@@ -184,7 +184,10 @@ public sealed class CardStudioWindow : Window
                         if (r["t"]?.ToString() == "exportFailed") throw new InvalidOperationException(r["message"]?.ToString());
                         var ps = _web.CoreWebView2.Environment.CreatePrintSettings();
                         ps.ShouldPrintBackgrounds = true; ps.ShouldPrintHeaderAndFooter = false;
-                        ps.PageWidth = 85.6 / 25.4; ps.PageHeight = 53.98 / 25.4; // ID-1 card
+                        // Page = the card size chosen in the Studio (e.g. 54 × 85.6 mm portrait lanyard card).
+                        double wMm = r["widthMm"]?.GetValue<double>() ?? 85.6, hMm = r["heightMm"]?.GetValue<double>() ?? 53.98;
+                        if (wMm is < 40 or > 200 || hMm is < 40 or > 200) { wMm = 85.6; hMm = 53.98; }
+                        ps.PageWidth = wMm / 25.4; ps.PageHeight = hMm / 25.4;
                         ps.MarginTop = ps.MarginBottom = ps.MarginLeft = ps.MarginRight = 0;
                         var path = Path.Combine(folder, name + ".pdf");
                         if (!await _web.CoreWebView2.PrintToPdfAsync(path, ps)) throw new IOException("PDF could not be written");

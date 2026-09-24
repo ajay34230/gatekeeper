@@ -1,6 +1,7 @@
 import React from 'react';
 import { CardDesign, Soldier } from '../types';
-import { CARD_THEMES } from '../themes';
+import { CARD_THEMES, cardSize, baseWidth } from '../themes';
+import { SlotMark } from './Slot';
 import { NationalCrest, CrossedSwordsBadge, SmartChip, HolographicSeal, SecurityWatermark } from './MilitaryEmblem';
 import { GuillochePattern, MicroPrintBorder } from './GuillochePattern';
 import { CredentialQr } from './QrCode';
@@ -13,17 +14,20 @@ const dash = (v: string) => (v && v.trim()) || '—';
 /** Card front — same layout as the reference design, filled only with the soldier's real register details. */
 export const CardFront: React.FC<{ soldier: Soldier; design: CardDesign; check: string; className?: string }> = ({ soldier, design, check, className = '' }) => {
   const theme = CARD_THEMES[design.theme] ?? CARD_THEMES.army;
+  const size = cardSize(design);
+  const pxPerMm = baseWidth(false) / size.w;
   const photo = photoUrl(soldier.id, soldier.photoVer);
   return (
     <div
-      className={`xv-card relative w-[700px] aspect-[1.586/1] rounded-2xl overflow-hidden border-2 ${theme.cardBorder} shadow-2xl bg-gradient-to-br ${theme.bgGradient} select-none ${className}`}
-      style={{ boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.15)' }}
+      className={`xv-card relative rounded-2xl overflow-hidden border-2 ${theme.cardBorder} shadow-2xl bg-gradient-to-br ${theme.bgGradient} select-none ${className}`}
+      style={{ width: 700, height: 700 * size.h / size.w, boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.15)' }}
     >
       <GuillochePattern opacity={0.12} strokeColor="#94a3b8" />
       <SecurityWatermark className="top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 text-slate-100" />
       <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-bl from-amber-300/10 via-cyan-400/5 to-transparent pointer-events-none"></div>
 
-      <div className="relative z-10 w-full h-full flex flex-col justify-between p-3.5 text-slate-100">
+      {design.showSlot && <SlotMark pxPerMm={pxPerMm} />}
+      <div className="relative z-10 w-full h-full flex flex-col justify-between p-3.5 text-slate-100" style={design.showSlot ? { paddingTop: 7.5 * pxPerMm } : undefined}>
         {/* Header */}
         <div className="flex items-center justify-between border-b border-white/15 pb-1.5 gap-2">
           <div className="flex items-center gap-2">

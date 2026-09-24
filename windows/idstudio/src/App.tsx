@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CardDesign, Soldier, ThemeId } from './types';
-import { CARD_THEMES, DEFAULT_DESIGN, ARMY_RANKS, BLOOD_GROUPS } from './themes';
-import { CardFront } from './components/CardFront';
-import { CardBack } from './components/CardBack';
+import { CARD_THEMES, DEFAULT_DESIGN, ARMY_RANKS, BLOOD_GROUPS, CARD_SIZES, cardSize, baseWidth } from './themes';
+import { CardFace } from './components/CardFace';
 import { SignaturePad } from './components/SignaturePad';
 import { NationalCrest } from './components/MilitaryEmblem';
 import { host } from './host';
@@ -119,17 +118,19 @@ export default function App() {
     if (!exportJob) return;
     let cancelled = false;
     const pageStyle = document.createElement('style');
-    if (exportJob.format === 'pdf') { pageStyle.textContent = '@page { size: 85.6mm 53.98mm; margin: 0; }'; document.head.appendChild(pageStyle); document.body.classList.add('exporting'); }
+    if (exportJob.format === 'pdf') { const sz = cardSize(design); pageStyle.textContent = `@page { size: ${sz.w}mm ${sz.h}mm; margin: 0; }`; document.head.appendChild(pageStyle); document.body.classList.add('exporting'); }
     (async () => {
       await new Promise(r => setTimeout(r, 250));
       const imgs = [...document.querySelectorAll<HTMLImageElement>('.export-area img, .export-png img')];
       await Promise.all(imgs.map(i => i.complete ? Promise.resolve() : i.decode().catch(() => undefined)));
       await new Promise(r => setTimeout(r, 150));
       if (cancelled) return;
-      if (exportJob.format === 'pdf') { host.send({ t: 'exportReady', id: exportJob.id, seq: exportJob.seq }); return; }
+      if (exportJob.format === 'pdf') { const sz = cardSize(design); host.send({ t: 'exportReady', id: exportJob.id, seq: exportJob.seq, widthMm: sz.w, heightMm: sz.h }); return; }
       try {
-        const front = await toPng(document.getElementById('export-png-front')!, { pixelRatio: 3, cacheBust: false });
-        const back = await toPng(document.getElementById('export-png-back')!, { pixelRatio: 3, cacheBust: false });
+        // About 600 dpi at the card's real size.
+        const sz = cardSize(design); const ratio = (sz.w / 25.4 * 600) / baseWidth(sz.portrait);
+        const front = await toPng(document.getElementById('export-png-front')!, { pixelRatio: ratio, cacheBust: false });
+        const back = await toPng(document.getElementById('export-png-back')!, { pixelRatio: ratio, cacheBust: false });
         if (!cancelled) host.send({ t: 'exportImages', id: exportJob.id, seq: exportJob.seq, front, back });
       } catch (e: any) {
         host.send({ t: 'exportFailed', id: exportJob.id, seq: exportJob.seq, message: String(e?.message || e) });
@@ -139,6 +140,13 @@ export default function App() {
   }, [exportJob]);
 
   const ids = selected.map(s => s.id);
+  // Physical size of the chosen card and the zoom that maps its layout pixels to millimetres (96 px = 25.4 mm).
+  const size = cardSize(design);
+  const base = baseWidth(size.portrait);
+  const mmZoom = (size.w * 96 / 25.4) / base;
+  const zoomBox = (child: React.ReactNode) => (
+    <div className="print-card" style={{ width: `${size.w}mm`, height: `${size.h}mm` }}><div style={{ zoom: mmZoom, width: base }} className="print-zoom">{child}</div></div>
+  );
   const readFile = (f: File, cb: (url: string) => void) => { const r = new FileReader(); r.onload = () => cb(String(r.result)); r.readAsDataURL(f); };
 
   if (!host.available) return <div className="p-10 text-slate-400 font-mono">The ID Card Studio runs inside the XV Command Center.</div>;
@@ -225,8 +233,8 @@ export default function App() {
 
           {current ? (
             <div className={`flex ${view === 'dual' ? 'flex-wrap' : ''} gap-8 justify-center`}>
-              {(view === 'dual' || !flipped) && <div className="space-y-2"><div className="text-center text-sm font-mono font-bold text-amber-300 tracking-widest">CARD FRONT</div><CardFront soldier={current} design={design} check={checks[current.id] ?? ''} /></div>}
-              {(view === 'dual' || flipped) && <div className="space-y-2"><div className="text-center text-sm font-mono font-bold text-cyan-300 tracking-widest">CARD BACK</div><CardBack soldier={current} design={design} /></div>}
+              {(view === 'dual' || !flipped) && <div className="space-y-2"><div className="text-center text-sm font-mono font-bold text-amber-300 tracking-widest">CARD FRONT</div><CardFace side="front" soldier={current} design={design} check={checks[current.id] ?? ''} /></div>}
+              {(view === 'dual' || flipped) && <div className="space-y-2"><div className="text-center text-sm font-mono font-bold text-cyan-300 tracking-widest">CARD BACK</div><CardFace side="back" soldier={current} design={design} /></div>}
             </div>
           ) : <div className="text-center text-slate-500 py-24 font-mono">{loaded ? 'No soldier to show.' : 'Loading register…'}</div>}
 
@@ -323,6 +331,30 @@ export default function App() {
 
             {tab === 'theme' && (
               <div className="space-y-5">
+                <div className="rounded-xl border border-slate-800 p-4 space-y-3">
+                  <div className="text-xs font-mono font-bold text-amber-400 uppercase">Card size &amp; orientation</div>
+                  <div className="flex flex-wrap gap-2">
+                    {([['portrait', 'Portrait — neck / lanyard card'], ['landscape', 'Landscape — wallet card']] as const).map(([k, t]) => (
+                      <button key={k} onClick={() => setD({ orientation: k })} className={`px-3 py-1.5 rounded-lg text-sm border ${design.orientation === k ? 'border-amber-500 text-amber-300 bg-amber-500/10' : 'border-slate-700 text-slate-400'}`}>{t}</button>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(Object.keys(CARD_SIZES) as (keyof typeof CARD_SIZES)[]).map(k => (
+                      <button key={k} onClick={() => setD({ size: k })} className={`text-left px-3 py-2 rounded-lg text-sm border ${design.size === k ? 'border-amber-500 text-amber-300 bg-amber-500/10' : 'border-slate-700 text-slate-300'}`}>{CARD_SIZES[k].name}</button>
+                    ))}
+                    <button onClick={() => setD({ size: 'custom' })} className={`text-left px-3 py-2 rounded-lg text-sm border ${design.size === 'custom' ? 'border-amber-500 text-amber-300 bg-amber-500/10' : 'border-slate-700 text-slate-300'}`}>Custom size (mm)</button>
+                  </div>
+                  {design.size === 'custom' && (
+                    <div className="grid grid-cols-2 gap-3 max-w-md">
+                      <Field label="Long side (mm, 40–200)" value={String(design.customLong)} onChange={v => setD({ customLong: parseFloat(v) || 0 })} mono />
+                      <Field label="Short side (mm, 40–200)" value={String(design.customShort)} onChange={v => setD({ customShort: parseFloat(v) || 0 })} mono />
+                    </div>
+                  )}
+                  <div className="flex flex-wrap items-center gap-5 text-sm">
+                    <Check label="Mark the lanyard / clip slot" v={design.showSlot} on={v => setD({ showSlot: v })} />
+                    <span className="font-mono text-xs text-slate-400">Printed size: {size.w.toFixed(1)} × {size.h.toFixed(1)} mm ({size.portrait ? 'portrait' : 'landscape'})</span>
+                  </div>
+                </div>
                 <div className="grid grid-cols-5 gap-3">
                   {(Object.keys(CARD_THEMES) as ThemeId[]).map(id => (
                     <button key={id} onClick={() => setD({ theme: id })} className={`rounded-xl p-3 border text-left ${design.theme === id ? 'border-amber-500 bg-amber-500/10' : 'border-slate-700 hover:border-slate-500'}`}>
@@ -381,14 +413,14 @@ export default function App() {
       {/* ============ EXPORT RENDERING (one soldier at a time) ============ */}
       {exportSoldier && exportJob?.format === 'pdf' && (
         <div className="export-area">
-          <div className="export-page"><div className="print-zoom"><CardFront soldier={exportSoldier} design={design} check={checks[exportSoldier.id] ?? ''} /></div></div>
-          <div className="export-page"><div className="print-zoom"><CardBack soldier={exportSoldier} design={design} /></div></div>
+          <div className="export-page" style={{ width: `${size.w}mm`, height: `${size.h}mm` }}><div className="print-zoom" style={{ zoom: mmZoom, width: base }}><CardFace side="front" soldier={exportSoldier} design={design} check={checks[exportSoldier.id] ?? ''} /></div></div>
+          <div className="export-page" style={{ width: `${size.w}mm`, height: `${size.h}mm` }}><div className="print-zoom" style={{ zoom: mmZoom, width: base }}><CardFace side="back" soldier={exportSoldier} design={design} /></div></div>
         </div>
       )}
       {exportSoldier && exportJob?.format === 'png' && (
         <div className="export-png" style={{ position: 'fixed', left: -10000, top: 0 }}>
-          <div id="export-png-front" style={{ width: 700 }}><CardFront soldier={exportSoldier} design={design} check={checks[exportSoldier.id] ?? ''} className="!shadow-none" /></div>
-          <div id="export-png-back" style={{ width: 700, marginTop: 20 }}><CardBack soldier={exportSoldier} design={design} className="!shadow-none" /></div>
+          <div id="export-png-front" style={{ width: base }}><CardFace side="front" soldier={exportSoldier} design={design} check={checks[exportSoldier.id] ?? ''} className="!shadow-none" /></div>
+          <div id="export-png-back" style={{ width: base, marginTop: 20 }}><CardFace side="back" soldier={exportSoldier} design={design} className="!shadow-none" /></div>
         </div>
       )}
 
@@ -398,8 +430,8 @@ export default function App() {
       <div className="print-area">
         {printList.map(s => (
           <div key={s.id} className="print-row">
-            <div className="print-card"><div className="print-zoom"><CardFront soldier={s} design={design} check={checks[s.id] ?? ''} /></div></div>
-            <div className="print-card"><div className="print-zoom"><CardBack soldier={s} design={design} /></div></div>
+            {zoomBox(<CardFace side="front" soldier={s} design={design} check={checks[s.id] ?? ''} />)}
+            {zoomBox(<CardFace side="back" soldier={s} design={design} />)}
           </div>
         ))}
       </div>

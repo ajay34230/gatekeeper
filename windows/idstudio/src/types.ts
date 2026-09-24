@@ -65,4 +65,13 @@ export interface CardDesign {
   showMobile: boolean;
   showChip: boolean;
   showMrz: boolean;
+  /** Physical card size: a preset (long × short side) or custom millimetres, printed in the chosen orientation. */
+  size: SizeId;
+  orientation: 'portrait' | 'landscape';
+  customLong: number;
+  customShort: number;
+  /** Mark where to punch the lanyard / clip slot. */
+  showSlot: boolean;
 }
+
+export type SizeId = 'cr80' | 'cr100' | 'badge34' | 'a7' | 'custom';

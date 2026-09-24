@@ -1,6 +1,7 @@
 import React from 'react';
 import { CardDesign, Soldier } from '../types';
-import { CARD_THEMES } from '../themes';
+import { CARD_THEMES, cardSize, baseWidth } from '../themes';
+import { SlotMark } from './Slot';
 import { HolographicSeal } from './MilitaryEmblem';
 import { GuillochePattern } from './GuillochePattern';
 import { mrz } from '../mrz';
@@ -11,14 +12,17 @@ const dash = (v: string) => (v && v.trim()) || '—';
 /** Card back — records, next of kin, conditions, issuing authority and a machine-readable zone computed from real data. */
 export const CardBack: React.FC<{ soldier: Soldier; design: CardDesign; className?: string }> = ({ soldier, design, className = '' }) => {
   const theme = CARD_THEMES[design.theme] ?? CARD_THEMES.army;
+  const size = cardSize(design);
+  const pxPerMm = baseWidth(false) / size.w;
   const [l1, l2, l3] = mrz(soldier, design.issuingState);
   return (
     <div
-      className={`xv-card relative w-[700px] aspect-[1.586/1] rounded-2xl overflow-hidden border-2 ${theme.cardBorder} shadow-2xl bg-gradient-to-br ${theme.bgGradient} select-none ${className}`}
-      style={{ boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.15)' }}
+      className={`xv-card relative rounded-2xl overflow-hidden border-2 ${theme.cardBorder} shadow-2xl bg-gradient-to-br ${theme.bgGradient} select-none ${className}`}
+      style={{ width: 700, height: 700 * size.h / size.w, boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.15)' }}
     >
       <GuillochePattern opacity={0.1} strokeColor="#94a3b8" />
-      <div className="relative z-10 w-full h-full flex flex-col justify-between p-3.5 text-slate-100">
+      {design.showSlot && <SlotMark pxPerMm={pxPerMm} />}
+      <div className="relative z-10 w-full h-full flex flex-col justify-between p-3.5 text-slate-100" style={design.showSlot ? { paddingTop: 7.5 * pxPerMm } : undefined}>
         <div className="w-full bg-slate-900 border-y border-white/15 py-1 px-3 flex items-center justify-between rounded">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400"></span>

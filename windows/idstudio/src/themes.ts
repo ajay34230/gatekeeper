@@ -1,4 +1,4 @@
-import { CardDesign, CardThemeConfig, ThemeId } from './types';
+import { CardDesign, CardThemeConfig, SizeId, ThemeId } from './types';
 
 export const CARD_THEMES: Record<ThemeId, CardThemeConfig> = {
   army: { id: 'army', name: 'Olive & Gold', bgGradient: 'from-[#0d160e] via-[#142316] to-[#0a120b]', cardBorder: 'border-amber-600/40' },
@@ -41,7 +41,33 @@ export const DEFAULT_DESIGN: CardDesign = {
   showMobile: true,
   showChip: true,
   showMrz: true,
+  size: 'cr80',
+  orientation: 'portrait',
+  customLong: 85.6,
+  customShort: 53.98,
+  showSlot: true,
 };
+
+/** Card sizes as long side × short side in millimetres. */
+export const CARD_SIZES: Record<Exclude<SizeId, 'custom'>, { name: string; long: number; short: number }> = {
+  cr80: { name: 'Standard ID card — CR-80 (85.6 × 54 mm)', long: 85.6, short: 53.98 },
+  cr100: { name: 'Large ID card — CR-100 (98.5 × 67 mm)', long: 98.5, short: 67 },
+  badge34: { name: 'Lanyard badge — 3 × 4 in (102 × 76 mm)', long: 101.6, short: 76.2 },
+  a7: { name: 'A7 badge (105 × 74 mm)', long: 105, short: 74 },
+};
+
+/** Width × height in millimetres of the card as printed. */
+export function cardSize(d: CardDesign): { w: number; h: number; portrait: boolean } {
+  const clamp = (v: number) => Math.min(200, Math.max(40, Number.isFinite(v) ? v : 0));
+  const preset = d.size !== 'custom' ? CARD_SIZES[d.size] ?? CARD_SIZES.cr80 : null;
+  let long = preset ? preset.long : clamp(d.customLong), short = preset ? preset.short : clamp(d.customShort);
+  if (short > long) [long, short] = [short, long];
+  const portrait = d.orientation === 'portrait';
+  return portrait ? { w: short, h: long, portrait } : { w: long, h: short, portrait };
+}
+
+/** Layout width in CSS px the card is designed at (landscape 700, portrait 440); printing scales it to millimetres. */
+export const baseWidth = (portrait: boolean) => (portrait ? 440 : 700);
 
 export const ARMY_RANKS = [
   'SEPOY', 'RIFLEMAN', 'LANCE NAIK', 'NAIK', 'HAVILDAR', 'COMPANY QUARTERMASTER HAVILDAR', 'COMPANY HAVILDAR MAJOR', 'NAIB SUBEDAR',
