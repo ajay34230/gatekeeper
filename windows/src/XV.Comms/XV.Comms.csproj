@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>XV.Comms</RootNamespace>
   </PropertyGroup>
-  <ItemGroup><ProjectReference Include="..\XV.Core\XV.Core.csproj" /><ProjectReference Include="..\XV.Comms\XV.Comms.csproj" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="..\XV.Core\XV.Core.csproj" /></ItemGroup>
 </Project>

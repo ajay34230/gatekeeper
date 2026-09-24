@@ -57,6 +57,22 @@ class AppConfig(context: Context) : ConnectionProfile {
         get() = prefs.getBoolean("publicUsesCa", false)
         set(value) = prefs.edit().putBoolean("publicUsesCa", value).apply()
 
+    // Comms engine (separate listener on the PC)
+    var commsPort: Int
+        get() = prefs.getInt("commsPort", 8444)
+        set(value) = prefs.edit().putInt("commsPort", value).apply()
+    var commsPublicUrl: String
+        get() = prefs.getString("commsPublicUrl", "") ?: ""
+        set(value) = prefs.edit().putString("commsPublicUrl", value.trim().trimEnd('/')).apply()
+    var commsPublicUsesCa: Boolean
+        get() = prefs.getBoolean("commsPublicUsesCa", false)
+        set(value) = prefs.edit().putBoolean("commsPublicUsesCa", value).apply()
+
+    /** Comms engine addresses: every known LAN host on the comms port first, then the internet URL. */
+    fun commsEndpoints(): List<Endpoint> =
+        lanHosts.map { Endpoint("https://$it:$commsPort", pinned = true, internet = false) } +
+            listOfNotNull(commsPublicUrl.takeIf { it.startsWith("https://") }?.let { Endpoint(it, pinned = !commsPublicUsesCa, internet = true) })
+
     override fun endpoints(): List<Endpoint> {
         val lan = lanHosts.map { Endpoint("https://$it:$serverPort", pinned = true, internet = false) }
         val wan = listOfNotNull(publicUrl.takeIf { it.startsWith("https://") }?.let { Endpoint(it, pinned = !publicUsesCaCertificate, internet = true) })
@@ -101,7 +117,7 @@ class AppConfig(context: Context) : ConnectionProfile {
     }
 
     fun unpair() {
-        deviceKey = ""; deviceId = ""; serverFingerprint = ""; serverId = ""; serverName = ""; lanHosts = emptyList(); publicUrl = ""
+        deviceKey = ""; deviceId = ""; serverFingerprint = ""; serverId = ""; serverName = ""; lanHosts = emptyList(); publicUrl = ""; commsPublicUrl = ""
         clearSession()
     }
 

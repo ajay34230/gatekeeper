@@ -31,6 +31,7 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
         config.cachedLocations = m.locations.map { it.id to it.name }
         config.cachedGates = m.gates.map { it.id to it.name }
         config.sharingMode = m.sharingMode
+        api.commsInfo().onSuccess { ci -> config.commsPort = ci.port; config.commsPublicUrl = ci.publicUrl; config.commsPublicUsesCa = ci.publicUsesCaCertificate }
 
         return@withContext try {
             val count = repo.syncPending()

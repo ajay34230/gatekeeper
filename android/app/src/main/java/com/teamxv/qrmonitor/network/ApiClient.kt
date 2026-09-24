@@ -40,6 +40,7 @@ class HttpFailure(val code: Int, val bodyText: String) : Exception(
 }
 
 @Serializable data class LoginResponse(val status: String, val username: String = "", val name: String = "", val role: String = "", val accessToken: String = "", val expiresAt: Long = 0L, val offlineGraceSeconds: Long = 0L)
+@Serializable data class CommsInfo(val port: Int = 8444, val publicUrl: String = "", val publicUsesCaCertificate: Boolean = false)
 @Serializable data class RegisterResponse(val status: String, val username: String = "")
 @Serializable data class HealthResponse(val status: String, val service: String = "", val serverId: String = "", val serverName: String = "", val version: String = "", val serverTime: Long = 0L, val publicUrl: String = "", val internetEnabled: Boolean = false)
 @Serializable data class EventPayload(
@@ -153,6 +154,15 @@ class ApiClient(private val profile: ConnectionProfile? = null) {
     fun verify(code: String, expected: String): Result<VerifyResponse> = runCatching {
         json.decodeFromJsonElement(VerifyResponse.serializer(), rpc("credential.verify", buildJsonObject { put("code", code); put("expected", expected) }))
     }
+
+    /** Where the separate Comms engine (messages, alerts, calls) is reachable. */
+    fun commsInfo(): Result<CommsInfo> = runCatching {
+        json.decodeFromJsonElement(CommsInfo.serializer(), rpc("comms.info", JsonObject(emptyMap()), withToken = false))
+    }
+
+    /** HTTP client with the same certificate pinning as the gate API, used by the Comms engine's WebSocket. */
+    fun httpClient(pinned: Boolean): OkHttpClient = client(pinned, profile?.fingerprint ?: "").newBuilder()
+        .readTimeout(0, TimeUnit.MILLISECONDS).pingInterval(25, TimeUnit.SECONDS).build()
 
     fun logout(baseUrl: String): Result<String> = runCatching { rpc("auth.logout", JsonObject(emptyMap())).toString() }
 

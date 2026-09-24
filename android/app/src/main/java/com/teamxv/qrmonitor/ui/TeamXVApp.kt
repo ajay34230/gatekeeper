@@ -29,6 +29,9 @@ import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DevicesOther
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
@@ -124,6 +127,13 @@ fun TeamXVApp(vm: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
 
+    LaunchedEffect(vm.paired) { if (vm.paired) vm.refreshCommsInfo() }
+    val openComms by com.teamxv.qrmonitor.CommsNav.openRequested
+    LaunchedEffect(openComms) {
+        if (openComms) { tab = 4; settingsOpen = false; com.teamxv.qrmonitor.CommsNav.openRequested.value = false }
+    }
+    val commsUnseen by vm.commsUnseen.collectAsState(initial = 0)
+
     LaunchedEffect(vm.loggedIn) {
         while (vm.loggedIn) {
             vm.enforceSession()
@@ -164,13 +174,14 @@ fun TeamXVApp(vm: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel
                         0 -> HomeScreen(vm)
                         1 -> ActivityScreen(vm)
                         2 -> SyncStatusScreen(vm)
+                        4 -> CommsScreen(vm)
                         else -> OperatorScreen(
                             vm = vm,
                             onOpenSettings = { settingsOpen = true }
                         )
                     }
                 }
-                TerminalBottomNav(tab, vm.pending) { tab = it }
+                TerminalBottomNav(tab, vm.pending, commsUnseen) { tab = it }
             }
         }
     }
@@ -2214,11 +2225,12 @@ private fun EmptyState(icon: ImageVector, title: String, subtitle: String) {
 }
 
 @Composable
-private fun TerminalBottomNav(currentTab: Int, pending: Int, onSelect: (Int) -> Unit) {
+private fun TerminalBottomNav(currentTab: Int, pending: Int, commsUnseen: Int, onSelect: (Int) -> Unit) {
     val tabs = listOf(
         Triple(Icons.Default.Home, "Home", 0),
         Triple(Icons.Default.History, "Activity", 1),
         Triple(Icons.Default.Refresh, "Sync", 2),
+        Triple(Icons.Default.Forum, "Comms", 4),
         Triple(Icons.Default.PersonOutline, "Operator", 3)
     )
     Surface(
@@ -2236,6 +2248,10 @@ private fun TerminalBottomNav(currentTab: Int, pending: Int, onSelect: (Int) -> 
                 ) {
                     Box(Modifier.size(30.dp), contentAlignment = Alignment.Center) {
                         Icon(icon, null, tint = UiInk, modifier = Modifier.size(if (currentTab == index) 24.dp else 22.dp))
+                        if (index == 4 && commsUnseen > 0) Box(
+                            Modifier.align(Alignment.TopEnd).clip(CircleShape).background(UiError).padding(horizontal = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) { Text(if (commsUnseen > 9) "9+" else commsUnseen.toString(), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = Sans) }
                         if (index == 2 && pending > 0) Box(Modifier.size(8.dp).clip(CircleShape).background(UiWarning).border(1.dp, UiSurface, CircleShape).align(Alignment.TopEnd))
                     }
                     Spacer(Modifier.height(2.dp))
@@ -2276,5 +2292,119 @@ private fun SessionRouter(vm: MainViewModel) {
         is ScanSession.VehicleOccupants -> VehicleOccupantsScreen(vm, s)
         is ScanSession.Unknown -> UnknownResultScreen(vm, s.message)
         ScanSession.Closed -> Unit
+    }
+}
+
+// ------------------------------------------------------------------ Comms (messages & alerts with the Command Center)
+
+@Composable
+private fun CommsScreen(vm: MainViewModel) {
+    val context = LocalContext.current
+    val messages by vm.commsMessages.collectAsState(initial = emptyList())
+    val state by vm.commsState.collectAsState()
+    var text by rememberSaveable { mutableStateOf("") }
+    var confirmAlert by remember { mutableStateOf(false) }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(messages.size) {
+        vm.commsSeen()
+        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+    }
+
+    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding().padding(horizontal = 16.dp, vertical = 14.dp)) {
+        ScreenHeader("Comms", "Messages & alerts with ${vm.currentConfig().serverName.ifBlank { "the Command Center" }}")
+        Spacer(Modifier.height(10.dp))
+        StatusBanner(
+            when (state.status) {
+                "ONLINE" -> "Comms engine connected • ${state.detail} • end-to-end encrypted"
+                "CONNECTING" -> "Connecting to the Comms engine…"
+                else -> (state.detail.ifBlank { "Offline" }) + ". Messages are kept and sent automatically when the link returns."
+            },
+            if (state.online) BannerTone.Success else BannerTone.Warning
+        )
+        if (!state.online && android.os.Build.VERSION.SDK_INT >= 23) {
+            val pm = context.getSystemService(android.os.PowerManager::class.java)
+            if (pm != null && !pm.isIgnoringBatteryOptimizations(context.packageName)) {
+                Spacer(Modifier.height(6.dp))
+                TextButton(onClick = {
+                    runCatching {
+                        context.startActivity(android.content.Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, android.net.Uri.parse("package:" + context.packageName)))
+                    }
+                }) { Text("Allow alerts in the background (battery settings)", fontFamily = Sans, fontSize = 12.sp, color = UiBlue) }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            if (messages.isEmpty()) {
+                Text(
+                    "No messages yet. Messages and alerts from the Command Center appear here and ring even when the app is closed.",
+                    fontFamily = Sans, fontSize = 13.sp, color = UiMuted, textAlign = TextAlign.Center,
+                    modifier = Modifier.align(Alignment.Center).padding(24.dp)
+                )
+            } else {
+                LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(messages, key = { it.id }) { m -> CommsBubble(m) }
+                }
+            }
+        }
+        if (vm.commsError.isNotBlank()) { Spacer(Modifier.height(6.dp)); StatusBanner(vm.commsError, BannerTone.Error) }
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = text, onValueChange = { if (it.length <= com.teamxv.qrmonitor.comms.CommsEngine.MAX_BODY) text = it },
+                modifier = Modifier.weight(1f), placeholder = { Text("Message to Command Center", fontFamily = Sans, fontSize = 13.sp) },
+                maxLines = 4, shape = RoundedCornerShape(12.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            FilledIconButton(onClick = { vm.sendComms("MESSAGE", text) { text = "" } }, enabled = text.isNotBlank(),
+                colors = IconButtonDefaults.filledIconButtonColors(containerColor = UiInk)) {
+                Icon(Icons.Default.Send, "Send", tint = Color.White)
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        OutlinedButton(
+            onClick = { confirmAlert = true }, enabled = text.isNotBlank(), modifier = Modifier.fillMaxWidth(),
+            border = BorderStroke(1.dp, UiError), shape = RoundedCornerShape(12.dp)
+        ) {
+            Icon(Icons.Default.NotificationsActive, null, tint = UiError, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Send as ALERT", fontFamily = Sans, fontWeight = FontWeight.Bold, color = UiError)
+        }
+    }
+    if (confirmAlert) AlertDialog(
+        onDismissRequest = { confirmAlert = false },
+        title = { Text("Send ALERT?", fontFamily = Sans, fontWeight = FontWeight.Bold) },
+        text = { Text("The alert pops up on the Command Center screen with a sound. Use it for urgent situations.", fontFamily = Sans) },
+        confirmButton = { TextButton(onClick = { confirmAlert = false; vm.sendComms("ALERT", text) { text = "" } }) { Text("Send alert", color = UiError, fontWeight = FontWeight.Bold) } },
+        dismissButton = { TextButton(onClick = { confirmAlert = false }) { Text("Cancel") } }
+    )
+}
+
+@Composable
+private fun CommsBubble(m: com.teamxv.qrmonitor.comms.CommsMessageEntity) {
+    val mine = m.direction == "OUT"
+    val alert = m.kind == "ALERT"
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
+        Surface(
+            color = when { alert -> UiErrorBg; mine -> UiInk; else -> UiSurface },
+            shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(1.dp, when { alert -> UiError; mine -> UiInk; else -> UiBorder }),
+            modifier = Modifier.fillMaxWidth(0.82f)
+        ) {
+            Column(Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) {
+                Text(
+                    (if (alert) "⚠ ALERT • " else "") + (if (mine) "You" else m.sender),
+                    fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 11.sp,
+                    color = when { alert -> UiError; mine -> Color(0xFFFCD34D); else -> UiBlue }
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(m.body, fontFamily = Sans, fontSize = 14.sp, color = if (mine && !alert) Color.White else UiInk)
+                Spacer(Modifier.height(4.dp))
+                val tick = if (!mine) "" else when (m.state) { "READ" -> " • read"; "DELIVERED" -> " • delivered"; "SENT" -> " • sent"; else -> " • waiting for link" }
+                Text(
+                    SimpleDateFormat("dd MMM HH:mm", Locale.getDefault()).format(Date(m.createdAt)) + tick,
+                    fontFamily = Mono, fontSize = 10.sp, color = if (mine && !alert) Color(0xFFA1A1AA) else UiMuted
+                )
+            }
+        }
     }
 }

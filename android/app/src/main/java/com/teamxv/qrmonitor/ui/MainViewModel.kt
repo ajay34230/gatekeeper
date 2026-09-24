@@ -620,6 +620,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             networkStatus = if (result.isSuccess) {
                 if (config.hasValidOnlineToken()) api.heartbeat(config.baseUrl, config.deviceId, config.locationId, config.gateId, config.operatorId, pending)
                 if (pending > 0 && config.hasValidOnlineToken()) SyncScheduler.enqueueNow(getApplication())
+                refreshCommsInfo()
                 NetworkStatus(
                     transport, true, true, true,
                     api.lastRoute, localIp, latency, "Encrypted link verified with ${result.getOrNull()?.serverName ?: "Command Center"}"
@@ -657,6 +658,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 loggedIn = false
                 pairingMessage = "Paired securely with ${config.serverName} (${enr.deviceId}). Sign in to start your shift."
                 refreshStations()
+                refreshCommsInfo()
             }.onFailure { e ->
                 pairingMessage = if (e is HttpFailure) (e.message ?: "Pairing refused") else (e.message ?: "Pairing failed")
             }
@@ -664,8 +666,44 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun unpair() {
+        com.teamxv.qrmonitor.comms.CommsService.stop(getApplication())
+        viewModelScope.launch(Dispatchers.IO) { com.teamxv.qrmonitor.comms.CommsDatabase.get(getApplication()).dao().clear() }
         config.unpair(); paired = false; loggedIn = false; api.operatorToken = ""
         pairingMessage = "Terminal unpaired. Scan a new pairing QR to connect."
+    }
+
+    // ------------------------------------------------------------------ comms engine (messages & alerts)
+
+    private val commsDao by lazy { com.teamxv.qrmonitor.comms.CommsDatabase.get(getApplication()).dao() }
+    val commsMessages by lazy { commsDao.observeAll() }
+    val commsUnseen by lazy { commsDao.observeUnseen() }
+    val commsState get() = com.teamxv.qrmonitor.comms.CommsEngine.state
+    var commsError by mutableStateOf("")
+
+    /** Learns where the PC's Comms engine listens and (re)starts the engine service. */
+    fun refreshCommsInfo() {
+        viewModelScope.launch(Dispatchers.IO) {
+            api.commsInfo().onSuccess { ci ->
+                val changed = ci.port != config.commsPort || ci.publicUrl.trimEnd('/') != config.commsPublicUrl || ci.publicUsesCaCertificate != config.commsPublicUsesCa
+                config.commsPort = ci.port; config.commsPublicUrl = ci.publicUrl; config.commsPublicUsesCa = ci.publicUsesCaCertificate
+                if (changed) com.teamxv.qrmonitor.comms.CommsEngine.nudge()
+            }
+            kotlinx.coroutines.withContext(Dispatchers.Main) { com.teamxv.qrmonitor.comms.CommsService.start(getApplication()) }
+        }
+    }
+
+    fun sendComms(kind: String, body: String, onSent: () -> Unit) {
+        val who = config.operatorName.ifBlank { config.operatorId }.ifBlank { config.deviceId }
+        val post = listOf(config.locationName.ifBlank { config.locationId }, config.gateName.ifBlank { config.gateId }).filter { it.isNotBlank() }.joinToString(" / ")
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { com.teamxv.qrmonitor.comms.CommsEngine.queue(getApplication(), kind, body, if (post.isBlank()) who else "$who • $post") }
+                .onSuccess { commsError = ""; kotlinx.coroutines.withContext(Dispatchers.Main) { onSent() } }
+                .onFailure { commsError = it.message ?: "Could not queue the message" }
+        }
+    }
+
+    fun commsSeen() {
+        viewModelScope.launch(Dispatchers.IO) { com.teamxv.qrmonitor.comms.CommsEngine.markSeen(getApplication()) }
     }
 
     /** Locations and gates configured on the PC (public list, no sign-in needed). */

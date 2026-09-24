@@ -1,3 +1,4 @@
+using XV.Comms;
 using XV.Core;
 
 // Headless host of the same server (no UI). Used for automated tests and for running on a machine without a desktop.
@@ -56,6 +57,12 @@ if (ei >= 0 && ei + 1 < args.Length)
 if (args.Contains("--setup-only")) return;
 await server.StartAsync();
 using var discovery = new DiscoveryResponder(settings, server.Fingerprint);
+await using var comms = new CommsEngine(settings, cert, store.DeviceKey);
+comms.Log += Console.WriteLine;
+comms.MessageReceived += m => Console.WriteLine($"COMMS {m.Kind} from {m.DeviceId}: {m.Body}");
+// CI only: answer every terminal message so the protocol test can check PC -> terminal delivery.
+if (args.Contains("--comms-test-echo")) comms.MessageReceived += m => comms.Send(m.DeviceId, "MESSAGE", "Echo: " + m.Body, "Command Center");
+await comms.StartAsync();
 Console.WriteLine($"Server {settings.ServerId} fingerprint {server.Fingerprint}");
 if (args.Contains("--pair"))
 {

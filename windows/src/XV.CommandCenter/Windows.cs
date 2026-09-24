@@ -91,6 +91,8 @@ public sealed class CloudLinkWindow : DarkWindow
         var host = Field("Public host (DDNS name, public IP or VPN IP)", s.PublicHost, mono: true);
         var port = Field("Public port", s.PublicPort.ToString(), mono: true);
         var url = Field("…or full public URL from a tunnel / relay (overrides host + port)", s.CloudUrl, mono: true);
+        var cport = Field("Comms engine public port (messages, alerts, calls)", s.CommsPublicPort.ToString(), mono: true);
+        var curl = Field("…or Comms URL from a tunnel (second hostname pointing to https://localhost:" + s.CommsPort + ")", s.CommsCloudUrl, mono: true);
         var pubCert = new CheckBox { Content = "The tunnel presents its own public HTTPS certificate (disable pinning for the internet address only)", IsChecked = s.CloudUsesPublicCertificate, Margin = new Thickness(0, 10, 0, 0) };
         Body.Children.Add(pubCert);
 
@@ -100,6 +102,7 @@ public sealed class CloudLinkWindow : DarkWindow
         void Refresh() => details.Text =
             $"Server ID ............ {s.ServerId}\nServer name .......... {s.ServerName}\nLocal HTTPS port ..... {s.Port} (TCP)\nDiscovery port ....... {s.DiscoveryPort} (UDP, LAN only)\n" +
             $"LAN addresses ........ {string.Join(", ", NetUtil.LanAddresses())}\nInternet URL ......... {(s.PublicUrl.Length > 0 ? s.PublicUrl : "(not set)")}\n" +
+            $"Comms engine ......... port {s.CommsPort} (TCP) • internet {(s.CommsPublicUrl.Length > 0 ? s.CommsPublicUrl : "(not set)")}\n" +
             $"TLS fingerprint ...... {App.Server.Fingerprint}\nEncryption ........... TLS 1.2/1.3 + AES-256-GCM per terminal, replay-protected\nAPI endpoints ........ GET /api/v1/ping, POST /api/v1/pair/enroll, POST /api/v1/rpc";
         Refresh();
 
@@ -129,6 +132,10 @@ public sealed class CloudLinkWindow : DarkWindow
             if (!int.TryParse(port.Text, out var pp) || pp is < 1 or > 65535) { MessageBox.Show("Public port must be 1-65535"); return; }
             var cleanUrl = url.Text.Trim();
             if (cleanUrl.Length > 0 && !cleanUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) { MessageBox.Show("The public URL must start with https://"); return; }
+            if (!int.TryParse(cport.Text, out var cp) || cp is < 1 or > 65535) { MessageBox.Show("Comms public port must be 1-65535"); return; }
+            var cleanCommsUrl = curl.Text.Trim();
+            if (cleanCommsUrl.Length > 0 && !cleanCommsUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) { MessageBox.Show("The Comms URL must start with https://"); return; }
+            s.CommsPublicPort = cp; s.CommsCloudUrl = cleanCommsUrl;
             s.InternetEnabled = enabled.IsChecked == true; s.CloudMode = mode.SelectedItem as string ?? mode.Text; s.PublicHost = host.Text.Trim(); s.PublicPort = pp;
             s.CloudUrl = cleanUrl; s.CloudUsesPublicCertificate = pubCert.IsChecked == true;
             s.Save();

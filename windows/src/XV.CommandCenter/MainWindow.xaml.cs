@@ -18,6 +18,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         App.Store.Changed += () => Dispatcher.BeginInvoke(QueueRefresh);
+        App.Comms.Changed += () => Dispatcher.BeginInvoke(UpdateCommsBadge);
+        Loaded += (_, _) => UpdateCommsBadge();
         App.Server.Log += msg => Dispatcher.BeginInvoke(() => StatusRight.Text = $"{DateTime.Now:HH:mm:ss}  {msg}");
         _timer.Tick += (_, _) => Refresh(full: false);
         _timer.Start();
@@ -404,6 +406,15 @@ public partial class MainWindow : Window
     void AddVehicle_Click(object s, RoutedEventArgs e) => Dialogs.EditVehicle(this, null);
     void ImportExport_Click(object s, RoutedEventArgs e) => Dialogs.ImportExport(this);
     void Pair_Click(object s, RoutedEventArgs e) => new PairWindow { Owner = this }.ShowDialog();
+    void Comms_Click(object s, RoutedEventArgs e) => CommsWindow.Show(this);
+
+    void UpdateCommsBadge()
+    {
+        var n = App.Comms.Store.UnreadCounts().Values.Sum();
+        CommsBadge.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
+        CommsBadgeText.Text = n > 99 ? "99+" : n.ToString();
+    }
+
     void Cloud_Click(object s, RoutedEventArgs e) => new CloudLinkWindow { Owner = this }.ShowDialog();
     void Stations_Click(object s, RoutedEventArgs e) => new StationsWindow { Owner = this }.ShowDialog();
     void Refresh_Click(object s, RoutedEventArgs e) => Refresh();

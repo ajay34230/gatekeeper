@@ -54,4 +54,28 @@ Body: `{"iv": base64(12 bytes), "ct": base64(ciphertext ‖ 16-byte tag)}` — A
 | `MINIMAL` (default) | IDs, category, status, access locations and `secretHash` (lowercase hex SHA-256 of the trimmed, upper-cased secret); names, ranks, plates and secrets are empty |
 | `RECEIVE_ONLY` | empty lists (also presence and manifests); terminals call `credential.verify` for every scan |
 
+## Comms engine (messages, alerts, call signalling)
+
+A separate listener on the PC (default port **8444**, same pinned certificate) with its own encrypted database (`xv-comms.db`)
+and its own per-terminal key. Terminals learn the port / internet URL with the `comms.info` RPC (device-authenticated, no operator token).
+
+| step | detail |
+|---|---|
+| key | `commsKey = HMAC-SHA256(deviceKey, "XV-COMMS-1")` |
+| clock | `GET /comms/v1/ping` → `serverTime` |
+| connect | `wss://host:8444/comms/v1/ws?d={deviceId}&t={serverTime}&n={nonce}&m={hex HMAC-SHA256(commsKey, "XVCM1|hello|d|t|n")}` — 10-minute window, nonce single use |
+| frames | text `{"iv","ct"}` AES-256-GCM, AAD `XVCM1|c2s|{d}|{n}|{seq}` (terminal→PC) or `XVCM1|s2c|{d}|{n}|{seq}` (PC→terminal); `seq` counts from 1 per direction and connection |
+
+Plaintext frames:
+
+| `t` | fields | meaning |
+|---|---|---|
+| `hello` | `serverName`, `serverTime` | first frame from the PC |
+| `msg` | `id`, `kind` (`MESSAGE`/`ALERT`), `body` (≤ 2000 chars), `sender`, `ts` | a message; the receiver answers `ack DELIVERED`; duplicates (same `id`) are ignored |
+| `ack` | `id`, `state` (`DELIVERED`/`READ`) | delivery / read receipt |
+| `ping` / `pong` | – | keep-alive |
+| `call` | see Phase 3 | call signalling, relayed to the call engine |
+
+Undelivered PC→terminal messages are sent when the terminal connects; terminals re-send unconfirmed messages on every connection.
+
 `windows/tests/e2e_protocol_test.py` exercises all of the above.

@@ -81,4 +81,37 @@ print("hb", rpc("heartbeat", {"locationId": "LOC07", "gateId": "G02", "operatorI
 # discovery
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.settimeout(3); s.sendto(b"XVGK_DISCOVER_V1", ("127.0.0.1", 47913))
 print("discovery", json.loads(s.recvfrom(2048)[0])["serverId"])
+# ---- Comms engine: separate TLS listener, key derived from the device key, every frame AES-GCM sealed
+import hmac, websocket
+code, info, _ = rpc("comms.info"); assert code == 200 and info["port"] == 8444, (code, info)
+der2 = ssl.PEM_cert_to_DER_cert(ssl.get_server_certificate(("127.0.0.1", info["port"])))
+assert hashlib.sha256(der2).hexdigest() == cfg["fp"], "comms engine must present the pinned certificate"
+ckey = hmac.new(key, b"XV-COMMS-1", hashlib.sha256).digest()
+def comms_connect(mac_key=ckey):
+    ts, n = int(time.time() * 1000), base64.urlsafe_b64encode(os.urandom(16)).decode().rstrip("=")
+    mac = hmac.new(mac_key, f"XVCM1|hello|{dev}|{ts}|{n}".encode(), hashlib.sha256).hexdigest()
+    ws = websocket.create_connection(f"wss://127.0.0.1:{info['port']}/comms/v1/ws?d={dev}&t={ts}&n={n}&m={mac}", sslopt={"cert_reqs": ssl.CERT_NONE}, timeout=10)
+    return ws, n
+try: comms_connect(os.urandom(32)); raise SystemExit("comms must reject a wrong key")
+except websocket.WebSocketBadStatusException as e: assert e.status_code == 401
+ws, cn = comms_connect(); seq = {"in": 0, "out": 0}
+def csend(obj):
+    seq["out"] += 1; iv = os.urandom(12); c = AES.new(ckey, AES.MODE_GCM, nonce=iv); c.update(f"XVCM1|c2s|{dev}|{cn}|{seq['out']}".encode())
+    ct, tag = c.encrypt_and_digest(json.dumps(obj).encode()); ws.send(json.dumps({"iv": base64.b64encode(iv).decode(), "ct": base64.b64encode(ct + tag).decode()}))
+def crecv():
+    env = json.loads(ws.recv()); raw = base64.b64decode(env["ct"]); seq["in"] += 1
+    d = AES.new(ckey, AES.MODE_GCM, nonce=base64.b64decode(env["iv"])); d.update(f"XVCM1|s2c|{dev}|{cn}|{seq['in']}".encode())
+    return json.loads(d.decrypt_and_verify(raw[:-16], raw[-16:]))
+assert crecv()["t"] == "hello"
+mid = uuid.uuid4().hex
+csend({"t": "msg", "id": mid, "kind": "ALERT", "body": "Test alert from gate", "sender": "GK-01"})
+got = [crecv(), crecv()]
+assert {"t": "ack", "id": mid, "state": "DELIVERED"} in got, got
+echo = next(f for f in got if f["t"] == "msg"); assert echo["body"] == "Echo: Test alert from gate", echo
+csend({"t": "ack", "id": echo["id"], "state": "READ"})
+csend({"t": "msg", "id": mid, "kind": "ALERT", "body": "Test alert from gate"})  # resend is idempotent: ack only, no second echo
+assert crecv() == {"t": "ack", "id": mid, "state": "DELIVERED"}
+csend({"t": "ping"}); assert crecv()["t"] == "pong"
+ws.close()
+print("comms ok")
 print("ALL CHECKS PASSED")

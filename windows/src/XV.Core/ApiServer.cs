@@ -169,6 +169,9 @@ public sealed class ApiServer : IAsyncDisposable
                     ["locations"] = new JsonArray(_store.Locations().Select(r => (JsonNode)new JsonObject { ["id"] = r["id"]?.ToString(), ["name"] = r["name"]?.ToString() }).ToArray()),
                     ["gates"] = new JsonArray(_store.Gates().Select(r => (JsonNode)new JsonObject { ["id"] = r["id"]?.ToString(), ["name"] = r["name"]?.ToString() }).ToArray()),
                 });
+            case "comms.info":
+                // Where this terminal reaches the separate Comms engine (messages, alerts, calls).
+                return (200, new JsonObject { ["port"] = s.CommsPort, ["publicUrl"] = s.CommsPublicUrl, ["publicUsesCaCertificate"] = s.CommsCloudUrl.Trim().Length > 0 && s.CloudUsesPublicCertificate });
             case "auth.logout":
                 if (!string.IsNullOrEmpty(token)) _store.Logout(token);
                 return (200, new JsonObject { ["status"] = "ok" });

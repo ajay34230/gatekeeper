@@ -65,6 +65,16 @@ public sealed class Settings
 
     public bool RequireApproval { get; set; } = true;
 
+    // Comms engine (messages, alerts, calls) — separate encrypted listener
+    public int CommsPort { get; set; } = 8444;
+    public int CommsPublicPort { get; set; } = 8444;
+    public string CommsCloudUrl { get; set; } = "";         // full https URL when a tunnel publishes the comms port
+
+    [JsonIgnore]
+    public string CommsPublicUrl =>
+        CommsCloudUrl.Trim().Length > 0 ? CommsCloudUrl.Trim().TrimEnd('/') :
+        PublicHost.Trim().Length > 0 ? $"https://{PublicHost.Trim()}:{CommsPublicPort}" : "";
+
     /// <summary>FULL | MINIMAL | RECEIVE_ONLY — how much registry data terminals receive (see Store.Bootstrap).</summary>
     public string DataSharing { get; set; } = "MINIMAL";
 

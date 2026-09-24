@@ -433,9 +433,11 @@ public static class ConnectionSheet
         ("LAN addresses", string.Join(", ", NetUtil.LanAddresses().Select(a => $"https://{a}:{s.Port}"))),
         ("HTTPS port on this PC", $"{s.Port}/TCP"),
         ("LAN discovery port", $"{s.DiscoveryPort}/UDP (local network only)"),
+        ("Comms engine port on this PC", $"{s.CommsPort}/TCP (messages, alerts, calls)"),
+        ("Comms internet URL", s.CommsPublicUrl.Length > 0 ? s.CommsPublicUrl : "(not set)"),
         ("TLS certificate SHA-256", fingerprint),
         ("Protocol", "HTTPS (TLS 1.2/1.3) + AES-256-GCM per-terminal envelope, replay protected"),
-        ("Endpoints", "GET /api/v1/ping • POST /api/v1/pair/enroll • POST /api/v1/rpc"),
+        ("Endpoints", "GET /api/v1/ping • POST /api/v1/pair/enroll • POST /api/v1/rpc • WSS /comms/v1/ws"),
         ("Generated", DateTime.Now.ToString("dd MMM yyyy HH:mm")),
     ];
 
@@ -446,7 +448,7 @@ public static class ConnectionSheet
             Tailscale (recommended):
               1. Install Tailscale on this PC and on every phone; sign in to the same account.
               2. On this PC run:  tailscale ip -4   → e.g. 100.x.y.z
-              3. In Cloud Link set Public host = that 100.x.y.z address, Public port = {s.Port}.
+              3. In Cloud Link set Public host = that 100.x.y.z address, Public port = {s.Port}, Comms port = {s.CommsPort}.
               4. Re-pair phones (or enter https://100.x.y.z:{s.Port} in the phone's Cloud settings).
             """,
         "TUNNEL" => $"""
@@ -458,18 +460,24 @@ public static class ConnectionSheet
                   service: https://localhost:{s.Port}
                   originRequest:
                     noTLSVerify: true
+                - hostname: comms.example.org
+                  service: https://localhost:{s.CommsPort}
+                  originRequest:
+                    noTLSVerify: true
                 - service: http_status:404
-            Then set Public URL = https://gate.example.org and tick "public certificate".
+            Then set Public URL = https://gate.example.org, Comms URL = https://comms.example.org
+            and tick "public certificate".
             """,
         "RELAY" => $"""
             Reverse SSH relay from this PC to a cloud VM (vm.example.org):
-              ssh -N -R 0.0.0.0:{s.PublicPort}:localhost:{s.Port} relay@vm.example.org
-            (VM sshd_config: GatewayPorts yes; open TCP {s.PublicPort} in the VM firewall.)
+              ssh -N -R 0.0.0.0:{s.PublicPort}:localhost:{s.Port} -R 0.0.0.0:{s.CommsPublicPort}:localhost:{s.CommsPort} relay@vm.example.org
+            (VM sshd_config: GatewayPorts yes; open TCP {s.PublicPort} and {s.CommsPublicPort} in the VM firewall.)
             Then set Public host = vm.example.org, Public port = {s.PublicPort}.
             """,
         _ => $"""
             Router port forwarding:
               External TCP {s.PublicPort}  →  {NetUtil.LanAddresses().FirstOrDefault() ?? "<this PC's LAN IP>"} : {s.Port}
+              External TCP {s.CommsPublicPort}  →  {NetUtil.LanAddresses().FirstOrDefault() ?? "<this PC's LAN IP>"} : {s.CommsPort}   (Comms engine)
             Give this PC a fixed LAN IP (DHCP reservation) and use a static public IP or a DDNS name
             (e.g. DuckDNS / No-IP) as Public host.
             """,

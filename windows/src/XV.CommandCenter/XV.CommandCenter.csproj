@@ -15,7 +15,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\XV.Core\XV.Core.csproj" />
+    <ProjectReference Include="..\XV.Core\XV.Core.csproj" /><ProjectReference Include="..\XV.Comms\XV.Comms.csproj" />
     <Resource Include="Assets\app.ico" />
   </ItemGroup>
 </Project>

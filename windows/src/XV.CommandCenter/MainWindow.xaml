@@ -44,6 +44,14 @@
                             <Ellipse Width="7" Height="7" Fill="{StaticResource Emerald}" Margin="8,0,0,0"/>
                         </StackPanel>
                     </Button>
+                    <Button Style="{StaticResource BtnDanger}" Margin="0,3,6,3" Click="Comms_Click" ToolTip="Messages, alerts and calls with terminals">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Comms" Foreground="#FDA4AF" FontWeight="SemiBold"/>
+                            <Border x:Name="CommsBadge" Visibility="Collapsed" Background="#FBBF24" CornerRadius="8" Padding="6,0" Margin="7,0,0,0">
+                                <TextBlock x:Name="CommsBadgeText" Foreground="#18181B" FontWeight="Bold" FontSize="11"/>
+                            </Border>
+                        </StackPanel>
+                    </Button>
                     <Button Style="{StaticResource BtnBlue}" Margin="0,3,6,3" Click="Cloud_Click" Content="Cloud Link"/>
                     <Button Margin="0,3,6,3" Click="Stations_Click" Content="Stations &amp; Settings"/>
                     <Button Click="Refresh_Click" ToolTip="Refresh now" Padding="10,7" Margin="0,3,0,3">

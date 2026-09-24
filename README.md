@@ -57,6 +57,11 @@ Building it yourself instead: `cd android && ./gradlew :app:assembleDebug` (JDK 
 - **Outbound block:** the installer adds a Windows Firewall rule that stops the Command Center from opening connections to public internet addresses (LAN, VPN `100.64.0.0/10` and IPv6 unique-local stay allowed). It can be switched off in *Data protection* (administrator approval required).
 - **Administrator password:** every export (reports, CSV, connection details), credential save/print, record wipe and data-protection change asks for the administrator password (set on first use, PBKDF2-hashed, unlock remembered for 5 minutes). Each use and each failed attempt is written to the Audit Trail.
 
+## Comms (messages & alerts)
+
+The **Comms** button on the PC opens the Comms Center: pick a paired terminal, send a message or an **ALERT**, or broadcast an alert to every terminal. On the phone the **Comms** tab shows the conversation and can send messages or alerts back; alerts from phones pop up on the PC with a sound, and alerts from the PC ring on the phone's alarm channel even when the app is closed.
+Comms is a separate engine: its own port (8444), its own encrypted databases on both sides and its own key per terminal, so it never touches the gate records. Messages to an offline terminal are queued and delivered when it reconnects. For reliable alerts, allow the app to run in the background (the Comms tab offers a shortcut to the battery setting). For internet use, forward/tunnel port 8444 as well (see Cloud Link).
+
 ## 5. Connecting over the internet (Cloud Link)
 
 Open **Cloud Link** on the PC. It lists every detail a remote connection needs (server ID, ports, LAN addresses, certificate fingerprint, endpoints) and supports:

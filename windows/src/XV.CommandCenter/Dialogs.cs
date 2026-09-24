@@ -446,6 +446,7 @@ public static class Dialogs
         yield return (() => new StationsWindow(), "08-stations-settings");
         yield return (() => new PersonDialog(null), "09-add-soldier");
         yield return (() => new ReportDialog("ALL", []), "10-reports-export");
+        yield return (() => new CommsWindow(), "12-comms-center");
         var first = App.Store.Persons().FirstOrDefault();
         if (first != null) yield return (() => new AddRecordDialog(S(first["id"])), "11-add-history-record");
     }

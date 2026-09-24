@@ -19,12 +19,12 @@ jobs:
         run: dotnet build windows/src/XV.Server -c Release
       - name: End-to-end encrypted protocol test
         run: |
-          pip install pycryptodome requests
+          pip install pycryptodome requests websocket-client
           mkdir -p /tmp/xv && cd /tmp/xv
           XV_DATA_DIR=/tmp/xv dotnet $GITHUB_WORKSPACE/windows/src/XV.Server/bin/Release/net8.0/XV.Server.dll \
             --create-operator "Test Operator" GK-01 "Operator#1" \
             --import-persons $GITHUB_WORKSPACE/windows/tests/sample/persons.csv --import-vehicles $GITHUB_WORKSPACE/windows/tests/sample/vehicles.csv \
-            --add-location LOC07 "Location 07" --add-gate G02 "Gate 02" --pair > srv.log 2>&1 &
+            --add-location LOC07 "Location 07" --add-gate G02 "Gate 02" --pair --comms-test-echo > srv.log 2>&1 &
           for i in $(seq 1 60); do grep -q PAIRQR srv.log && break; sleep 1; done; cat srv.log
           python3 $GITHUB_WORKSPACE/windows/tests/e2e_protocol_test.py "$(grep PAIRQR srv.log | cut -d' ' -f2)"
 

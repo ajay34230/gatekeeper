@@ -2,6 +2,8 @@ using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Controls;
+using XV.Comms;
 using XV.Core;
 
 namespace XV.CommandCenter;
@@ -11,6 +13,11 @@ public partial class App : Application
     public static Store Store { get; private set; } = null!;
     public static ApiServer Server { get; private set; } = null!;
     public static Settings Settings => Store.Settings;
+    /// <summary>Separate Comms engine (messages, alerts, calls) with its own listener and encrypted database.</summary>
+    public static CommsEngine Comms { get; private set; } = null!;
+    public static string CommsStatus => Comms.Running ? $"Listening on port {Settings.CommsPort} • end-to-end encrypted" : "Not running: " + (Comms.LastError ?? "stopped");
+    /// <summary>Adds per-terminal actions (e.g. calls) to the Comms Center header: (panel, deviceId, online).</summary>
+    public static Action<StackPanel, string, bool>? ExtendCommsHeader;
     static DiscoveryResponder? _discovery;
     static Mutex? _single;
 
@@ -35,7 +42,13 @@ public partial class App : Application
         {
             var settings = Settings.Load();
             Store = new Store(settings);
-            Server = new ApiServer(Store, CertManager.LoadOrCreate(settings));
+            var cert = CertManager.LoadOrCreate(settings);
+            Server = new ApiServer(Store, cert);
+            Comms = new CommsEngine(settings, cert, Store.DeviceKey);
+            Comms.MessageReceived += m =>
+            {
+                if (m.Kind == "ALERT") Current.Dispatcher.BeginInvoke(() => { if (Current.MainWindow is Window w && screenshotDir == null) CommsWindow.ShowIncomingAlert(w, m); });
+            };
             await StartServerAsync();
         }
         catch (Exception ex)
@@ -57,6 +70,8 @@ public partial class App : Application
         _discovery?.Dispose();
         await Server.StopAsync();
         await Server.StartAsync();
+        await Comms.StopAsync();
+        await Comms.StartAsync();   // failures are reported in the Comms Center, the gate server keeps running
         try { _discovery = new DiscoveryResponder(Store.Settings, Server.Fingerprint); } catch { _discovery = null; }
     }
 
@@ -64,6 +79,7 @@ public partial class App : Application
     {
         _discovery?.Dispose();
         try { Server?.StopAsync().Wait(3000); } catch { }
+        try { Comms?.DisposeAsync().AsTask().Wait(3000); } catch { }
         Store?.Dispose();
         base.OnExit(e);
     }
