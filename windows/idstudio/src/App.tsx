@@ -7,7 +7,8 @@ import { SignaturePad } from './components/SignaturePad';
 import { NationalCrest } from './components/MilitaryEmblem';
 import { host } from './host';
 import { cardCheck } from './mrz';
-import { Printer, RotateCw, FileDown, Users, Search, Sliders, User, Type, Shield, Palette, Upload, PenTool, Save, Trash2, Database, CheckSquare, Square } from 'lucide-react';
+import { toPng } from 'html-to-image';
+import { Printer, RotateCw, FileDown, Users, Search, Sliders, User, Type, Shield, Palette, Upload, PenTool, Save, Trash2, Database, CheckSquare, Square, Download, X } from 'lucide-react';
 
 type Mode = 'INDIVIDUAL' | 'MULTIPLE' | 'COMPANY' | 'PLATOON' | 'SECTION' | 'ALL';
 const MODES: [Mode, string][] = [['INDIVIDUAL', 'Individual'], ['MULTIPLE', 'Multiple'], ['COMPANY', 'Company'], ['PLATOON', 'Platoon'], ['SECTION', 'Section'], ['ALL', 'Entire']];
@@ -35,6 +36,9 @@ export default function App() {
   const [printIds, setPrintIds] = useState<string[]>([]);
   const printPurpose = useRef<'print' | 'pdf'>('print');
   const [checks, setChecks] = useState<Record<string, string>>({});
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'pdf' | 'png' | 'both'>('pdf');
+  const [exportJob, setExportJob] = useState<{ id: string; format: 'pdf' | 'png'; seq: number } | null>(null);
 
   // ---------------------------------------------------------------- host bridge
   useEffect(() => {
@@ -46,6 +50,8 @@ export default function App() {
       if (m.t === 'designSaved') setDesignDirty(false);
       if (m.t === 'preparePrint') { printPurpose.current = m.purpose; setPrintIds(m.ids); }
       if (m.t === 'printDone') setPrintIds([]);
+      if (m.t === 'prepareExport') setExportJob({ id: m.id, format: m.format, seq: m.seq });
+      if (m.t === 'exportDone') setExportJob(null);
     });
     host.send({ t: 'ready' });
     return off;
@@ -107,6 +113,31 @@ export default function App() {
     return () => { cancelled = true; };
   }, [printList]);
 
+  // ---------------------------------------------------------------- export one soldier's card (driven by the host, one soldier at a time)
+  const exportSoldier = exportJob ? soldiers.find(s => s.id === exportJob.id) : undefined;
+  useEffect(() => {
+    if (!exportJob) return;
+    let cancelled = false;
+    const pageStyle = document.createElement('style');
+    if (exportJob.format === 'pdf') { pageStyle.textContent = '@page { size: 85.6mm 53.98mm; margin: 0; }'; document.head.appendChild(pageStyle); document.body.classList.add('exporting'); }
+    (async () => {
+      await new Promise(r => setTimeout(r, 250));
+      const imgs = [...document.querySelectorAll<HTMLImageElement>('.export-area img, .export-png img')];
+      await Promise.all(imgs.map(i => i.complete ? Promise.resolve() : i.decode().catch(() => undefined)));
+      await new Promise(r => setTimeout(r, 150));
+      if (cancelled) return;
+      if (exportJob.format === 'pdf') { host.send({ t: 'exportReady', id: exportJob.id, seq: exportJob.seq }); return; }
+      try {
+        const front = await toPng(document.getElementById('export-png-front')!, { pixelRatio: 3, cacheBust: false });
+        const back = await toPng(document.getElementById('export-png-back')!, { pixelRatio: 3, cacheBust: false });
+        if (!cancelled) host.send({ t: 'exportImages', id: exportJob.id, seq: exportJob.seq, front, back });
+      } catch (e: any) {
+        host.send({ t: 'exportFailed', id: exportJob.id, seq: exportJob.seq, message: String(e?.message || e) });
+      }
+    })();
+    return () => { cancelled = true; pageStyle.remove(); document.body.classList.remove('exporting'); };
+  }, [exportJob]);
+
   const ids = selected.map(s => s.id);
   const readFile = (f: File, cb: (url: string) => void) => { const r = new FileReader(); r.onload = () => cb(String(r.result)); r.readAsDataURL(f); };
 
@@ -129,6 +160,7 @@ export default function App() {
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => host.send({ t: 'exportData', ids })} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-200 text-sm font-semibold hover:bg-slate-800"><Database className="w-4 h-4" />Export data</button>
+            <button disabled={!selected.length} onClick={() => setExportOpen(true)} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-700/60 bg-emerald-950/40 text-emerald-300 text-sm font-semibold hover:bg-emerald-900/40 disabled:opacity-40"><Download className="w-4 h-4" />Export cards ({selected.length})</button>
             <button disabled={!selected.length} onClick={() => host.send({ t: 'pdf', ids })} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-cyan-700/60 bg-cyan-950/40 text-cyan-300 text-sm font-semibold hover:bg-cyan-900/40 disabled:opacity-40"><FileDown className="w-4 h-4" />Save PDF ({selected.length})</button>
             <button disabled={!selected.length} onClick={() => host.send({ t: 'print', ids })} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500 text-slate-950 text-sm font-bold shadow-lg shadow-amber-500/20 hover:bg-amber-400 disabled:opacity-40"><Printer className="w-4 h-4" />Print cards ({selected.length})</button>
           </div>
@@ -319,6 +351,46 @@ export default function App() {
 
       <SignaturePad open={pad !== ''} title={pad === 'co' ? 'Issuing authority signature' : `Signature of ${draft?.rank ?? ''} ${draft?.name ?? ''}`} onClose={() => setPad('')}
         onSave={png => pad === 'co' ? setD({ coSignature: png }) : draft && host.send({ t: 'saveSignature', id: draft.id, dataUrl: png })} />
+
+      {exportOpen && (
+        <div className="no-print fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800">
+              <div className="flex items-center gap-2 text-emerald-300 font-bold"><Download className="w-4 h-4" />Export {selected.length} card(s)</div>
+              <button onClick={() => setExportOpen(false)} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-sm text-slate-400">One file per soldier, named by the <span className="text-amber-300 font-semibold">Army Number</span> (Personnel ID when no army number is recorded).</p>
+              {([['pdf', 'PDF — card size (85.6 × 54 mm), page 1 front, page 2 back', 'e.g. JC-784912X.pdf'],
+                 ['png', 'PNG images — high resolution (≈ 620 dpi)', 'e.g. JC-784912X-front.png, JC-784912X-back.png'],
+                 ['both', 'PDF and PNG', 'all three files per soldier']] as const).map(([k, t, ex]) => (
+                <label key={k} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer ${exportFormat === k ? 'border-emerald-500/70 bg-emerald-500/10' : 'border-slate-700'}`}>
+                  <input type="radio" checked={exportFormat === k} onChange={() => setExportFormat(k)} className="mt-1 accent-emerald-500" />
+                  <span><span className="block text-sm font-semibold text-slate-100">{t}</span><span className="block text-xs font-mono text-slate-400">{ex}</span></span>
+                </label>
+              ))}
+              <div className="flex justify-end gap-2 pt-2">
+                <button onClick={() => setExportOpen(false)} className="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 text-sm">Cancel</button>
+                <button onClick={() => { setExportOpen(false); host.send({ t: 'exportCards', ids, format: exportFormat }); }} className="px-4 py-2 rounded-lg bg-emerald-600 text-white font-bold text-sm">Choose folder & export</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============ EXPORT RENDERING (one soldier at a time) ============ */}
+      {exportSoldier && exportJob?.format === 'pdf' && (
+        <div className="export-area">
+          <div className="export-page"><div className="print-zoom"><CardFront soldier={exportSoldier} design={design} check={checks[exportSoldier.id] ?? ''} /></div></div>
+          <div className="export-page"><div className="print-zoom"><CardBack soldier={exportSoldier} design={design} /></div></div>
+        </div>
+      )}
+      {exportSoldier && exportJob?.format === 'png' && (
+        <div className="export-png" style={{ position: 'fixed', left: -10000, top: 0 }}>
+          <div id="export-png-front" style={{ width: 700 }}><CardFront soldier={exportSoldier} design={design} check={checks[exportSoldier.id] ?? ''} className="!shadow-none" /></div>
+          <div id="export-png-back" style={{ width: 700, marginTop: 20 }}><CardBack soldier={exportSoldier} design={design} className="!shadow-none" /></div>
+        </div>
+      )}
 
       {toast && <div className="no-print fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl bg-slate-900 border border-amber-500/50 text-amber-200 text-sm shadow-2xl">{toast}</div>}
 

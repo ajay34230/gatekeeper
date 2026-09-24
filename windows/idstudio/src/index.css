@@ -4,7 +4,7 @@
 @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
 /* Print layout: each soldier = one row with the card front and back at true ID-1 size (85.6 × 53.98 mm), with cut marks. */
-.print-area { display: none; }
+.print-area, .export-area { display: none; }
 @page { size: A4 portrait; margin: 10mm; }
 @media print {
   html, body, .app-root { background: #fff !important; min-height: 0 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -18,4 +18,10 @@
   /* The card is designed 700 px wide; 85.6 mm = 323.53 CSS px → zoom 0.4622. */
   .print-zoom { zoom: 0.46218; width: 700px; }
   .print-zoom .xv-card { box-shadow: none !important; border-radius: 26px; }
+  /* Card export: one card per page at exact card size (page size set while exporting). */
+  body.exporting .print-area { display: none !important; }
+  body.exporting .export-area { display: block !important; }
+  .export-page { width: 85.6mm; height: 53.98mm; overflow: hidden; break-after: page; page-break-after: always; }
+  .export-page:last-child { break-after: auto; page-break-after: auto; }
+  .export-page .xv-card { box-shadow: none !important; border-radius: 0; border-width: 0; }
 }

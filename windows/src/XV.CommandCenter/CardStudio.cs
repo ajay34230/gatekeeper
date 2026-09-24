@@ -25,6 +25,9 @@ public sealed class CardStudioWindow : Window
     readonly DispatcherTimer _refresh = new() { Interval = TimeSpan.FromMilliseconds(400) };
     readonly List<string> _preselect;
     string? _pdfPath;
+    TaskCompletionSource<JsonObject>? _step;
+    int _stepSeq;
+    bool _exporting;
 
     public static void Show(Window owner, IEnumerable<string>? preselect = null)
     {
@@ -71,7 +74,7 @@ public sealed class CardStudioWindow : Window
         core.Settings.IsStatusBarEnabled = false;
         core.Settings.AreDefaultContextMenusEnabled = false;
         core.SetVirtualHostNameToFolderMapping(HostName, folder, CoreWebView2HostResourceAccessKind.Deny);
-        core.AddWebResourceRequestedFilter($"https://{HostName}/media/*", CoreWebView2WebResourceContext.Image);
+        core.AddWebResourceRequestedFilter($"https://{HostName}/media/*", CoreWebView2WebResourceContext.All);
         core.WebResourceRequested += (_, e) => e.Response = Media(core, e.Request.Uri);
         core.NewWindowRequested += (_, e) => e.Handled = true;
         core.NavigationStarting += (_, e) => { if (!e.Uri.StartsWith($"https://{HostName}/", StringComparison.OrdinalIgnoreCase)) e.Cancel = true; };
@@ -129,6 +132,88 @@ public sealed class CardStudioWindow : Window
         var bytes = Convert.FromBase64String(dataUrl[(comma + 1)..]);
         if (bytes.Length > maxBytes) throw new InvalidDataException($"Image is larger than {maxBytes / 1024 / 1024} MB.");
         return bytes;
+    }
+
+    /// <summary>File name for a soldier's card: the Army Number (Personnel ID when none), made safe for Windows.</summary>
+    static string CardFileName(Dictionary<string, object?> p)
+    {
+        var raw = S(p["service_no"]).Trim();
+        if (raw.Length == 0) raw = S(p["id"]);
+        var bad = Path.GetInvalidFileNameChars();
+        var name = new string(raw.Select(c => bad.Contains(c) ? '-' : c).ToArray()).Trim(' ', '.');
+        return name.Length == 0 ? S(p["id"]) : name;
+    }
+
+    /// <summary>Renders one soldier at a time in the Studio page and waits for it to report back.</summary>
+    async Task<JsonObject> Step(string id, string format)
+    {
+        _step = new TaskCompletionSource<JsonObject>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var seq = ++_stepSeq;
+        Post(new JsonObject { ["t"] = "prepareExport", ["id"] = id, ["format"] = format, ["seq"] = seq });
+        var done = await Task.WhenAny(_step.Task, Task.Delay(TimeSpan.FromSeconds(60)));
+        if (done != _step.Task) throw new TimeoutException($"The card for {id} did not finish rendering.");
+        return _step.Task.Result;
+    }
+
+    async Task ExportCards(List<string> ids, string format)
+    {
+        if (ids.Count == 0 || _exporting) return;
+        if (!AdminGate.Require(this, $"Export {ids.Count} ID card file(s)")) return;
+        var dlg = new OpenFolderDialog { Title = "Folder for the ID card files (one file per soldier, named by Army Number)" };
+        if (dlg.ShowDialog(this) != true) return;
+        var folder = dlg.FolderName;
+        var people = App.Store.Persons().ToDictionary(p => S(p["id"]));
+        var wantPdf = format is "pdf" or "both";
+        var wantPng = format is "png" or "both";
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var written = new List<string>();
+        var failed = new List<string>();
+        _exporting = true;
+        try
+        {
+            foreach (var id in ids)
+            {
+                if (!people.TryGetValue(id, out var p)) continue;
+                var name = CardFileName(p);
+                if (!used.Add(name)) { name = $"{name}-{DisplayId(id)}"; used.Add(name); } // two soldiers with the same army no.
+                try
+                {
+                    if (wantPdf)
+                    {
+                        var r = await Step(id, "pdf");
+                        if (r["t"]?.ToString() == "exportFailed") throw new InvalidOperationException(r["message"]?.ToString());
+                        var ps = _web.CoreWebView2.Environment.CreatePrintSettings();
+                        ps.ShouldPrintBackgrounds = true; ps.ShouldPrintHeaderAndFooter = false;
+                        ps.PageWidth = 85.6 / 25.4; ps.PageHeight = 53.98 / 25.4; // ID-1 card
+                        ps.MarginTop = ps.MarginBottom = ps.MarginLeft = ps.MarginRight = 0;
+                        var path = Path.Combine(folder, name + ".pdf");
+                        if (!await _web.CoreWebView2.PrintToPdfAsync(path, ps)) throw new IOException("PDF could not be written");
+                        written.Add(Path.GetFileName(path));
+                    }
+                    if (wantPng)
+                    {
+                        var r = await Step(id, "png");
+                        if (r["t"]?.ToString() == "exportFailed") throw new InvalidOperationException(r["message"]?.ToString());
+                        foreach (var side in new[] { "front", "back" })
+                        {
+                            var path = Path.Combine(folder, $"{name}-{side}.png");
+                            await File.WriteAllBytesAsync(path, FromDataUrl(r[side]?.ToString() ?? "", 40_000_000));
+                            written.Add(Path.GetFileName(path));
+                        }
+                    }
+                }
+                catch (Exception ex) { failed.Add($"{DisplayId(id)}: {ex.Message}"); }
+            }
+        }
+        finally
+        {
+            _exporting = false;
+            Post(new JsonObject { ["t"] = "exportDone" });
+        }
+        App.Store.AdminAudit("ID_CARDS_EXPORT", $"{format} → {folder}: {written.Count} file(s) for {ids.Count} soldier(s)");
+        var msg = $"Exported {written.Count} file(s) to\n{folder}" + (failed.Count > 0 ? $"\n\nNot exported ({failed.Count}):\n" + string.Join("\n", failed.Take(10)) : "") + "\n\nOpen the folder now?";
+        if (MessageBox.Show(this, msg, "Export cards", MessageBoxButton.YesNo) == MessageBoxResult.Yes)
+            System.Diagnostics.Process.Start("explorer.exe", folder);
     }
 
     async Task Handle(JsonObject m)
@@ -198,6 +283,16 @@ public sealed class CardStudioWindow : Window
                     }
                     App.Store.AdminAudit(pdf ? "ID_CARDS_PDF" : "ID_CARDS_PRINT", string.Join(",", ids.Take(50)) + (ids.Count > 50 ? $" (+{ids.Count - 50})" : ""));
                     Post(new JsonObject { ["t"] = "preparePrint", ["purpose"] = pdf ? "pdf" : "print", ["ids"] = new JsonArray(ids.Select(i => (JsonNode)i).ToArray()) });
+                    break;
+
+                case "exportCards":
+                    await ExportCards((m["ids"] as JsonArray)?.Select(x => x!.ToString()).ToList() ?? [], m["format"]?.ToString() ?? "pdf");
+                    break;
+
+                case "exportReady":
+                case "exportImages":
+                case "exportFailed":
+                    if (m["seq"]?.GetValue<int>() == _stepSeq) _step?.TrySetResult(m);
                     break;
 
                 case "printReady":
