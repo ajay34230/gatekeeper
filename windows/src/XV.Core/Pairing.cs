@@ -42,6 +42,17 @@ public static class Csv
     /// <summary>Minimal RFC-4180 reader used by the registry import.</summary>
     public static List<Dictionary<string, string>> Parse(string text)
     {
+        var rows = ParseRows(text);
+        if (rows.Count == 0) return [];
+        var head = rows[0].Select(h => h.Trim()).ToList();
+        return rows.Skip(1).Where(r => r.Any(c => c.Trim().Length > 0))
+            .Select(r => head.Select((h, i) => (h, v: i < r.Count ? r[i].Trim() : "")).Where(x => x.h.Length > 0).DistinctBy(x => x.h, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(x => x.h, x => x.v, StringComparer.OrdinalIgnoreCase)).ToList();
+    }
+
+    /// <summary>Raw CSV rows (RFC 4180 quoting); the first row is the header.</summary>
+    public static List<List<string>> ParseRows(string text)
+    {
         var rows = new List<List<string>>(); var row = new List<string>(); var cell = new StringBuilder(); var q = false;
         for (var i = 0; i < text.Length; i++)
         {
@@ -53,10 +64,7 @@ public static class Csv
             else if (ch != '\r') cell.Append(ch);
         }
         if (cell.Length > 0 || row.Count > 0) { row.Add(cell.ToString()); rows.Add(row); }
-        if (rows.Count == 0) return [];
-        var head = rows[0].Select(h => h.Trim()).ToList();
-        return rows.Skip(1).Where(r => r.Any(c => c.Trim().Length > 0))
-            .Select(r => head.Select((h, i) => (h, v: i < r.Count ? r[i].Trim() : "")).ToDictionary(x => x.h, x => x.v, StringComparer.OrdinalIgnoreCase)).ToList();
+        return rows;
     }
 }
 

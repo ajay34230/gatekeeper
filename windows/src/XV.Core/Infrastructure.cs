@@ -105,6 +105,12 @@ public sealed class Settings
     public List<string> CustomFields { get; set; } = [];
 
     /// <summary>History record types besides ENTRY / EXIT that can be added to a person's history from the PC.</summary>
+    /// <summary>Reasons offered on the terminal when recording an entry / exit (the operator can also type a custom reason).</summary>
+    public List<string> MovementReasons { get; set; } = ["TD", "Proceeding on Leave", "Rejoining from Leave", "Posting Out", "Posting In", "Local Work"];
+
+    /// <summary>Card Studio design (theme, header texts, instructions, CO details), stored as JSON by the Card Studio.</summary>
+    public string CardDesignJson { get; set; } = "";
+
     public List<string> EventTypes { get; set; } = ["Leave", "Returned from Leave", "Duty", "Course", "Medical", "Guard Duty", "Out Pass", "Temporary Duty"];
     public int TokenHours { get; set; } = 12;
     public int OfflineGraceHours { get; set; } = 12;

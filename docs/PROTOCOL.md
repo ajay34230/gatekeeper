@@ -34,13 +34,13 @@ Body: `{"iv": base64(12 bytes), "ct": base64(ciphertext ‖ 16-byte tag)}` — A
 | op | token | data |
 |---|---|---|
 | `health` | no | – |
-| `stations.list` | no | – → locations, gates |
+| `stations.list` | no | – → locations, gates, `reasons` (entry/exit reasons set on the PC) |
 | `auth.login` | no | `username`, `password` |
 | `auth.register` | no | `name`, `username` (optional), `password` → `pending` until approved on the PC |
 | `auth.logout` | yes | – |
-| `master.bootstrap` | yes | – → `sharingMode`, persons, vehicles, locations, gates, presence, active `manifests` (see below) |
+| `master.bootstrap` | yes | – → `sharingMode`, `reasons`, persons, vehicles, locations, gates, presence, active `manifests` (see below) |
 | `credential.verify` | yes | `code` (badge secret, ID or service number / plate), `expected` (`PERSON`/`VEHICLE`/empty) → details for this one scan; 404 `NOT_REGISTERED` |
-| `events.create` | yes | person movement event |
+| `events.create` | yes | person movement event; optional `reason` (≤ 60 chars, from `reasons` or typed) and `remarks` (≤ 300 chars) |
 | `vehicle.transaction` | yes | `{event, manifest}` vehicle entry/exit with occupants |
 | `heartbeat` | yes | `locationId`, `gateId`, `operatorId`, `pending`, `appVersion` |
 

@@ -117,7 +117,7 @@ public static class Reports
             var color = CompanyColor(g.Company);
             var ws = wb.Worksheets.Add(SafeSheet(g.Company));
             ws.TabColor = XLColor.FromHtml(color);
-            string[] rosterHead = ["ID", "Name", "Rank", "Service No", "Unit", "Role", "Category", "Status", "Presence", "Last seen", .. custom];
+            string[] rosterHead = ["ID", "Name", "Rank", "Army No", "Unit", "Platoon", "Section", "Appointment", "Category", "Status", "Presence", "Last seen", .. custom];
             var width = Math.Max(rosterHead.Length, 13);
             Title(ws, 1, width, $"{g.Company.ToUpperInvariant()} COMPANY", color);
             ws.Cell(2, 1).Value = $"{g.Persons.Count} personnel • {g.Records.Count} records • {Scope(req)}";
@@ -129,12 +129,12 @@ public static class Reports
             foreach (var p in g.Persons)
             {
                 var cf = Custom(p);
-                object?[] vals = [Id(S(p["id"])), S(p["name"]), S(p["rank"]), S(p["service_no"]), S(p["unit"]), S(p["role"]), S(p["category"]), S(p["status"]), Presence(p),
+                object?[] vals = [Id(S(p["id"])), S(p["name"]), S(p["rank"]), S(p["service_no"]), S(p["unit"]), S(p["platoon"]), S(p["section"]), S(p["role"]), S(p["category"]), S(p["status"]), Presence(p),
                     L(p["last_seen"]) > 0 ? Local(L(p["last_seen"])).ToString("dd MMM yyyy HH:mm") : "No gate activity", .. custom.Select(f => cf.GetValueOrDefault(f, ""))];
                 for (var i = 0; i < vals.Length; i++) ws.Cell(r, i + 1).Value = S(vals[i]);
                 if (r % 2 == 1) ws.Range(r, 1, r, rosterHead.Length).Style.Fill.SetBackgroundColor(XLColor.FromHtml(Band));
-                StatusCell(ws.Cell(r, 8), S(p["status"]));
-                ws.Cell(r, 9).Style.Font.SetFontColor(XLColor.FromHtml(L(p["inside_since"]) > 0 ? "#047857" : "#71717A")).Font.SetBold();
+                StatusCell(ws.Cell(r, 10), S(p["status"]));
+                ws.Cell(r, 11).Style.Font.SetFontColor(XLColor.FromHtml(L(p["inside_since"]) > 0 ? "#047857" : "#71717A")).Font.SetBold();
                 ws.Cell(r, 1).Style.Font.SetBold().Font.SetFontName("Consolas");
                 r++;
             }
@@ -145,7 +145,7 @@ public static class Reports
             {
                 r += 2;
                 Section(ws, r, width, "GATE & HISTORY RECORDS", color);
-                string[] recHead = ["Date", "Time", "ID", "Name", "Rank", "Record", "Location", "Gate", "Stay", "Location flag", "Operator", "Source", "Remarks"];
+                string[] recHead = ["Date", "Time", "ID", "Name", "Rank", "Record", "Reason", "Location", "Gate", "Stay", "Location flag", "Operator", "Source", "Remarks"];
                 Header(ws, r + 1, recHead);
                 var start = r + 1;
                 r += 2;
@@ -154,7 +154,7 @@ public static class Reports
                 {
                     var p = names[S(e["entity_id"])];
                     var t = Local(L(e["event_ts"]));
-                    object[] vals = [t.ToString("dd MMM yyyy"), t.ToString("HH:mm:ss"), Id(S(e["entity_id"])), S(p["name"]), S(p["rank"]), S(e["event_type"]),
+                    object[] vals = [t.ToString("dd MMM yyyy"), t.ToString("HH:mm:ss"), Id(S(e["entity_id"])), S(p["name"]), S(p["rank"]), S(e["event_type"]), S(e["reason"]),
                         S(e["location_name"]), S(e["gate_name"]), Duration(L(e["stay_ms"])), L(e["loc_mismatch"]) == 1 ? "⚠ QR: " + S(e["scanned_loc"]) : "",
                         S(e["operator_id"]), S(e["source"]) == "PC" ? "Command Center" : "Gate terminal " + S(e["device_id"]), S(e["remarks"])];
                     for (var i = 0; i < vals.Length; i++) ws.Cell(r, i + 1).Value = S(vals[i]);
@@ -318,16 +318,16 @@ public static class Reports
             var hs = h.AddFormattedText($"    {g.Persons.Count} personnel • {g.Records.Count} records"); hs.Font.Size = 8; hs.Font.Color = C("#71717A");
 
             var roster = sec.AddTable();
-            foreach (var w in new[] { 2.0, 5, 3, 3, 4.5, 3.5, 2.5, 3.5 }) roster.AddColumn(Unit.FromCentimeter(w));
-            PdfHeader(roster, "ID", "Name", "Rank", "Service No", "Unit", "Role", "Status", "Presence");
+            foreach (var w in new[] { 1.8, 4.4, 2.8, 2.8, 3.8, 2.4, 2.2, 3.0, 2.2, 3.2 }) roster.AddColumn(Unit.FromCentimeter(w));
+            PdfHeader(roster, "ID", "Name", "Rank", "Army No", "Unit", "Platoon", "Section", "Appointment", "Status", "Presence");
             var i = 0;
             foreach (var p in g.Persons)
             {
                 var r = roster.AddRow(); if (i++ % 2 == 1) r.Shading.Color = C(Band);
                 Cell(r, 0, Id(S(p["id"])), bold: true); Cell(r, 1, S(p["name"]), bold: true); Cell(r, 2, S(p["rank"])); Cell(r, 3, S(p["service_no"]));
-                Cell(r, 4, S(p["unit"])); Cell(r, 5, S(p["role"]));
-                Cell(r, 6, S(p["status"]), bold: true, color: S(p["status"]) == "ACTIVE" ? C("#047857") : C("#BE123C"));
-                Cell(r, 7, Presence(p), color: L(p["inside_since"]) > 0 ? C("#047857") : C("#71717A"));
+                Cell(r, 4, S(p["unit"])); Cell(r, 5, S(p["platoon"])); Cell(r, 6, S(p["section"])); Cell(r, 7, S(p["role"]));
+                Cell(r, 8, S(p["status"]), bold: true, color: S(p["status"]) == "ACTIVE" ? C("#047857") : C("#BE123C"));
+                Cell(r, 9, Presence(p), color: L(p["inside_since"]) > 0 ? C("#047857") : C("#71717A"));
             }
             PdfGrid(roster);
 
@@ -336,8 +336,8 @@ public static class Reports
                 var sp = sec.AddParagraph("Gate & history records"); sp.Format.Font.Bold = true; sp.Format.Font.Color = color;
                 sp.Format.SpaceBefore = Unit.FromPoint(8); sp.Format.SpaceAfter = Unit.FromPoint(3); sp.Format.KeepWithNext = true;
                 var rec = sec.AddTable();
-                foreach (var w in new[] { 3.2, 1.8, 4.2, 2.4, 3.8, 2.2, 2.4, 2.6, 4.4 }) rec.AddColumn(Unit.FromCentimeter(w));
-                PdfHeader(rec, "Date & time", "ID", "Name", "Record", "Location • Gate", "Stay", "Flag", "Operator", "Remarks");
+                foreach (var w in new[] { 3.0, 1.6, 3.8, 2.2, 3.0, 3.4, 2.0, 2.2, 2.2, 4.0 }) rec.AddColumn(Unit.FromCentimeter(w));
+                PdfHeader(rec, "Date & time", "ID", "Name", "Record", "Reason", "Location • Gate", "Stay", "Flag", "Operator", "Remarks");
                 var names = g.Persons.ToDictionary(p => S(p["id"]));
                 var j = 0;
                 foreach (var e in g.Records)
@@ -347,9 +347,9 @@ public static class Reports
                     var type = S(e["event_type"]);
                     var tc = Cell(r, 3, type, bold: true, color: type == "ENTRY" ? C("#065F46") : type == "EXIT" ? C("#92400E") : C("#1E40AF"));
                     tc.Shading.Color = type == "ENTRY" ? C("#D1FAE5") : type == "EXIT" ? C("#FEF3C7") : C("#DBEAFE");
-                    Cell(r, 4, $"{S(e["location_name"])} • {S(e["gate_name"])}"); Cell(r, 5, Duration(L(e["stay_ms"])));
-                    Cell(r, 6, L(e["loc_mismatch"]) == 1 ? "QR " + S(e["scanned_loc"]) : "", bold: true, color: C("#B45309"));
-                    Cell(r, 7, S(e["operator_id"])); Cell(r, 8, S(e["remarks"]));
+                    Cell(r, 4, S(e["reason"])); Cell(r, 5, $"{S(e["location_name"])} • {S(e["gate_name"])}"); Cell(r, 6, Duration(L(e["stay_ms"])));
+                    Cell(r, 7, L(e["loc_mismatch"]) == 1 ? "QR " + S(e["scanned_loc"]) : "", bold: true, color: C("#B45309"));
+                    Cell(r, 8, S(e["operator_id"])); Cell(r, 9, S(e["remarks"]));
                 }
                 PdfGrid(rec);
             }
@@ -403,7 +403,7 @@ public static class Reports
                 var row = new Dictionary<string, object?>
                 {
                     ["company"] = g.Company, ["date"] = Local(L(e["event_ts"])).ToString("yyyy-MM-dd"), ["time"] = Local(L(e["event_ts"])).ToString("HH:mm:ss"),
-                    ["id"] = Id(S(e["entity_id"])), ["name"] = S(p["name"]), ["rank"] = S(p["rank"]), ["service_no"] = S(p["service_no"]), ["record"] = S(e["event_type"]),
+                    ["id"] = Id(S(e["entity_id"])), ["name"] = S(p["name"]), ["rank"] = S(p["rank"]), ["service_no"] = S(p["service_no"]), ["record"] = S(e["event_type"]), ["reason"] = S(e["reason"]),
                     ["location"] = S(e["location_name"]), ["gate"] = S(e["gate_name"]), ["stay"] = Duration(L(e["stay_ms"])),
                     ["flag"] = L(e["loc_mismatch"]) == 1 ? "QR " + S(e["scanned_loc"]) : "", ["operator"] = S(e["operator_id"]), ["remarks"] = S(e["remarks"]),
                 };
@@ -412,7 +412,7 @@ public static class Reports
             }
         }
         (string, string)[] cols = [("Company", "company"), ("Date", "date"), ("Time", "time"), ("ID", "id"), ("Name", "name"), ("Rank", "rank"), ("Service No", "service_no"),
-            ("Record", "record"), ("Location", "location"), ("Gate", "gate"), ("Stay", "stay"), ("Location flag", "flag"), ("Operator", "operator"), ("Remarks", "remarks"),
+            ("Record", "record"), ("Reason", "reason"), ("Location", "location"), ("Gate", "gate"), ("Stay", "stay"), ("Location flag", "flag"), ("Operator", "operator"), ("Remarks", "remarks"),
             .. custom.Select(f => (f, "cf_" + f))];
         File.WriteAllText(path, XV.Core.Csv.Build(rows, cols), new UTF8Encoding(true));
     }

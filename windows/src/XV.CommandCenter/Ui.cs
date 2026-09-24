@@ -91,6 +91,15 @@ public static class Ui
     }
 
     /// <summary>Display form of canonical IDs: P001 → P-001.</summary>
+    /// <summary>"Reason — remarks" of a record followed by the separator, or empty.</summary>
+    public static string Note(Dictionary<string, object?> r, string sep)
+    {
+        var reason = r.TryGetValue("reason", out var x) ? S(x) : "";
+        var remarks = r.TryGetValue("remarks", out var y) ? S(y) : "";
+        var text = reason.Length > 0 && remarks.Length > 0 ? $"{reason} — {remarks}" : reason + remarks;
+        return text.Length > 0 ? text + sep : "";
+    }
+
     public static string DisplayId(string id) => id.Length > 1 && char.IsLetter(id[0]) && char.IsDigit(id[1]) ? id[0] + "-" + id[1..] : id;
 
     public static TextBlock Empty(string text) => new() { Text = text, Foreground = B("#71717A"), FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 60, 0, 60), TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center };

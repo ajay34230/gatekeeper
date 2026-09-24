@@ -174,6 +174,8 @@ public sealed class StationsWindow : DarkWindow
         fields.AcceptsReturn = true; fields.MinHeight = 80; fields.TextWrapping = TextWrapping.Wrap;
         var types = Field("History record types besides ENTRY / EXIT (one per line)", string.Join(Environment.NewLine, s.EventTypes));
         types.AcceptsReturn = true; types.MinHeight = 110; types.TextWrapping = TextWrapping.Wrap;
+        var reasons = Field("Entry / exit reasons offered on terminals (one per line; operators can also type a custom reason and remarks)", string.Join(Environment.NewLine, s.MovementReasons));
+        reasons.AcceptsReturn = true; reasons.MinHeight = 110; reasons.TextWrapping = TextWrapping.Wrap;
         var tokenH = Field("Operator session length (hours)", s.TokenHours.ToString(), mono: true);
         var graceH = Field("Offline grace period after session expiry (hours)", s.OfflineGraceHours.ToString(), mono: true);
 
@@ -214,6 +216,7 @@ public sealed class StationsWindow : DarkWindow
             s.StartWithWindows = autostart.IsChecked == true; s.TokenHours = th; s.OfflineGraceHours = gh;
             static List<string> Lines(string t) => t.Split('\n', '\r', ',').Select(x => x.Trim()).Where(x => x.Length > 0 && x.Length <= 40).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             s.CustomFields = Lines(fields.Text);
+            s.MovementReasons = Lines(reasons.Text).Where(r => !r.Equals("Custom", StringComparison.OrdinalIgnoreCase)).ToList();
             s.EventTypes = Lines(types.Text).Where(t => !t.Equals("ENTRY", StringComparison.OrdinalIgnoreCase) && !t.Equals("EXIT", StringComparison.OrdinalIgnoreCase)).ToList();
             s.Save();
             if (Owner is MainWindow mw) mw.Refresh();

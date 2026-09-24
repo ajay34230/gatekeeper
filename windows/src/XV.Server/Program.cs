@@ -12,7 +12,17 @@ var ci = Array.IndexOf(args, "--create-operator");
 if (ci >= 0 && ci + 3 < args.Length) Console.WriteLine("Created " + store.CreateAccount(args[ci + 1], args[ci + 2], args[ci + 3], "ADMIN").id);
 for (var i = 0; i + 1 < args.Length; i++)
 {
-    if (args[i] == "--import-persons") Console.WriteLine("Imported persons: " + RegistryImport.Persons(store, File.ReadAllText(args[i + 1])).ok);
+    if (args[i] == "--import-persons" || args[i] == "--import-soldiers")
+    {
+        var (headers, rows) = SoldierFile.Read(args[i + 1]);
+        var (added, updated, errors) = SoldierFile.Import(store, headers, rows, settings.CustomFields);
+        Console.WriteLine($"Imported soldiers: {added} added, {updated} updated" + (errors.Count > 0 ? "; " + string.Join("; ", errors) : ""));
+    }
+    if (args[i] == "--export-soldiers")
+    {
+        SoldierFile.Export(store.Persons(), settings.CustomFields, args[i + 1], "All soldiers");
+        Console.WriteLine("Exported soldiers to " + args[i + 1]);
+    }
     if (args[i] == "--import-vehicles") Console.WriteLine("Imported vehicles: " + RegistryImport.Vehicles(store, File.ReadAllText(args[i + 1])).ok);
     if (args[i] == "--add-location" && i + 2 < args.Length) store.UpsertLocation(args[i + 1], args[i + 2]);
     if (args[i] == "--add-gate" && i + 2 < args.Length) store.UpsertGate(args[i + 1], args[i + 2]);

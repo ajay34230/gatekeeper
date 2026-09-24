@@ -84,14 +84,39 @@ public static class Dialogs
             var fService = Field("Army / service number", V("service_no"), mono: true);
             var fCompany = Choice("Company", Companies, V("company"), editable: true);
             var fUnit = Field("Unit", V("unit"));
-            var fRole = Field("Role / designation", V("role"));
+            var fRole = Field("Appointment / designation", V("role"));
+            var fPlatoon = Field("Platoon", V("platoon"));
+            var fSection = Field("Section", V("section"));
             var fCat = Choice("Category", ["PERSONNEL", "CIVILIAN", "CONTRACTOR", "VISITOR"], p == null ? "PERSONNEL" : V("category"));
             var fStatus = Choice("Credential status", Statuses, p == null ? "ACTIVE" : V("status"));
             var fCard = Field("I-Card number", V("id_card"), mono: true);
             var fMobile = Field("Mobile number", V("mobile"), mono: true);
             var fBlood = Choice("Blood group", ["", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"], V("blood_group"));
             var fAccess = Field("Authorized locations (comma separated IDs, blank = all)", V("access_locations"), mono: true);
+            var fAddress = Field("Permanent address", V("address"));
+            var fDob = Field("Date of birth (DD-MM-YYYY)", V("dob"), mono: true);
+            var fEnrol = Field("Date of enrolment (DD-MM-YYYY)", V("enrol_date"), mono: true);
+            var fExpiry = Field("ID card expiry (DD-MM-YYYY)", V("expiry_date"), mono: true);
+            var fMark = Field("Identification mark", V("id_mark"));
+            var fNokName = Field("Next of kin — name", V("nok_name"));
+            var fNokRel = Field("Next of kin — relation", V("nok_relation"));
+            var fNokPhone = Field("Next of kin — phone", V("nok_phone"), mono: true);
+            var fSerial = Field("ID card serial / reference no.", V("card_serial"), mono: true);
             var fNotes = Field("Notes", V("notes"));
+            Body.Children.Add(Label("Photo (uniform passport portrait)"));
+            byte[]? photo = id == null ? null : App.Store.PersonPhoto(id);
+            var photoChanged = false;
+            var img = new Image { Width = 96, Height = 120, Stretch = System.Windows.Media.Stretch.UniformToFill, Source = Photo.Image(photo) };
+            var photoBox = new Border { Width = 100, Height = 124, BorderBrush = B("#D97706"), BorderThickness = new Thickness(2), CornerRadius = new CornerRadius(6), Child = img, Background = B("#0C0C0E") };
+            Body.Children.Add(Row(photoBox,
+                Btn("Choose photo…", (_, _) =>
+                {
+                    var dlg = new OpenFileDialog { Filter = "Images|*.jpg;*.jpeg;*.png;*.bmp" };
+                    if (dlg.ShowDialog() != true) return;
+                    try { photo = Photo.Prepare(File.ReadAllBytes(dlg.FileName)); img.Source = Photo.Image(photo); photoChanged = true; }
+                    catch { MessageBox.Show("That file is not a readable image."); }
+                }, "BtnGold").M(12),
+                Btn("Remove", (_, _) => { photo = null; img.Source = null; photoChanged = true; }, "BtnDanger").M(8)));
             var existingCustom = new Dictionary<string, string>();
             try { existingCustom = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(p == null || V("custom_json").Length < 2 ? "{}" : V("custom_json")) ?? []; } catch { }
             var customBoxes = new Dictionary<string, TextBox>();
@@ -107,8 +132,12 @@ public static class Dialogs
                         ["id"] = fId.Text, ["name"] = fName.Text, ["rank"] = fRank.Text, ["serviceNo"] = fService.Text, ["company"] = fCompany.Text, ["unit"] = fUnit.Text,
                         ["role"] = fRole.Text, ["category"] = fCat.Text, ["status"] = fStatus.Text, ["idCard"] = fCard.Text, ["mobile"] = fMobile.Text,
                         ["bloodGroup"] = fBlood.Text, ["accessLocations"] = fAccess.Text, ["notes"] = fNotes.Text,
+                        ["platoon"] = fPlatoon.Text, ["section"] = fSection.Text, ["address"] = fAddress.Text, ["dob"] = fDob.Text, ["enrolDate"] = fEnrol.Text,
+                        ["expiryDate"] = fExpiry.Text, ["idMark"] = fMark.Text, ["nokName"] = fNokName.Text, ["nokRelation"] = fNokRel.Text,
+                        ["nokPhone"] = fNokPhone.Text, ["cardSerial"] = fSerial.Text,
                         ["custom"] = new JsonObject(customBoxes.Select(kv => new KeyValuePair<string, System.Text.Json.Nodes.JsonNode?>(kv.Key, kv.Value.Text.Trim()))),
                     });
+                    if (photoChanged) App.Store.SetPersonPhoto(Store.CanonId(fId.Text), photo);
                     DialogResult = true;
                 }
                 catch (Exception ex) { Fail(ex); }
@@ -283,7 +312,7 @@ public static class Dialogs
                         T("  " + Time(L(r["event_ts"]), "ddd dd MMM yyyy  HH:mm:ss"), 12, "#F4F4F5", mono: true),
                         T($"   {S(r["location_name"])} • {S(r["gate_name"])}", 11.5, "#A1A1AA")),
                     Row(L(r["loc_mismatch"]) == 1 ? T("⚠ LOC FLAG  ", 10.5, "#FCD34D", bold: true, mono: true) : new TextBlock(),
-                        T((S(r["remarks"]).Length > 0 ? S(r["remarks"]) + "  •  " : "") + (L(r["stay_ms"]) > 0 ? "Stayed " + Duration(L(r["stay_ms"])) : "Op " + S(r["operator_id"])), 11, "#D4D4D8", mono: true))), "#131316", pad: 10).M(0, 0, 0, 6));
+                        T(Note(r, "  •  ") + (L(r["stay_ms"]) > 0 ? "Stayed " + Duration(L(r["stay_ms"])) : "Op " + S(r["operator_id"])), 11, "#D4D4D8", mono: true))), "#131316", pad: 10).M(0, 0, 0, 6));
             }
             if (rows.Count > 0) Body.Children.Insert(0, Para($"{rows.Count} records • total recorded time on site: {Duration(total ?? 0)}", "#FBBF24"));
             if (type == "PERSON")
@@ -406,9 +435,9 @@ public static class Dialogs
     {
         public ImportExportWindow() : base("Import / Export", "Move registry data in and out as CSV files (open directly in Excel). Imports add new records and update existing IDs.", 620, 560)
         {
-            Section("PERSONNEL REGISTRY",
-                ("Import CSV", () => Import(true), "BtnEmerald"), ("Export CSV", () => SaveCsv("xv-personnel.csv", Csv.Build(App.Store.Persons(), PersonCols)), "BtnBase"),
-                ("Blank template", () => SaveCsv("xv-personnel-template.csv", Csv.Build([], PersonCols), containsData: false), "BtnBase"));
+            Section("SOLDIER REGISTER (EXCEL • CSV)",
+                ("Import Excel / CSV", () => SoldierRegister.Import(this), "BtnEmerald"), ("Export…", () => SoldierRegister.Export(this), "BtnBase"),
+                ("Blank template", () => SoldierRegister.Template(this), "BtnBase"), ("Import photos from folder", () => SoldierRegister.ImportPhotos(this), "BtnBase"));
             Section("VEHICLE FLEET",
                 ("Import CSV", () => Import(false), "BtnEmerald"), ("Export CSV", () => SaveCsv("xv-vehicles.csv", Csv.Build(App.Store.Vehicles(), VehicleCols)), "BtnBase"),
                 ("Blank template", () => SaveCsv("xv-vehicles-template.csv", Csv.Build([], VehicleCols), containsData: false), "BtnBase"));

@@ -182,7 +182,7 @@ public partial class MainWindow : Window
                        Col(T(Time(L(r["event_ts"])), 11, "#A1A1AA", mono: true), T(Time(L(r["event_ts"]), "dd MMM"), 10, "#52525B", mono: true))),
                 Spread(T($"⌖ {S(r["location_name"])} • {S(r["gate_name"])}", 10.5, "#A1A1AA", mono: true),
                        L(r["stay_ms"]) > 0 ? T("Stayed: " + Duration(L(r["stay_ms"])), 10.5, "#D4D4D8", mono: true) : T(S(r["entity_type"]) == "VEHICLE" ? "VEHICLE" : "PERSON", 10, "#52525B", mono: true)).M(0, 10),
-                T((other ? S(r["event_type"]).ToUpperInvariant() + " • " : "") + (S(r["remarks"]).Length > 0 ? S(r["remarks"]) + " • " : "") + $"Op {S(r["operator_id"])} • {(S(r["source"]) == "PC" ? "Command Center" : "Terminal " + S(r["device_id"]))} • Seq #{L(r["seq"])}", 10, other ? "#93C5FD" : "#52525B", mono: true).M(0, 5));
+                T((other ? S(r["event_type"]).ToUpperInvariant() + " • " : "") + Note(r, " • ") + $"Op {S(r["operator_id"])} • {(S(r["source"]) == "PC" ? "Command Center" : "Terminal " + S(r["device_id"]))} • Seq #{L(r["seq"])}", 10, other ? "#93C5FD" : "#52525B", mono: true).M(0, 5));
             if (flag)
                 body.Children.Add(Card(Spread(T("⚠ LOCATION MISMATCH", 10, "#FCD34D", bold: true, mono: true), T("QR: " + (S(r["scanned_loc"]) is { Length: > 0 } q ? q : "Diff Loc"), 10, "#FCD34D", mono: true)), "#3A2A0A", "#B45309", 7).M(0, 8));
             if (S(r["occupants"]).Length > 2)

@@ -53,7 +53,9 @@ def ev(eid, etype, ent, typ, extra=None):
     e = {"eventId": eid, "entityType": etype, "entityId": ent, "eventType": typ, "locationId": "LOC07", "gateId": "G02",
          "deviceId": dev, "operatorId": "GK-01", "eventTimestamp": now, "createdAt": now, "sourceType": "DIRECT"}
     e.update(extra or {}); return e
-e1 = ev("EVT-1", "PERSON", "P001", "ENTRY")
+code, st, _ = rpc("stations.list"); assert code == 200 and "Proceeding on Leave" in st["reasons"], st
+assert "TD" in boot["reasons"], boot.get("reasons")
+e1 = ev("EVT-1", "PERSON", "P001", "ENTRY", {"reason": "Rejoining from Leave", "remarks": "Pass no. 42"})
 print("entry", rpc("events.create", e1, tok)[:2])
 print("dup  ", rpc("events.create", e1, tok)[:2])
 print("again", rpc("events.create", ev("EVT-2", "PERSON", "P001", "ENTRY"), tok)[:2])

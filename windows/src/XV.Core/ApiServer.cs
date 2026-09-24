@@ -168,6 +168,7 @@ public sealed class ApiServer : IAsyncDisposable
                 {
                     ["locations"] = new JsonArray(_store.Locations().Select(r => (JsonNode)new JsonObject { ["id"] = r["id"]?.ToString(), ["name"] = r["name"]?.ToString() }).ToArray()),
                     ["gates"] = new JsonArray(_store.Gates().Select(r => (JsonNode)new JsonObject { ["id"] = r["id"]?.ToString(), ["name"] = r["name"]?.ToString() }).ToArray()),
+                    ["reasons"] = new JsonArray(s.MovementReasons.Select(r => (JsonNode)JsonValue.Create(r)!).ToArray()),
                 });
             case "comms.info":
                 // Where this terminal reaches the separate Comms engine (messages, alerts, calls).

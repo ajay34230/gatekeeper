@@ -90,7 +90,18 @@ public sealed class Store : IDisposable
         Ensure("persons", "custom_json", "TEXT NOT NULL DEFAULT '{}'");
         Ensure("events", "remarks", "TEXT NOT NULL DEFAULT ''");
         Ensure("events", "source", "TEXT NOT NULL DEFAULT 'TERMINAL'");
+        Ensure("events", "reason", "TEXT NOT NULL DEFAULT ''");
+        foreach (var (_, col) in ExtraPersonFields) Ensure("persons", col, "TEXT NOT NULL DEFAULT ''");
+        Exec("CREATE TABLE IF NOT EXISTS person_media(person_id TEXT PRIMARY KEY, photo BLOB, signature BLOB, updated_at INTEGER NOT NULL)");
     }
+
+    /// <summary>Soldier details used by the ID card and the import/export files (JSON key → column).</summary>
+    public static readonly (string key, string column)[] ExtraPersonFields =
+    [
+        ("platoon", "platoon"), ("section", "section"), ("address", "address"), ("dob", "dob"), ("enrolDate", "enrol_date"),
+        ("expiryDate", "expiry_date"), ("idMark", "id_mark"), ("nokName", "nok_name"), ("nokRelation", "nok_relation"),
+        ("nokPhone", "nok_phone"), ("cardSerial", "card_serial"),
+    ];
 
     // ------------------------------------------------------------------ low level helpers
 
@@ -172,6 +183,8 @@ public sealed class Store : IDisposable
         ORDER BY p.id
         """, q.Trim(), "%" + q.Trim() + "%");
 
+    public Dictionary<string, object?>? Person(string id) => One("SELECT * FROM persons WHERE id=$1", CanonId(id));
+
     public List<Dictionary<string, object?>> Vehicles(string q = "") => Query("""
         SELECT v.*, (SELECT m.created_at FROM manifests m WHERE m.vehicle_id=v.id AND m.state='ACTIVE' LIMIT 1) AS inside_since
         FROM vehicles v WHERE $1='' OR v.id LIKE $2 OR v.plate LIKE $2 OR v.type LIKE $2 OR v.company LIKE $2 ORDER BY v.id
@@ -200,11 +213,39 @@ public sealed class Store : IDisposable
             """, id, secret, name, T(p, "rank"), T(p, "serviceNo"), T(p, "unit"), T(p, "company"), T(p, "role"),
             Upper(T(p, "category")) is { Length: > 0 } c ? c : "PERSONNEL", Upper(T(p, "status")) is { Length: > 0 } st ? st : "ACTIVE",
             T(p, "mobile"), T(p, "idCard"), T(p, "bloodGroup"), T(p, "accessLocations"), T(p, "notes"), now);
+        foreach (var (key, col) in ExtraPersonFields)
+            if (p.ContainsKey(key)) Exec($"UPDATE persons SET {col}=$1 WHERE id=$2", T(p, key), id);
         if (p["custom"] is JsonObject custom)
-            Exec("UPDATE persons SET custom_json=$1 WHERE id=$2", custom.ToJsonString(), id);
+        {
+            // Merge so an import that carries only some custom columns keeps the others.
+            var merged = JsonNode.Parse(S(Scalar("SELECT custom_json FROM persons WHERE id=$1", id)) is { Length: > 1 } cj ? cj : "{}") as JsonObject ?? new JsonObject();
+            foreach (var kv in custom) merged[kv.Key] = kv.Value?.ToString().Trim() ?? "";
+            Exec("UPDATE persons SET custom_json=$1 WHERE id=$2", merged.ToJsonString(), id);
+        }
         Audit(actor, existing == null ? "ADD_PERSON" : "EDIT_PERSON", "PERSON", id);
         Notify();
     }
+
+    // ------------------------------------------------------------------ photos & signatures (kept out of list queries)
+
+    public byte[]? PersonPhoto(string id) => Scalar("SELECT photo FROM person_media WHERE person_id=$1", id) as byte[];
+    public byte[]? PersonSignature(string id) => Scalar("SELECT signature FROM person_media WHERE person_id=$1", id) as byte[];
+
+    public void SetPersonPhoto(string id, byte[]? jpeg, string actor = "PC-ADMIN")
+    {
+        Exec("INSERT INTO person_media(person_id,photo,updated_at) VALUES($1,$2,$3) ON CONFLICT(person_id) DO UPDATE SET photo=$2, updated_at=$3", id, jpeg, NowMs);
+        Audit(actor, jpeg == null ? "REMOVE_PHOTO" : "SET_PHOTO", "PERSON", id);
+        Notify();
+    }
+
+    public void SetPersonSignature(string id, byte[]? png, string actor = "PC-ADMIN")
+    {
+        Exec("INSERT INTO person_media(person_id,signature,updated_at) VALUES($1,$2,$3) ON CONFLICT(person_id) DO UPDATE SET signature=$2, updated_at=$3", id, png, NowMs);
+        Audit(actor, png == null ? "REMOVE_SIGNATURE" : "SET_SIGNATURE", "PERSON", id);
+        Notify();
+    }
+
+    public HashSet<string> PersonsWithPhoto() => Query("SELECT person_id FROM person_media WHERE photo IS NOT NULL").Select(r => S(r["person_id"])).ToHashSet();
 
     public void UpsertVehicle(JsonObject v, string actor = "PC-ADMIN")
     {
@@ -226,7 +267,7 @@ public sealed class Store : IDisposable
 
     static string T(JsonObject o, string k) => (o[k]?.ToString() ?? "").Trim();
 
-    public void DeletePerson(string id) { Exec("DELETE FROM persons WHERE id=$1", id); Audit("PC-ADMIN", "DELETE_PERSON", "PERSON", id); Notify(); }
+    public void DeletePerson(string id) { Exec("DELETE FROM persons WHERE id=$1", id); Exec("DELETE FROM person_media WHERE person_id=$1", id); Audit("PC-ADMIN", "DELETE_PERSON", "PERSON", id); Notify(); }
     public void DeleteVehicle(string id) { Exec("DELETE FROM vehicles WHERE id=$1", id); Audit("PC-ADMIN", "DELETE_VEHICLE", "VEHICLE", id); Notify(); }
 
     /// <summary>Issues a new QR secret, instantly invalidating the old printed credential.</summary>
@@ -436,6 +477,7 @@ public sealed class Store : IDisposable
             ["presence"] = new JsonArray(!shareRegistry ? [] : Query("SELECT person_id, entry_at FROM presence WHERE status='ACTIVE'").Select(r => (JsonNode)new JsonObject
             { ["personId"] = S(r["person_id"]), ["entryAt"] = Convert.ToInt64(r["entry_at"]) }).ToArray()),
             ["manifests"] = new JsonArray(!shareRegistry ? [] : ActiveManifests().ToArray()),
+            ["reasons"] = new JsonArray(Settings.MovementReasons.Select(r => (JsonNode)JsonValue.Create(r)!).ToArray()),
         };
     }
 
@@ -512,10 +554,12 @@ public sealed class Store : IDisposable
     void InsertEvent(JsonObject e, string entity, string id, string type, long seq, string hash, long? stay) =>
         Exec("""
             INSERT INTO events(event_id,entity_type,entity_id,event_type,location_id,gate_id,device_id,operator_id,event_ts,created_at,received_at,seq,
-              source_type,source_id,loc_mismatch,scanned_loc,stay_ms,payload_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+              source_type,source_id,loc_mismatch,scanned_loc,stay_ms,payload_hash,reason,remarks) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
             """, T(e, "eventId"), entity, id, type, Upper(T(e, "locationId")), Upper(T(e, "gateId")), T(e, "deviceId"), Upper(T(e, "operatorId")),
             (long)e["eventTimestamp"]!, (long)e["createdAt"]!, NowMs, seq, Upper(T(e, "sourceType")) is { Length: > 0 } s ? s : "DIRECT",
-            e["sourceId"]?.ToString(), e["locationMismatch"]?.GetValue<bool>() == true ? 1 : 0, T(e, "scannedLocation"), stay, hash);
+            e["sourceId"]?.ToString(), e["locationMismatch"]?.GetValue<bool>() == true ? 1 : 0, T(e, "scannedLocation"), stay, hash, Clip(T(e, "reason"), 60), Clip(T(e, "remarks"), 300));
+
+    static string Clip(string v, int max) => v.Length <= max ? v : v[..max];
 
     public JsonObject PersonEvent(JsonObject e, string deviceId, string operatorId)
     {
