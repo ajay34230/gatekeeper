@@ -227,7 +227,9 @@ public static class Reports
     // ------------------------------------------------------------------ PDF
 
     /// <summary>Loads a regular and bold sans font from the system (Segoe UI / Arial on Windows, Liberation Sans elsewhere).</summary>
-    sealed class SystemFontResolver : IFontResolver
+    public sealed class SystemFontResolverPublic : SystemFontResolver { }
+
+    public class SystemFontResolver : IFontResolver
     {
         static readonly (string regular, string bold)[] Candidates =
         [
@@ -413,5 +415,125 @@ public static class Reports
             ("Record", "record"), ("Location", "location"), ("Gate", "gate"), ("Stay", "stay"), ("Location flag", "flag"), ("Operator", "operator"), ("Remarks", "remarks"),
             .. custom.Select(f => (f, "cf_" + f))];
         File.WriteAllText(path, XV.Core.Csv.Build(rows, cols), new UTF8Encoding(true));
+    }
+}
+
+/// <summary>Connection details for whoever sets up the internet link (VPN / router / tunnel). Contains no secrets.</summary>
+public static class ConnectionSheet
+{
+    public static List<(string key, string value)> Details(Settings s, string fingerprint) =>
+    [
+        ("Server name", s.ServerName),
+        ("Server ID", s.ServerId),
+        ("Internet access", s.InternetEnabled ? "Enabled" : "Disabled (LAN only)"),
+        ("Connection method", s.CloudMode switch { "VPN" => "VPN (Tailscale / ZeroTier)", "TUNNEL" => "Tunnel (Cloudflare Tunnel / ngrok)", "RELAY" => "Cloud relay", _ => "Port forwarding + DDNS" }),
+        ("Internet URL for terminals", s.PublicUrl.Length > 0 ? s.PublicUrl : "(not set)"),
+        ("Public host / port", s.PublicHost.Length > 0 ? $"{s.PublicHost}:{s.PublicPort}" : "(not set)"),
+        ("Tunnel presents public certificate", s.CloudUsesPublicCertificate ? "Yes" : "No"),
+        ("LAN addresses", string.Join(", ", NetUtil.LanAddresses().Select(a => $"https://{a}:{s.Port}"))),
+        ("HTTPS port on this PC", $"{s.Port}/TCP"),
+        ("LAN discovery port", $"{s.DiscoveryPort}/UDP (local network only)"),
+        ("TLS certificate SHA-256", fingerprint),
+        ("Protocol", "HTTPS (TLS 1.2/1.3) + AES-256-GCM per-terminal envelope, replay protected"),
+        ("Endpoints", "GET /api/v1/ping • POST /api/v1/pair/enroll • POST /api/v1/rpc"),
+        ("Generated", DateTime.Now.ToString("dd MMM yyyy HH:mm")),
+    ];
+
+    /// <summary>Ready-to-use setup instructions / config for the selected connection method.</summary>
+    public static string Snippet(Settings s) => s.CloudMode switch
+    {
+        "VPN" => $"""
+            Tailscale (recommended):
+              1. Install Tailscale on this PC and on every phone; sign in to the same account.
+              2. On this PC run:  tailscale ip -4   → e.g. 100.x.y.z
+              3. In Cloud Link set Public host = that 100.x.y.z address, Public port = {s.Port}.
+              4. Re-pair phones (or enter https://100.x.y.z:{s.Port} in the phone's Cloud settings).
+            """,
+        "TUNNEL" => $"""
+            Cloudflare Tunnel (config.yml on this PC):
+              tunnel: <TUNNEL-ID>
+              credentials-file: C:\Users\<you>\.cloudflared\<TUNNEL-ID>.json
+              ingress:
+                - hostname: gate.example.org
+                  service: https://localhost:{s.Port}
+                  originRequest:
+                    noTLSVerify: true
+                - service: http_status:404
+            Then set Public URL = https://gate.example.org and tick "public certificate".
+            """,
+        "RELAY" => $"""
+            Reverse SSH relay from this PC to a cloud VM (vm.example.org):
+              ssh -N -R 0.0.0.0:{s.PublicPort}:localhost:{s.Port} relay@vm.example.org
+            (VM sshd_config: GatewayPorts yes; open TCP {s.PublicPort} in the VM firewall.)
+            Then set Public host = vm.example.org, Public port = {s.PublicPort}.
+            """,
+        _ => $"""
+            Router port forwarding:
+              External TCP {s.PublicPort}  →  {NetUtil.LanAddresses().FirstOrDefault() ?? "<this PC's LAN IP>"} : {s.Port}
+            Give this PC a fixed LAN IP (DHCP reservation) and use a static public IP or a DDNS name
+            (e.g. DuckDNS / No-IP) as Public host.
+            """,
+    };
+
+    public static void Txt(Settings s, string fp, string path)
+    {
+        var sb = new StringBuilder("XV DIGITAL ACCESS CONTROL — CONNECTION DETAILS\r\n==============================================\r\n\r\n");
+        foreach (var (k, v) in Details(s, fp)) sb.Append($"{k,-36}{v}\r\n");
+        sb.Append("\r\nSETUP\r\n-----\r\n").Append(Snippet(s).Replace("\n", "\r\n"))
+          .Append("\r\n\r\nPairing: open 'Local Wi-Fi & Pair Device' on the PC and scan the QR, or send its one-time pairing text (valid 10 minutes).\r\nThis sheet contains no passwords or keys.\r\n");
+        File.WriteAllText(path, sb.ToString(), new UTF8Encoding(true));
+    }
+
+    public static void Json(Settings s, string fp, string path)
+    {
+        var o = new System.Text.Json.Nodes.JsonObject
+        {
+            ["serverName"] = s.ServerName, ["serverId"] = s.ServerId, ["internetEnabled"] = s.InternetEnabled, ["method"] = s.CloudMode,
+            ["publicUrl"] = s.PublicUrl, ["publicHost"] = s.PublicHost, ["publicPort"] = s.PublicPort, ["publicCertificate"] = s.CloudUsesPublicCertificate,
+            ["lanAddresses"] = new System.Text.Json.Nodes.JsonArray(NetUtil.LanAddresses().Select(a => (System.Text.Json.Nodes.JsonNode)a).ToArray()),
+            ["httpsPort"] = s.Port, ["discoveryPort"] = s.DiscoveryPort, ["certificateSha256"] = fp,
+            ["endpoints"] = new System.Text.Json.Nodes.JsonObject { ["ping"] = "GET /api/v1/ping", ["enroll"] = "POST /api/v1/pair/enroll", ["rpc"] = "POST /api/v1/rpc" },
+            ["encryption"] = "TLS 1.2/1.3 + AES-256-GCM per terminal", ["generated"] = DateTimeOffset.Now.ToString("o"),
+        };
+        File.WriteAllText(path, o.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    public static void Pdf(Settings s, string fp, string path)
+    {
+        GlobalFontSettings.FontResolver ??= new Reports.SystemFontResolverPublic();
+        var doc = new Document();
+        doc.Styles[StyleNames.Normal]!.Font.Name = "XV Sans";
+        doc.Styles[StyleNames.Normal]!.Font.Size = 9.5;
+        var sec = doc.AddSection();
+        sec.PageSetup.PageFormat = PageFormat.A4;
+        sec.PageSetup.LeftMargin = sec.PageSetup.RightMargin = Unit.FromCentimeter(1.8);
+        var band = sec.AddTable(); band.AddColumn(Unit.FromCentimeter(17.4));
+        var br = band.AddRow(); br.Shading.Color = Color.Parse("#FF18181B"); br.TopPadding = br.BottomPadding = Unit.FromPoint(9);
+        var bp = br.Cells[0].AddParagraph(); bp.Format.LeftIndent = Unit.FromPoint(8);
+        var t = bp.AddFormattedText("XV DIGITAL ACCESS CONTROL", TextFormat.Bold); t.Font.Size = 16; t.Font.Color = Colors.White; bp.AddLineBreak();
+        var t2 = bp.AddFormattedText("Command Center connection details — for VPN / router / tunnel setup"); t2.Font.Color = Color.Parse("#FFFCD34D");
+        sec.AddParagraph().Format.SpaceAfter = Unit.FromPoint(8);
+        var tbl = sec.AddTable();
+        tbl.AddColumn(Unit.FromCentimeter(5.4)); tbl.AddColumn(Unit.FromCentimeter(12));
+        tbl.Borders.Width = 0.25; tbl.Borders.Color = Color.Parse("#FFD4D4D8");
+        tbl.LeftPadding = tbl.RightPadding = Unit.FromPoint(5); tbl.TopPadding = tbl.BottomPadding = Unit.FromPoint(4);
+        var i = 0;
+        foreach (var (k, v) in Details(s, fp))
+        {
+            var r = tbl.AddRow(); if (i++ % 2 == 1) r.Shading.Color = Color.Parse("#FFF4F4F5");
+            var kp = r.Cells[0].AddParagraph(k); kp.Format.Font.Bold = true; kp.Format.Font.Color = Color.Parse("#FF3F3F46");
+            r.Cells[1].AddParagraph(v);
+        }
+        var h = sec.AddParagraph("Setup for the selected method"); h.Format.Font.Bold = true; h.Format.Font.Size = 12;
+        h.Format.SpaceBefore = Unit.FromPoint(14); h.Format.SpaceAfter = Unit.FromPoint(4); h.Format.Font.Color = Color.Parse("#FF047857");
+        var code = sec.AddParagraph(Snippet(s));
+        code.Format.Font.Name = "XV Sans"; code.Format.Font.Size = 8.5;
+        code.Format.Shading.Color = Color.Parse("#FFF4F4F5"); code.Format.Borders.Width = 0.5; code.Format.Borders.Color = Color.Parse("#FFD4D4D8");
+        code.Format.Borders.Distance = Unit.FromPoint(6);
+        var n = sec.AddParagraph("Pairing: open 'Local Wi-Fi & Pair Device' on the PC and scan the QR, or send its one-time pairing text (valid 10 minutes). This sheet contains no passwords or keys.");
+        n.Format.SpaceBefore = Unit.FromPoint(12); n.Format.Font.Size = 8; n.Format.Font.Color = Color.Parse("#FF71717A");
+        var renderer = new PdfDocumentRenderer { Document = doc };
+        renderer.RenderDocument();
+        renderer.PdfDocument.Save(path);
     }
 }

@@ -106,6 +106,22 @@ public sealed class CloudLinkWindow : DarkWindow
         Body.Children.Add(Label("After saving"));
         Body.Children.Add(Para("Open 'Local Wi-Fi & Pair Device' and pair (or re-pair) terminals — the QR then carries the internet address, so phones switch automatically when away from the base network. Already-paired phones can also enter the URL manually in Sync Hub → Cloud Server."));
 
+        AddButton("Export details…", () =>
+        {
+            var dlg = new SaveFileDialog { FileName = $"XV-Connection-{s.ServerId}", Filter = "PDF connection sheet|*.pdf|Text|*.txt|JSON|*.json" };
+            if (dlg.ShowDialog() != true) return;
+            try
+            {
+                switch (System.IO.Path.GetExtension(dlg.FileName).ToLowerInvariant())
+                {
+                    case ".txt": ConnectionSheet.Txt(s, App.Server.Fingerprint, dlg.FileName); break;
+                    case ".json": ConnectionSheet.Json(s, App.Server.Fingerprint, dlg.FileName); break;
+                    default: ConnectionSheet.Pdf(s, App.Server.Fingerprint, dlg.FileName); break;
+                }
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dlg.FileName) { UseShellExecute = true });
+            }
+            catch (Exception ex) { Fail(ex); }
+        }, "BtnEmerald");
         AddButton("Cancel", Close);
         AddButton("Save", async () =>
         {

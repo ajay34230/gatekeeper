@@ -19,6 +19,17 @@ for (var i = 0; i + 1 < args.Length; i++)
 for (var i = 0; i + 3 < args.Length; i++)
     if (args[i] == "--add-record")
         store.AddManualRecord(args[i + 1], args[i + 2], Store.NowMs - (i * 3_600_000L), "LOC07", "G02", args[i + 3]);
+var ci2 = Array.IndexOf(args, "--connection-sheet");
+if (ci2 >= 0 && ci2 + 1 < args.Length)
+{
+    var fp = CertManager.Fingerprint(cert);
+    Directory.CreateDirectory(args[ci2 + 1]);
+    ConnectionSheet.Pdf(settings, fp, Path.Combine(args[ci2 + 1], "XV-Connection.pdf"));
+    ConnectionSheet.Txt(settings, fp, Path.Combine(args[ci2 + 1], "XV-Connection.txt"));
+    ConnectionSheet.Json(settings, fp, Path.Combine(args[ci2 + 1], "XV-Connection.json"));
+    Console.WriteLine("Connection details written to " + args[ci2 + 1]);
+    return;
+}
 var ri = Array.IndexOf(args, "--report");
 if (ri >= 0 && ri + 1 < args.Length)
 {
