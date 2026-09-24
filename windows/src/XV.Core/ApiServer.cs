@@ -70,7 +70,7 @@ public sealed class ApiServer : IAsyncDisposable
             await next();
         });
 
-        app.MapGet("/api/v1/ping", () => Results.Json(new { app = "XVGK", version = Version, serverId = s.ServerId, serverName = s.ServerName, fingerprint = Fingerprint }));
+        app.MapGet("/api/v1/ping", () => Results.Json(new { app = "XVGK", version = Version, serverId = s.ServerId, serverName = s.ServerName, fingerprint = Fingerprint, serverTime = Store.NowMs }));
 
         app.MapPost("/api/v1/pair/enroll", async (HttpContext ctx) =>
         {

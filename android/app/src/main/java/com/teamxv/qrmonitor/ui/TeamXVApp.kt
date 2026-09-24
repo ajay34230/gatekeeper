@@ -127,6 +127,7 @@ fun TeamXVApp(vm: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel
     LaunchedEffect(vm.loggedIn) {
         while (vm.loggedIn) {
             vm.enforceSession()
+            vm.testConnection()
             vm.syncStateRefresh()
             kotlinx.coroutines.delay(30_000)
         }
@@ -433,7 +434,7 @@ private fun HomeScreen(vm: MainViewModel) {
                 .padding(horizontal = 20.dp, vertical = 15.dp)
         ) {
             Text(
-                "Operator: ${cfg.operatorId.ifBlank { "UNASSIGNED" }}",
+                "Operator: ${cfg.operatorId} ${cfg.operatorName}".trim(),
                 fontFamily = Sans,
                 fontWeight = FontWeight.Bold,
                 fontSize = 21.sp,
@@ -442,7 +443,7 @@ private fun HomeScreen(vm: MainViewModel) {
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                "${cfg.locationId} • ${cfg.gateId}",
+                "${cfg.locationName.ifBlank { cfg.locationId }} • ${cfg.gateName.ifBlank { cfg.gateId }}",
                 fontFamily = Sans,
                 fontSize = 19.sp,
                 fontWeight = FontWeight.Medium,
@@ -555,10 +556,14 @@ private fun HomeScreen(vm: MainViewModel) {
                     }
                     Spacer(Modifier.height(6.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        vm.personnel.take(3).forEach { p ->
+                        if (vm.personnel.isEmpty()) {
+                            Text("Personnel registry is empty. Add personnel on the PC Command Center; this terminal receives them on the next sync.", fontFamily = Sans, fontSize = 10.sp, color = UiMuted)
+                        }
+                        vm.personnel.sortedByDescending { p -> vm.events.firstOrNull { it.entityType == EntityType.PERSON && it.entityId == p.id }?.eventTimestamp ?: 0L }.take(4).forEach { p ->
                             val isInside = p.currentStatus == PresenceStatus.INSIDE
+                            val lastSeen = vm.events.firstOrNull { it.entityType == EntityType.PERSON && it.entityId == p.id }?.eventTimestamp
                             Surface(
-                                Modifier.fillMaxWidth(),
+                                Modifier.fillMaxWidth().clickable { vm.selectPerson(p.id) },
                                 color = UiBackground,
                                 shape = RoundedCornerShape(8.dp),
                                 border = BorderStroke(1.dp, UiBorder)
@@ -574,7 +579,7 @@ private fun HomeScreen(vm: MainViewModel) {
                                         )
                                         Column {
                                             Text(p.name, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = UiInk)
-                                            Text(p.id, fontFamily = Mono, fontSize = 9.sp, color = UiMuted)
+                                            Text(displayId(p.id), fontFamily = Mono, fontSize = 9.sp, color = UiMuted)
                                         }
                                     }
                                     Surface(
@@ -583,7 +588,7 @@ private fun HomeScreen(vm: MainViewModel) {
                                         border = BorderStroke(1.dp, if (isInside) Color(0xFFA7F3D0) else UiBorder)
                                     ) {
                                         Text(
-                                            "Seen ${if (isInside) "21:10" else "22:15"}",
+                                            if (lastSeen != null) "Seen ${formatShort(lastSeen)}" else if (isInside) "On site" else "No activity",
                                             fontFamily = Mono,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 9.sp,
@@ -602,6 +607,38 @@ private fun HomeScreen(vm: MainViewModel) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(13.dp)) {
                 HomeCounter(Modifier.weight(1f), "Entries", entries.toString())
                 HomeCounter(Modifier.weight(1f), "Exits", exits.toString())
+            }
+
+            if (vm.vehicles.isNotEmpty()) {
+                Spacer(Modifier.height(13.dp))
+                Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = CardShape, border = BorderStroke(1.dp, UiBorder)) {
+                    Column(Modifier.padding(14.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Default.LocalShipping, null, tint = UiWarning, modifier = Modifier.size(16.dp))
+                                Text("Vehicle Fleet Presence", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = UiInk)
+                            }
+                            Text("${vm.vehiclesInside.size} in yard / ${vm.vehicles.size}", fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = UiMuted)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        vm.vehicles.sortedByDescending { it.id in vm.vehiclesInside }.take(3).forEach { v ->
+                            val inYard = v.id in vm.vehiclesInside
+                            Surface(
+                                Modifier.fillMaxWidth().padding(vertical = 2.dp).clickable { vm.selectVehicle(v.id) },
+                                color = if (inYard) UiWarningBg else UiBackground, shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, if (inYard) Color(0xFFFDE68A) else UiBorder)
+                            ) {
+                                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                    Column {
+                                        Text(v.registration, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = UiInk)
+                                        Text("${displayId(v.id)} • ${v.type}", fontFamily = Mono, fontSize = 9.sp, color = UiMuted)
+                                    }
+                                    StatusPill(if (inYard) "IN YARD" else "OUT", if (inYard) StatusTone.Warning else StatusTone.Neutral, compact = true)
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             if (vm.attention > 0 || vm.syncUi.lastError.isNotBlank()) {
@@ -645,7 +682,7 @@ private fun HomeScreen(vm: MainViewModel) {
                         )
                     } else {
                         vm.events.take(7).forEachIndexed { index, event ->
-                            HomeActivityRow(event)
+                            HomeActivityRow(event, vm.titleFor(event))
                             if (index < minOf(vm.events.size, 7) - 1) {
                                 Divider(color = UiBorder, thickness = 1.dp, modifier = Modifier.padding(start = 54.dp))
                             }
@@ -748,7 +785,7 @@ private fun HomeActionCard(
 }
 
 @Composable
-private fun HomeActivityRow(event: MovementEvent) {
+private fun HomeActivityRow(event: MovementEvent, title: String) {
     val entry = event.eventType == EventType.ENTRY
     val label = if (event.entityType == EntityType.VEHICLE) "Vehicle" else "Person"
     val badgeTone = if (entry) StatusTone.Success else StatusTone.Warning
@@ -759,7 +796,7 @@ private fun HomeActivityRow(event: MovementEvent) {
     ) {
         Text(time, fontFamily = Mono, fontWeight = FontWeight.Medium, fontSize = 11.sp, color = UiInk, modifier = Modifier.width(58.dp))
         Text(
-            "$label  ${event.entityId}",
+            title.ifBlank { "$label ${displayId(event.entityId)}" },
             fontFamily = Sans,
             fontWeight = FontWeight.Medium,
             fontSize = 12.sp,
@@ -927,7 +964,7 @@ private fun ActivityScreen(vm: MainViewModel) {
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.fillMaxSize()) {
                 items(filtered, key = { it.eventId }) { event ->
-                    Box(Modifier.clickable { selected = event }) { ActivityRow(event) }
+                    Box(Modifier.clickable { selected = event }) { ActivityRow(event, vm.titleFor(event)) }
                 }
                 item { Spacer(Modifier.height(14.dp)) }
             }
@@ -941,7 +978,7 @@ private fun ActivityScreen(vm: MainViewModel) {
 }
 
 @Composable
-private fun ActivityRow(event: MovementEvent) {
+private fun ActivityRow(event: MovementEvent, title: String) {
     val isEntry = event.eventType == EventType.ENTRY
     Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -951,8 +988,8 @@ private fun ActivityRow(event: MovementEvent) {
             }
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
-                Text("${event.entityType.name} ${event.entityId}", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = UiInk, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${event.locationId} • ${event.gateId} • ${event.sourceType.name}", fontFamily = Mono, fontSize = 8.sp, color = UiFaint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(title.ifBlank { "${event.entityType.name} ${displayId(event.entityId)}" } + "  " + displayId(event.entityId), fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = UiInk, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("${event.locationId} • ${event.gateId}" + (if (event.locationMismatch) " • ⚠ LOC FLAG" else "") + " • ${event.syncStatus.name}", fontFamily = Mono, fontSize = 8.sp, color = UiFaint, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.width(7.dp))
             StatusPill(event.eventType.name, if (isEntry) StatusTone.Success else StatusTone.Warning, compact = true)
@@ -1462,6 +1499,7 @@ private fun VehicleScanScreen(vm: MainViewModel, session: ScanSession.VehicleSca
         Column {
             ScreenHeader(if (entry) "Vehicle Identified" else "Vehicle Exit", if (entry) "Vehicle credential verified" else "Vehicle currently registered as inside", vm::returnToHome)
             Spacer(Modifier.height(12.dp))
+            if (vm.vehicleMismatch.isNotBlank()) { StatusBanner("VEHICLE LOCATION MISMATCH • QR specifies ${vm.vehicleMismatch}, this station is ${vm.currentConfig().locationName.ifBlank { vm.currentConfig().locationId }}.", BannerTone.Warning); Spacer(Modifier.height(8.dp)) }
             VehicleIdentityCard(vehicle)
             Spacer(Modifier.height(11.dp))
             Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {

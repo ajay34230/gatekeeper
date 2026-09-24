@@ -413,7 +413,11 @@ public sealed class Store : IDisposable
         foreach (var f in EventFields)
             if (e[f] == null) throw new StoreException("MISSING_" + f.ToUpperInvariant(), $"Missing field {f}", 400);
         if (T(e, "deviceId") != deviceId) throw new StoreException("DEVICE_MISMATCH", "Event was not created by this device", 403);
-        if (Upper(T(e, "operatorId")) != operatorId) throw new StoreException("OPERATOR_MISMATCH", "Event operator does not match the signed-in operator", 403);
+        // Records captured offline may belong to an operator who signed out before the upload; they are accepted
+        // from the same paired terminal as long as that operator account exists.
+        var recordedBy = Upper(T(e, "operatorId"));
+        if (recordedBy != operatorId && Count("SELECT COUNT(*) FROM accounts WHERE id=$1", recordedBy) == 0)
+            throw new StoreException("UNKNOWN_OPERATOR", $"Operator {recordedBy} does not exist on this Command Center", 403);
         if (Upper(T(e, "eventType")) is not ("ENTRY" or "EXIT")) throw new StoreException("INVALID_EVENT_TYPE", "Invalid event type", 400);
     }
 

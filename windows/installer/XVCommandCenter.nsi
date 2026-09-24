@@ -52,7 +52,7 @@ Section "Install"
   ; Firewall: HTTPS API for terminals + LAN discovery
   nsExec::Exec 'netsh advfirewall firewall delete rule name="XV Command Center HTTPS"'
   nsExec::Exec 'netsh advfirewall firewall delete rule name="XV Command Center Discovery"'
-  nsExec::Exec 'netsh advfirewall firewall add rule name="XV Command Center HTTPS" dir=in action=allow protocol=TCP localport=8443 program="$INSTDIR\XVCommandCenter.exe" enable=yes'
+  nsExec::Exec 'netsh advfirewall firewall add rule name="XV Command Center HTTPS" dir=in action=allow protocol=TCP program="$INSTDIR\XVCommandCenter.exe" enable=yes'
   nsExec::Exec 'netsh advfirewall firewall add rule name="XV Command Center Discovery" dir=in action=allow protocol=UDP localport=47913 program="$INSTDIR\XVCommandCenter.exe" enable=yes'
   WriteRegStr HKLM "Software\XVCommandCenter" "InstallDir" "$INSTDIR"
   WriteRegStr HKLM "${UNINST}" "DisplayName" "${APP}"

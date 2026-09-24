@@ -112,6 +112,8 @@ class ApiClient(private val profile: ConnectionProfile? = null) {
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false; encodeDefaults = true }
     private val random = SecureRandom()
     @Volatile private var preferred: String? = null
+    /** Difference between the Command Center's clock and this phone's, learned automatically. */
+    @Volatile private var clockOffsetMs: Long = 0L
     @Volatile var lastRoute: String = ""
         private set
 
@@ -207,6 +209,11 @@ class ApiClient(private val profile: ConnectionProfile? = null) {
                     lastRoute = if (ep.internet) "Internet • ${ep.baseUrl}" else "Local Wi-Fi • ${ep.baseUrl}"
                     return result
                 } catch (e: HttpFailure) {
+                    if (e.code == 401 && e.reason == "STALE_OR_REPLAYED" && syncClock(ep, p)) {
+                        val result = call(ep, p, key, request)
+                        preferred = ep.baseUrl
+                        return result
+                    }
                     throw e
                 } catch (e: Exception) {
                     lastError = e
@@ -219,7 +226,7 @@ class ApiClient(private val profile: ConnectionProfile? = null) {
     }
 
     private fun call(ep: Endpoint, p: ConnectionProfile, key: ByteArray, plaintext: String): JsonElement {
-        val ts = System.currentTimeMillis()
+        val ts = System.currentTimeMillis() + clockOffsetMs
         val nonceBytes = ByteArray(16).also(random::nextBytes)
         val nonce = Base64.encodeToString(nonceBytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
         val (iv, ct) = seal(key, plaintext, "XVGK1|req|${p.deviceId}|$ts|$nonce")
@@ -238,6 +245,16 @@ class ApiClient(private val profile: ConnectionProfile? = null) {
             return out
         }
     }
+
+    /** Reads the server clock from /ping so a phone with a wrong clock can still talk to the Command Center. */
+    private fun syncClock(ep: Endpoint, p: ConnectionProfile): Boolean = runCatching {
+        val before = System.currentTimeMillis()
+        client(ep.pinned, p.fingerprint, quick = true).newCall(Request.Builder().url(ep.baseUrl + "/api/v1/ping").get().build()).execute().use { res ->
+            val serverTime = json.parseToJsonElement(res.body?.string().orEmpty()).jsonObject["serverTime"]!!.jsonPrimitive.content.toLong()
+            clockOffsetMs = serverTime - (before + System.currentTimeMillis()) / 2
+        }
+        true
+    }.getOrDefault(false)
 
     /** UDP broadcast probe; the Command Center answers with its id so we only accept our own server. */
     private fun discover(p: ConnectionProfile): Boolean = runCatching {

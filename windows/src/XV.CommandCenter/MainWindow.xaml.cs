@@ -18,7 +18,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         App.Store.Changed += () => Dispatcher.BeginInvoke(QueueRefresh);
         App.Server.Log += msg => Dispatcher.BeginInvoke(() => StatusRight.Text = $"{DateTime.Now:HH:mm:ss}  {msg}");
-        _timer.Tick += (_, _) => Refresh();
+        _timer.Tick += (_, _) => Refresh(full: false);
         _timer.Start();
         SizeChanged += (_, _) => QueueRefresh();
         Loaded += (_, _) => Refresh();
@@ -36,7 +36,9 @@ public partial class MainWindow : Window
 
     // ------------------------------------------------------------------ refresh
 
-    public void Refresh()
+    public void Refresh() => Refresh(true);
+
+    public void Refresh(bool full)
     {
         var s = App.Store;
         var st = s.Stats();
@@ -61,7 +63,7 @@ public partial class MainWindow : Window
 
         RenderGates();
         RenderDevices();
-        RenderTab();
+        if (full) RenderTab();
     }
 
     void RenderGates()

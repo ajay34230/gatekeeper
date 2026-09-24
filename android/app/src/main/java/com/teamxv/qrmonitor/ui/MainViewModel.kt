@@ -474,7 +474,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     config.locationId,
                     config.gateId,
                     config.deviceId,
-                    config.operatorId
+                    config.operatorId,
+                    vehicleMismatch.isNotBlank(),
+                    vehicleMismatch
                 )
             ) {
                 is OperationResult.Success -> {
@@ -504,7 +506,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     config.locationId,
                     config.gateId,
                     config.deviceId,
-                    config.operatorId
+                    config.operatorId,
+                    vehicleMismatch.isNotBlank(),
+                    vehicleMismatch
                 )
             ) {
                 is OperationResult.Success -> {
@@ -529,6 +533,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
+    }
+
+    /** Display name for a record: person name or vehicle plate from the local registry. */
+    fun titleFor(event: MovementEvent): String = when (event.entityType) {
+        EntityType.PERSON -> personnel.firstOrNull { it.id == event.entityId }?.name ?: ""
+        EntityType.VEHICLE -> vehicles.firstOrNull { it.id == event.entityId }?.registration ?: ""
+    }
+
+    /** Opens the identification screen for a person picked from the home roster (same checks as a scan). */
+    fun selectPerson(id: String) {
+        viewModelScope.launch { handlePerson(repo.lookupIdentity(id, EntityType.PERSON, config.locationId)) }
+    }
+
+    /** Starts the vehicle flow for a vehicle picked from the home fleet list. */
+    fun selectVehicle(id: String) {
+        showSuccess = false; completedEvent = null; completedVehicle = null
+        viewModelScope.launch { handleVehicle(repo.lookupIdentity(id, EntityType.VEHICLE, config.locationId)) }
     }
 
     fun trySync() {
@@ -558,6 +579,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val latency = System.currentTimeMillis() - start
             networkStatus = if (result.isSuccess) {
                 if (config.hasValidOnlineToken()) api.heartbeat(config.baseUrl, config.deviceId, config.locationId, config.gateId, config.operatorId, pending)
+                if (pending > 0 && config.hasValidOnlineToken()) SyncScheduler.enqueueNow(getApplication())
                 NetworkStatus(
                     transport, true, true, true,
                     api.lastRoute, localIp, latency, "Encrypted link verified with ${result.getOrNull()?.serverName ?: "Command Center"}"

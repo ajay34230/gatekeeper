@@ -188,7 +188,9 @@ class EventRepository(
         location: String,
         gate: String,
         device: String,
-        operator: String
+        operator: String,
+        locationMismatch: Boolean = false,
+        scannedLocation: String = ""
     ): OperationResult<VehicleTransaction> = db.withTransaction {
         val vehicle = vehicles.find(draft.vehicle.id) ?: return@withTransaction OperationResult.Rejected("VEHICLE_NOT_FOUND")
         if (!vehicle.active) return@withTransaction OperationResult.Rejected("INACTIVE_VEHICLE")
@@ -202,7 +204,8 @@ class EventRepository(
         val eventId = newEventId()
         val event = MovementEvent(
             eventId, EntityType.VEHICLE, vehicle.id, EventType.ENTRY,
-            location, gate, device, operator, now, now, SyncStatus.PENDING
+            location, gate, device, operator, now, now, SyncStatus.PENDING,
+            locationMismatch = locationMismatch, scannedLocation = scannedLocation
         )
         val manifestId = newManifestId()
         val members = people.mapIndexed { index, p -> VehicleManifestMemberEntity(manifestId, p.id, index + 1) }
@@ -230,7 +233,9 @@ class EventRepository(
         location: String,
         gate: String,
         device: String,
-        operator: String
+        operator: String,
+        locationMismatch: Boolean = false,
+        scannedLocation: String = ""
     ): OperationResult<Pair<MovementEvent, Long?>> = db.withTransaction {
         val vehicle = vehicles.find(vehicleId) ?: return@withTransaction OperationResult.Rejected("VEHICLE_NOT_FOUND")
         val activeManifest = manifests.activeForVehicle(vehicle.id)
@@ -238,7 +243,8 @@ class EventRepository(
         val now = System.currentTimeMillis()
         val event = MovementEvent(
             newEventId(), EntityType.VEHICLE, vehicle.id, EventType.EXIT,
-            location, gate, device, operator, now, now, SyncStatus.PENDING
+            location, gate, device, operator, now, now, SyncStatus.PENDING,
+            locationMismatch = locationMismatch, scannedLocation = scannedLocation
         )
         val closed = manifests.closeManifest(activeManifest.manifestId, event.eventId, now)
         if (closed != 1) return@withTransaction OperationResult.Rejected("MANIFEST_STATE_CHANGED")

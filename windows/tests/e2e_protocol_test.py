@@ -17,8 +17,8 @@ enr = S.post(host + "/api/v1/pair/enroll", json={"code": cfg["c"], "deviceName":
 dev, key = enr["deviceId"], base64.b64decode(enr["deviceKey"])
 assert S.post(host + "/api/v1/pair/enroll", json={"code": cfg["c"]}).status_code == 403, "pair code must be single use"
 
-def rpc(op, data=None, token=None, replay=None):
-    ts, nonce = int(time.time() * 1000), base64.urlsafe_b64encode(os.urandom(16)).decode().rstrip("=")
+def rpc(op, data=None, token=None, replay=None, skew=0):
+    ts, nonce = int(time.time() * 1000) + skew, base64.urlsafe_b64encode(os.urandom(16)).decode().rstrip("=")
     if replay: ts, nonce = replay
     iv = os.urandom(12); c = AES.new(key, AES.MODE_GCM, nonce=iv)
     c.update(f"XVGK1|req|{dev}|{ts}|{nonce}".encode())
@@ -56,6 +56,18 @@ man = {"manifestId": "MNF-1", "vehicleId": "V014", "entryEventId": "EVT-4", "loc
 print("veh in ", rpc("vehicle.transaction", {"event": ve, "manifest": man}, tok)[:2])
 vx = ev("EVT-5", "VEHICLE", "V014", "EXIT"); man2 = dict(man, state="EXITED", exitEventId="EVT-5", exitAt=vx["eventTimestamp"])
 print("veh out", rpc("vehicle.transaction", {"event": vx, "manifest": man2}, tok)[:2])
+# clock skew: rejected with a reason the phone uses to resynchronize from /ping
+code, body, _ = rpc("health", skew=3_600_000); assert code == 401 and body["reason"] == "STALE_OR_REPLAYED", (code, body)
+assert abs(S.get(host + "/api/v1/ping").json()["serverTime"] - time.time() * 1000) < 60_000
+# record captured offline by another existing operator on this terminal is accepted
+e6 = ev("EVT-6", "PERSON", "P001", "ENTRY"); e6["operatorId"] = "GK-02"
+assert rpc("events.create", e6, tok)[0] == 403, "unknown operator must be rejected"
+code, other, _ = rpc("auth.register", {"name": "Second Operator", "username": "GK-03", "password": "abcdef1"})
+e6["operatorId"] = "GK-03"; code, body, _ = rpc("events.create", e6, tok); assert code == 201, (code, body)
+# person who arrived in a vehicle leaves on foot
+vi = ev("EVT-7", "VEHICLE", "V014", "ENTRY"); m3 = dict(man, manifestId="MNF-2", entryEventId="EVT-7", occupants=["P002"], driverId="P002", createdAt=vi["createdAt"])
+code, body, _ = rpc("vehicle.transaction", {"event": vi, "manifest": m3}, tok); assert code == 201, (code, body)
+code, body, _ = rpc("events.create", ev("EVT-8", "PERSON", "P002", "EXIT", {"sourceType": "VEHICLE", "sourceId": "MNF-2"}), tok); assert code == 201, (code, body)
 print("hb", rpc("heartbeat", {"locationId": "LOC07", "gateId": "G02", "operatorId": "GK-01", "pending": 0, "appVersion": "t"}, tok)[:2])
 # discovery
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.settimeout(3); s.sendto(b"XVGK_DISCOVER_V1", ("127.0.0.1", 47913))
