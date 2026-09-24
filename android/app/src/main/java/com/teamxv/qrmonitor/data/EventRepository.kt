@@ -197,7 +197,9 @@ class EventRepository(
         device: String,
         operator: String,
         locationMismatch: Boolean = false,
-        scannedLocation: String = ""
+        scannedLocation: String = "",
+        reason: String = "",
+        remarks: String = ""
     ): OperationResult<MovementEvent> = db.withTransaction {
         val p = persons.find(personId) ?: return@withTransaction OperationResult.Rejected("PERSON_NOT_FOUND")
         if (!p.active) return@withTransaction OperationResult.Rejected("INACTIVE_PERSON")
@@ -212,7 +214,9 @@ class EventRepository(
             sourceType = if (active?.sourceType == "VEHICLE") PresenceSource.VEHICLE else PresenceSource.DIRECT,
             sourceId = active?.sourceId,
             locationMismatch = locationMismatch,
-            scannedLocation = scannedLocation
+            scannedLocation = scannedLocation,
+            reason = reason.trim().take(60),
+            remarks = remarks.trim().take(300)
         )
         events.insert(toEntity(event))
         if (type == EventType.ENTRY) {
@@ -377,7 +381,7 @@ class EventRepository(
         e.eventId, e.entityType.name, e.entityId, e.eventType.name,
         e.locationId, e.gateId, e.deviceId, e.operatorId, e.eventTimestamp,
         e.createdAt, e.syncStatus.name, 0, null, e.createdAt,
-        e.sourceType.name, e.sourceId, e.locationMismatch, e.scannedLocation
+        e.sourceType.name, e.sourceId, e.locationMismatch, e.scannedLocation, e.reason, e.remarks
     )
 
     private fun toModel(e: MovementEventEntity) = MovementEvent(
@@ -385,7 +389,7 @@ class EventRepository(
         EventType.valueOf(e.eventType), e.locationId, e.gateId,
         e.deviceId, e.operatorId, e.eventTimestamp, e.createdAt,
         SyncStatus.valueOf(e.syncStatus), PresenceSource.valueOf(e.sourceType), e.sourceId,
-        e.locationMismatch, e.scannedLocation
+        e.locationMismatch, e.scannedLocation, e.reason, e.remarks
     )
 
     private fun newEventId() = "EVT-" + UUID.randomUUID().toString().replace("-", "").take(12).uppercase()

@@ -30,7 +30,10 @@ data class MovementEventEntity(
     val sourceType: String = "DIRECT",
     val sourceId: String? = null,
     val locationMismatch: Boolean = false,
-    val scannedLocation: String = ""
+    val scannedLocation: String = "",
+    /** Reason chosen at the gate (list set on the PC, or typed) and free remarks. */
+    val reason: String = "",
+    val remarks: String = ""
 )
 
 @Entity(tableName = "presence_sessions", indices = [

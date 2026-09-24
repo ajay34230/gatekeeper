@@ -47,7 +47,8 @@ class HttpFailure(val code: Int, val bodyText: String) : Exception(
     val eventId: String, val entityType: String, val entityId: String, val eventType: String,
     val locationId: String, val gateId: String, val deviceId: String, val operatorId: String,
     val eventTimestamp: Long, val createdAt: Long, val sourceType: String = "DIRECT", val sourceId: String? = null,
-    val locationMismatch: Boolean = false, val scannedLocation: String = ""
+    val locationMismatch: Boolean = false, val scannedLocation: String = "",
+    val reason: String = "", val remarks: String = ""
 )
 @Serializable data class VehicleManifestPayload(
     val manifestId: String, val vehicleId: String, val entryEventId: String, val locationId: String,
@@ -82,7 +83,7 @@ class HttpFailure(val code: Int, val bodyText: String) : Exception(
     val sharingMode: String = "FULL", val manifests: List<ManifestItem> = emptyList(),
     val version: String = "", val persons: List<MasterPerson> = emptyList(), val vehicles: List<MasterVehicle> = emptyList(),
     val locations: List<NamedItem> = emptyList(), val gates: List<NamedItem> = emptyList(),
-    val presence: List<PresenceItem> = emptyList(), val serverTime: Long = 0L
+    val presence: List<PresenceItem> = emptyList(), val serverTime: Long = 0L, val reasons: List<String> = emptyList()
 )
 
 /** Contents of the pairing QR shown by the PC Command Center ("XVGK1:" + base64url JSON). */
@@ -148,8 +149,14 @@ class ApiClient(private val profile: ConnectionProfile? = null) {
     fun stations(): Result<Pair<List<Pair<String, String>>, List<Pair<String, String>>>> = runCatching {
         val r = rpc("stations.list", JsonObject(emptyMap()), withToken = false).jsonObject
         fun list(k: String) = json.decodeFromJsonElement(kotlinx.serialization.builtins.ListSerializer(NamedItem.serializer()), r[k] ?: kotlinx.serialization.json.JsonArray(emptyList())).map { it.id to it.name }
+        val reasons = (r["reasons"] as? kotlinx.serialization.json.JsonArray)?.map { it.jsonPrimitive.content }
+        reasonsFromServer = reasons
         list("locations") to list("gates")
     }
+
+    /** Entry/exit reasons from the last stations.list call (null when the PC did not send any). */
+    @Volatile var reasonsFromServer: List<String>? = null
+        private set
 
     fun verify(code: String, expected: String): Result<VerifyResponse> = runCatching {
         json.decodeFromJsonElement(VerifyResponse.serializer(), rpc("credential.verify", buildJsonObject { put("code", code); put("expected", expected) }))
@@ -185,7 +192,7 @@ class ApiClient(private val profile: ConnectionProfile? = null) {
             event.eventId, event.entityType.name, event.entityId, event.eventType.name,
             event.locationId, event.gateId, event.deviceId, event.operatorId,
             event.eventTimestamp, event.createdAt, event.sourceType.name, event.sourceId,
-            event.locationMismatch, event.scannedLocation
+            event.locationMismatch, event.scannedLocation, event.reason, event.remarks
         ))).toString()
     }
 

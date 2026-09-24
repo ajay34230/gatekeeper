@@ -1055,6 +1055,8 @@ private fun ActivityDetailSheet(event: MovementEvent, onDismiss: () -> Unit) {
                 Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                     ReviewRow("Recorded Time", formatLongTime(event.eventTimestamp))
                     ReviewRow("Location / Gate", "${event.locationId} • ${event.gateId}")
+                    if (event.reason.isNotBlank()) ReviewRow("Reason", event.reason)
+                    if (event.remarks.isNotBlank()) ReviewRow("Remarks", event.remarks)
                     ReviewRow("Operator", event.operatorId)
                     ReviewRow("Device", event.deviceId)
                     ReviewRow("Source", "${event.sourceType.name} • ${event.sourceId}")
@@ -1393,6 +1395,10 @@ private fun ConfigField(label: String, value: String, password: Boolean = false,
 @Composable
 private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonResult) {
     var confirm by rememberSaveable { mutableStateOf(false) }
+    var reason by rememberSaveable(session.person.id) { mutableStateOf("") }
+    var customReason by rememberSaveable(session.person.id) { mutableStateOf("") }
+    var remarks by rememberSaveable(session.person.id) { mutableStateOf("") }
+    val finalReason = if (reason == REASON_CUSTOM) customReason.trim() else reason
     val cfg = vm.currentConfig()
     val entryAt = remember(vm.events, session.person.id) {
         vm.events.filter {
@@ -1482,6 +1488,7 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
             if (!allowed) {
                 StatusBanner("ACCESS DENIED • Credential is ${person.status.lowercase()}. Direct the individual to the central security desk.", BannerTone.Error)
             }
+            if (allowed) ReasonPicker(vm.reasons, reason, { reason = it }, customReason, { customReason = it }, remarks, { remarks = it })
             if (allowed) Surface(
                 Modifier.fillMaxWidth().height(58.dp).clickable { confirm = true },
                 color = UiInk,
@@ -1512,13 +1519,53 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
             title = "CONFIRM ${if (session.inside) "EXIT" else "ENTRY"}",
             subtitle = "Confirmation Required",
             onDismiss = { confirm = false },
-            onConfirm = { confirm = false; vm.confirmPerson() }
+            onConfirm = { confirm = false; vm.confirmPerson(finalReason, remarks) }
         ) {
             ReviewRow("Personnel", "${session.person.name} (${displayId(session.person.id)})")
+            ReviewRow("Reason", finalReason.ifBlank { "—" })
+            if (remarks.isNotBlank()) ReviewRow("Remarks", remarks.trim())
             ReviewRow("Location / Gate", "$postName • ${cfg.gateName.ifBlank { cfg.gateId }}")
             if (session.locationMismatch) ReviewRow("Location Flag", "QR: ${session.scannedLocation}", valueColor = UiWarning)
             ReviewRow("Timestamp", formatLongTime(System.currentTimeMillis()))
             if (stayMs > 0) ReviewRow("Calculated Stay", formatDuration(stayMs), valueColor = UiWarning)
+        }
+    }
+}
+
+private const val REASON_CUSTOM = "Custom…"
+
+/** Reason for the movement (list from the Command Center + custom text) and optional remarks; sent with the record. */
+@Composable
+private fun ReasonPicker(
+    reasons: List<String>, reason: String, onReason: (String) -> Unit,
+    custom: String, onCustom: (String) -> Unit, remarks: String, onRemarks: (String) -> Unit
+) {
+    var open by remember { mutableStateOf(false) }
+    Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, UiBorder)) {
+        Column(Modifier.padding(12.dp)) {
+            Text("REASON", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 1.sp, color = UiMuted)
+            Spacer(Modifier.height(6.dp))
+            Box {
+                Surface(Modifier.fillMaxWidth().height(46.dp).clickable { open = true }, color = UiSurfaceSubtle, shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, UiBorder)) {
+                    Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(reason.ifBlank { "Select reason (optional)" }, fontFamily = Sans, fontSize = 14.sp, color = if (reason.isBlank()) UiFaint else UiInk, modifier = Modifier.weight(1f))
+                        Icon(Icons.Default.ArrowDownward, null, tint = UiMuted, modifier = Modifier.size(16.dp))
+                    }
+                }
+                DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                    (listOf("") + reasons + REASON_CUSTOM).forEach { r ->
+                        DropdownMenuItem(text = { Text(r.ifBlank { "No reason" }, fontFamily = Sans) }, onClick = { open = false; onReason(r) })
+                    }
+                }
+            }
+            if (reason == REASON_CUSTOM) {
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(custom, { if (it.length <= 60) onCustom(it) }, Modifier.fillMaxWidth(), singleLine = true,
+                    placeholder = { Text("Type the reason", fontFamily = Sans, fontSize = 13.sp) }, shape = RoundedCornerShape(10.dp))
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(remarks, { if (it.length <= 300) onRemarks(it) }, Modifier.fillMaxWidth(), maxLines = 3,
+                placeholder = { Text("Remarks (pass no., authority, destination…)", fontFamily = Sans, fontSize = 13.sp) }, shape = RoundedCornerShape(10.dp))
         }
     }
 }

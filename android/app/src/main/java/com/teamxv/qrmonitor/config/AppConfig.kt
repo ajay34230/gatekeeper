@@ -57,6 +57,11 @@ class AppConfig(context: Context) : ConnectionProfile {
         get() = prefs.getBoolean("publicUsesCa", false)
         set(value) = prefs.edit().putBoolean("publicUsesCa", value).apply()
 
+    /** Entry/exit reasons configured on the PC (TD, leave, posting…). */
+    var movementReasons: List<String>
+        get() = (prefs.getString("movementReasons", null) ?: DEFAULT_REASONS.joinToString("\n")).split('\n').map { it.trim() }.filter { it.isNotEmpty() }
+        set(value) = prefs.edit().putString("movementReasons", value.joinToString("\n")).apply()
+
     // Comms engine (separate listener on the PC)
     var commsPort: Int
         get() = prefs.getInt("commsPort", 8444)
@@ -218,5 +223,10 @@ class AppConfig(context: Context) : ConnectionProfile {
             .remove("offlineSessionUntil")
             .putBoolean("operatorLoggedIn", false)
             .apply()
+    }
+
+    companion object {
+        /** Used until the first contact with the Command Center. */
+        val DEFAULT_REASONS = listOf("TD", "Proceeding on Leave", "Rejoining from Leave", "Posting Out", "Posting In", "Local Work")
     }
 }

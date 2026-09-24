@@ -390,7 +390,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         session = s.copy(occupants = s.occupants + p)
     }
 
-    fun confirmPerson() {
+    /** Entry/exit reasons set on the Command Center (the operator may also type a custom one). */
+    var reasons by mutableStateOf(config.movementReasons)
+
+    fun confirmPerson(reason: String = "", remarks: String = "") {
         val s = session as? ScanSession.PersonResult ?: return
         viewModelScope.launch {
             when (
@@ -401,7 +404,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     config.deviceId,
                     config.operatorId,
                     s.locationMismatch,
-                    s.scannedLocation
+                    s.scannedLocation,
+                    reason,
+                    remarks
                 )
             ) {
                 is OperationResult.Success -> {
@@ -714,6 +719,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun refreshStations() {
         viewModelScope.launch(Dispatchers.IO) {
             api.stations().onSuccess { (locs, gts) ->
+                api.reasonsFromServer?.let { config.movementReasons = it; reasons = it }
                 config.cachedLocations = locs; config.cachedGates = gts
                 locations = locs; gates = gts
             }

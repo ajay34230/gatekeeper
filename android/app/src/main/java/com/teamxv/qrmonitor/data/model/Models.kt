@@ -34,7 +34,9 @@ data class MovementEvent(
     val sourceType: PresenceSource = PresenceSource.DIRECT,
     val sourceId: String? = null,
     val locationMismatch: Boolean = false,
-    val scannedLocation: String = ""
+    val scannedLocation: String = "",
+    val reason: String = "",
+    val remarks: String = ""
 )
 
 data class NetworkStatus(
