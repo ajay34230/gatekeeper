@@ -12,3 +12,5 @@
 -dontwarn org.conscrypt.**
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
+# Call page JavaScript bridge (WebView) must keep its method names in release builds.
+-keepclassmembers class * { @android.webkit.JavascriptInterface <methods>; }

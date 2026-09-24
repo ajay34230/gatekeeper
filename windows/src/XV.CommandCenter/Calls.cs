@@ -22,6 +22,8 @@ public static class Calls
 {
     const int RingSeconds = 45;
     static Active? _call;
+    /// <summary>Raised when a call starts or ends (the Comms Center refreshes its call buttons).</summary>
+    public static event Action? StateChanged;
     static Task<CoreWebView2Environment>? _env;
 
     sealed class Active
@@ -69,6 +71,7 @@ public static class Calls
         if (!App.Comms.IsOnline(dev)) { MessageBox.Show("The terminal is offline. Calls need the terminal connected to the Comms engine.", "Call"); return; }
         var c = new Active { Id = Guid.NewGuid().ToString("N"), Device = dev, Direction = "OUT", Video = video, Peer = PeerName(dev) };
         _call = c;
+        StateChanged?.Invoke();
         App.Comms.Store.LogCall(c.Id, dev, "OUT", video, Store.NowMs);
         c.Window = new CallWindow(c.Peer, "caller", video, OnPage, () => Hangup("Call ended", notify: true));
         c.Window.Show();
@@ -94,6 +97,7 @@ public static class Calls
             var video = f["video"]?.GetValue<bool>() == true;
             var c = new Active { Id = id, Device = dev, Direction = "IN", Video = video, Peer = PeerName(dev) };
             _call = c;
+            StateChanged?.Invoke();
             App.Comms.Store.LogCall(id, dev, "IN", video, Store.NowMs);
             c.Ringing = new IncomingCallWindow(c.Peer, video, accept: () => Accept(c), decline: () => { Send(dev, "decline", id); Finish(null, "DECLINED"); });
             c.Ringing.Show();
@@ -165,6 +169,7 @@ public static class Calls
         var c = _call;
         if (c == null) return;
         _call = null;
+        StateChanged?.Invoke();
         c.Timeout?.Stop();
         c.Ringing?.Close();
         App.Comms.Store.CallEnded(c.Id, outcome);

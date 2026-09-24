@@ -78,10 +78,12 @@ public sealed class CommsWindow : Window
         _thread.Children.Add(Empty("Choose a terminal on the left to see its messages."));
         App.Comms.Changed += OnChanged;
         App.Comms.MessageReceived += OnMessage;
-        Closed += (_, _) => { App.Comms.Changed -= OnChanged; App.Comms.MessageReceived -= OnMessage; };
+        Calls.StateChanged += OnCallState;
+        Closed += (_, _) => { App.Comms.Changed -= OnChanged; App.Comms.MessageReceived -= OnMessage; Calls.StateChanged -= OnCallState; };
         FillDevices();
     }
 
+    void OnCallState() => Dispatcher.BeginInvoke(() => { if (_device != null) FillThread(); });
     void OnChanged() => Dispatcher.BeginInvoke(() => { FillDevices(); if (_device != null) FillThread(); });
     void OnMessage(CommsMessage m) => Dispatcher.BeginInvoke(() => { if (m.DeviceId == _device && IsActive) App.Comms.MarkRead(m.DeviceId); });
 
