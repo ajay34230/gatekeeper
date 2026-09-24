@@ -294,7 +294,9 @@ public static class Dialogs
     }
 
     public static void ExportEvents(Window o) => SaveCsv($"xv-gate-records-{DateTime.Now:yyyyMMdd-HHmm}.csv", Csv.Build(
-        App.Store.RecentEvents(1_000_000).Select(r => { r["time"] = Time(L(r["event_ts"]), "yyyy-MM-dd HH:mm:ss"); r["stay"] = L(r["stay_ms"]) > 0 ? Duration(L(r["stay_ms"])) : ""; return r; }),
+        App.Store.RecentEvents(1_000_000).Select(r => { r["time"] = Time(L(r["event_ts"]), "yyyy-MM-dd HH:mm:ss"); r["stay"] = L(r["stay_ms"]) > 0 ? Duration(L(r["stay_ms"])) : "";
+            r["occupants"] = S(r["occupants"]).Length > 2 ? string.Join(", ", (System.Text.Json.JsonSerializer.Deserialize<List<string>>(S(r["occupants"])) ?? []).Select(DisplayId)) : "";
+            r["loc_mismatch"] = L(r["loc_mismatch"]) == 1 ? "YES" : ""; return r; }),
         ("Time", "time"), ("Action", "event_type"), ("Type", "entity_type"), ("ID", "entity_id"), ("Name / Plate", "title"), ("Location", "location_name"), ("Gate", "gate_name"),
         ("Operator", "operator_id"), ("Terminal", "device_id"), ("Stay", "stay"), ("Location flag", "loc_mismatch"), ("QR location", "scanned_loc"), ("Occupants", "occupants"), ("Event ID", "event_id"), ("Server seq", "seq")));
 

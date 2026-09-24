@@ -16,6 +16,18 @@ for (var i = 0; i + 1 < args.Length; i++)
     if (args[i] == "--add-location" && i + 2 < args.Length) store.UpsertLocation(args[i + 1], args[i + 2]);
     if (args[i] == "--add-gate" && i + 2 < args.Length) store.UpsertGate(args[i + 1], args[i + 2]);
 }
+var ei = Array.IndexOf(args, "--export");
+if (ei >= 0 && ei + 1 < args.Length)
+{
+    // Same CSV layouts as the Command Center's Import / Export window.
+    Directory.CreateDirectory(args[ei + 1]);
+    File.WriteAllText(Path.Combine(args[ei + 1], "persons.csv"), Csv.Build(store.Persons(), ("ID", "id"), ("Name", "name"), ("Rank", "rank"), ("Service No", "service_no"), ("Unit", "unit"), ("Company", "company"), ("Status", "status"), ("Inside since", "inside_since"), ("Last seen", "last_seen")));
+    File.WriteAllText(Path.Combine(args[ei + 1], "vehicles.csv"), Csv.Build(store.Vehicles(), ("ID", "id"), ("Plate", "plate"), ("Type", "type"), ("Model", "model"), ("Company", "company"), ("Status", "status"), ("In yard since", "inside_since")));
+    File.WriteAllText(Path.Combine(args[ei + 1], "records.csv"), Csv.Build(store.RecentEvents(100000), ("Seq", "seq"), ("Time", "event_ts"), ("Action", "event_type"), ("Type", "entity_type"), ("ID", "entity_id"), ("Name / Plate", "title"), ("Location", "location_name"), ("Gate", "gate_name"), ("Operator", "operator_id"), ("Terminal", "device_id"), ("Stay ms", "stay_ms"), ("Loc flag", "loc_mismatch"), ("QR location", "scanned_loc"), ("Occupants", "occupants")));
+    File.WriteAllText(Path.Combine(args[ei + 1], "audit.csv"), Csv.Build(store.AuditLog(100000), ("Time", "created_at"), ("Actor", "actor"), ("Action", "action"), ("Entity", "entity_id"), ("Detail", "detail")));
+    Console.WriteLine("Exported to " + args[ei + 1]);
+    return;
+}
 if (args.Contains("--setup-only")) return;
 await server.StartAsync();
 using var discovery = new DiscoveryResponder(settings, server.Fingerprint);
