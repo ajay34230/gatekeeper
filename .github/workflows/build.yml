@@ -2,7 +2,11 @@ name: Build APK and Windows installer
 
 on:
   push:
+    branches-ignore: [ci-screenshots]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   server-tests:
@@ -52,6 +56,15 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: windows-screenshots, path: screenshots }
+      - name: Publish screenshots to the ci-screenshots branch
+        shell: pwsh
+        run: |
+          git config user.name "ci-bot"; git config user.email "ci-bot@users.noreply.github.com"
+          git checkout --orphan ci-screenshots
+          git rm -rf --cached . | Out-Null
+          git add -f screenshots
+          git commit -m "Windows screenshots for ${{ github.sha }}"
+          git push -f origin ci-screenshots
 
   android:
     runs-on: ubuntu-latest
