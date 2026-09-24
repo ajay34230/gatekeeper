@@ -74,12 +74,12 @@ jobs:
         with: { distribution: temurin, java-version: '17' }
       - name: Build APK
         working-directory: android
-        run: chmod +x gradlew && ./gradlew --no-daemon :app:assembleDebug
+        run: chmod +x gradlew && ./gradlew --no-daemon :app:assembleDebug :app:assembleRelease
       - uses: actions/upload-artifact@v4
-        with: { name: XV-Gatekeeper-APK, path: android/app/build/outputs/apk/debug/*.apk }
+        with: { name: XV-Gatekeeper-APK, path: android/app/build/outputs/apk/release/*.apk }
       - name: Publish APK to the ci-apk branch
         run: |
-          mkdir -p /tmp/apk && cp android/app/build/outputs/apk/debug/*.apk /tmp/apk/XV-Gatekeeper.apk
+          mkdir -p /tmp/apk && cp android/app/build/outputs/apk/release/*.apk /tmp/apk/XV-Gatekeeper.apk
           git config user.name "ci-bot"; git config user.email "ci-bot@users.noreply.github.com"
           git checkout --orphan ci-apk
           git rm -rf --cached . > /dev/null

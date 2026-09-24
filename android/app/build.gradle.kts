@@ -16,6 +16,7 @@ android {
         targetSdk = 35
         versionCode = 100
         versionName = "1.0.0"
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
 
     }
 
@@ -27,6 +28,11 @@ android {
         }
         release {
             manifestPlaceholders["allowCleartextTraffic"] = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Signed with the build machine's key so the APK installs directly; use your own keystore for store releases.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
