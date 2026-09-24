@@ -61,14 +61,30 @@ class EventRepository(
     suspend fun applyMasterBootstrap(master: com.teamxv.qrmonitor.network.MasterBootstrapResponse) {
         db.withTransaction {
             persons.upsertAll(master.persons.map {
-                PersonEntity(it.personId, it.name, it.category, it.active, it.secretCode, it.rank, it.serviceNo, it.unit, it.company, it.role, it.status, it.accessLocations)
+                PersonEntity(it.personId, it.name, it.category, it.active, it.secretCode, it.rank, it.serviceNo, it.unit, it.company, it.role, it.status, it.accessLocations, it.secretHash)
             })
             vehicles.upsertAll(master.vehicles.map {
-                VehicleEntity(it.vehicleId, it.registration, it.type, it.active, it.secretCode, it.milReg, it.model, it.company, it.status)
+                VehicleEntity(it.vehicleId, it.registration, it.type, it.active, it.secretCode, it.milReg, it.model, it.company, it.status, it.secretHash)
             })
-            if (master.persons.isEmpty()) persons.deleteAll() else persons.deleteAllExcept(master.persons.map { it.personId })
-            if (master.vehicles.isEmpty()) vehicles.deleteAll() else vehicles.deleteAllExcept(master.vehicles.map { it.vehicleId })
+            if (master.sharingMode == "RECEIVE_ONLY") {
+                // Nothing personal may stay on the phone: keep ID-only rows, blank every detail.
+                persons.blankDetails(); vehicles.blankDetails()
+            } else if (master.persons.isEmpty()) persons.deleteAll() else persons.deleteAllExcept(master.persons.map { it.personId })
+            if (master.sharingMode != "RECEIVE_ONLY") { if (master.vehicles.isEmpty()) vehicles.deleteAll() else vehicles.deleteAllExcept(master.vehicles.map { it.vehicleId }) }
 
+            if (events.pendingCount() == 0 && master.sharingMode != "RECEIVE_ONLY") {
+                // Vehicles that entered through another gate: take the server's active manifests; close ours that ended elsewhere.
+                val serverManifests = master.manifests.associateBy { it.manifestId }
+                manifests.activeAll().filter { it.manifestId !in serverManifests }.forEach { manifests.markExitedElsewhere(it.manifestId) }
+                val localActive = manifests.activeAll().map { it.manifestId }.toSet()
+                master.manifests.filter { it.manifestId !in localActive && manifests.findManifest(it.manifestId) == null }.forEach { m ->
+                    manifests.insertManifest(VehicleManifestEntity(
+                        manifestId = m.manifestId, vehicleId = m.vehicleId, eventId = m.entryEventId, locationId = m.locationId, gateId = m.gateId,
+                        driverId = m.driverId, coDriverId = m.coDriverId, createdAt = m.createdAt, syncStatus = SyncStatus.SYNCED.name, state = "ACTIVE"
+                    ))
+                    manifests.insertMembers(m.occupants.mapIndexed { i, pid -> VehicleManifestMemberEntity(m.manifestId, pid, i + 1) })
+                }
+            }
             if (events.pendingCount() == 0) {
                 val now = System.currentTimeMillis()
                 val serverInside = master.presence.associateBy { it.personId }
@@ -118,13 +134,14 @@ class EventRepository(
         fun ok(p: PersonEntity? = null, v: VehicleEntity? = null) = IdentityResult(p, v, null, parsed.location, mismatch)
         val code = parsed.code
         if (code.isBlank()) return IdentityResult(error = "Empty code")
+        val hash = sha256(code.trim().uppercase())
         if (code.startsWith("XVGK1:")) return IdentityResult(error = "This is a PC pairing QR. Use Sync Hub → Pair with PC.")
         if (expected != EntityType.VEHICLE) {
-            val p = persons.findBySecret(code) ?: QrPayloadParser.personId(code)?.let { persons.find(it) } ?: persons.findByServiceNo(code)
-            if (p != null) return ok(p = p)
+            val p = persons.findBySecret(code) ?: persons.findBySecretHash(hash) ?: QrPayloadParser.personId(code)?.let { persons.find(it) } ?: persons.findByServiceNo(code)
+            if (p != null) return ok(p = p.withDisplayName())
         }
         if (expected != EntityType.PERSON) {
-            val v = vehicles.findBySecret(code) ?: QrPayloadParser.vehicleId(code)?.let { vehicles.find(it) }
+            val v = vehicles.findBySecret(code) ?: vehicles.findBySecretHash(hash) ?: QrPayloadParser.vehicleId(code)?.let { vehicles.find(it) }
                 ?: vehicles.findByPlate(code.uppercase().replace("-", "").replace(" ", ""))
             if (v != null) return ok(v = v)
         }
@@ -137,6 +154,35 @@ class EventRepository(
     }
 
 
+
+    private fun sha256(s: String): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest(s.toByteArray()).joinToString("") { "%02x".format(it) }
+
+    /** Minimal mode holds no names: show the ID instead. */
+    private fun PersonEntity.withDisplayName() = if (name.isBlank()) copy(name = "ID " + id) else this
+
+    /**
+     * Receive-only mode: the Command Center verified the code online. Only an ID-level row is kept so the record can be
+     * created and synced; the name and details are returned for display and never written to the phone.
+     */
+    suspend fun applyOnlineVerification(v: com.teamxv.qrmonitor.network.VerifyResponse): IdentityResult = db.withTransaction {
+        if (v.type == "PERSON") {
+            persons.upsert(PersonEntity(v.id, "", v.category, v.status == "ACTIVE", status = v.status))
+            val local = sessions.activeForPerson(v.id)
+            if (v.inside && local == null) sessions.insert(PresenceSessionEntity("SRV-${v.id}-${v.insideSince}", v.id, null, "DIRECT", null, "SERVER", v.insideSince, "", ""))
+            if (!v.inside && local != null && events.pendingCount() == 0) sessions.closeDirectForPerson(v.id, System.currentTimeMillis())
+            IdentityResult(person = PersonEntity(v.id, v.name.ifBlank { "ID " + v.id }, v.category, v.status == "ACTIVE", "", v.rank, v.serviceNo, v.unit, v.company, "", v.status))
+        } else {
+            vehicles.upsert(VehicleEntity(v.id, "", "", v.status == "ACTIVE", status = v.status))
+            val m = v.manifest
+            if (m != null && manifests.findManifest(m.manifestId) == null) {
+                manifests.insertManifest(VehicleManifestEntity(m.manifestId, m.vehicleId, m.entryEventId, m.locationId, m.gateId, m.driverId, m.coDriverId, m.createdAt, SyncStatus.SYNCED.name, "ACTIVE"))
+                manifests.insertMembers(m.occupants.mapIndexed { i, pid -> VehicleManifestMemberEntity(m.manifestId, pid, i + 1) })
+                m.occupants.forEach { pid -> if (persons.find(pid) == null) persons.upsert(PersonEntity(pid, "", "PERSONNEL", true)) }
+            }
+            IdentityResult(vehicle = VehicleEntity(v.id, v.registration.ifBlank { v.id }, v.vehicleType, v.status == "ACTIVE", status = v.status))
+        }
+    }
 
     suspend fun isPersonInside(personId: String): Boolean = sessions.activeForPerson(personId) != null
 

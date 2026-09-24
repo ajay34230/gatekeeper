@@ -38,9 +38,20 @@ Body: `{"iv": base64(12 bytes), "ct": base64(ciphertext ‖ 16-byte tag)}` — A
 | `auth.login` | no | `username`, `password` |
 | `auth.register` | no | `name`, `username` (optional), `password` → `pending` until approved on the PC |
 | `auth.logout` | yes | – |
-| `master.bootstrap` | yes | – → persons, vehicles, locations, gates, presence |
+| `master.bootstrap` | yes | – → `sharingMode`, persons, vehicles, locations, gates, presence, active `manifests` (see below) |
+| `credential.verify` | yes | `code` (badge secret, ID or service number / plate), `expected` (`PERSON`/`VEHICLE`/empty) → details for this one scan; 404 `NOT_REGISTERED` |
 | `events.create` | yes | person movement event |
 | `vehicle.transaction` | yes | `{event, manifest}` vehicle entry/exit with occupants |
 | `heartbeat` | yes | `locationId`, `gateId`, `operatorId`, `pending`, `appVersion` |
+
+### Data sharing modes
+
+`sharingMode` is set on the PC by the administrator:
+
+| mode | persons / vehicles in bootstrap |
+|---|---|
+| `FULL` | all fields including `secretCode` |
+| `MINIMAL` (default) | IDs, category, status, access locations and `secretHash` (lowercase hex SHA-256 of the trimmed, upper-cased secret); names, ranks, plates and secrets are empty |
+| `RECEIVE_ONLY` | empty lists (also presence and manifests); terminals call `credential.verify` for every scan |
 
 `windows/tests/e2e_protocol_test.py` exercises all of the above.

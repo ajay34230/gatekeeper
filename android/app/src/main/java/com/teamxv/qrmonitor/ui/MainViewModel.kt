@@ -315,11 +315,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 ScannerTarget.PAIRING -> { pairWithQr(raw); return@launch }
             }
             when (target) {
-                ScannerTarget.PERSON -> handlePerson(repo.lookupIdentity(raw, expected, config.locationId))
-                ScannerTarget.VEHICLE -> handleVehicle(repo.lookupIdentity(raw, expected, config.locationId))
-                ScannerTarget.DRIVER -> handleDriver(repo.lookupIdentity(raw, expected))
-                ScannerTarget.CO_DRIVER -> handleCoDriver(repo.lookupIdentity(raw, expected))
-                ScannerTarget.OCCUPANT -> handleOccupant(repo.lookupIdentity(raw, expected))
+                ScannerTarget.PERSON -> handlePerson(identify(raw, expected, config.locationId))
+                ScannerTarget.VEHICLE -> handleVehicle(identify(raw, expected, config.locationId))
+                ScannerTarget.DRIVER -> handleDriver(identify(raw, expected))
+                ScannerTarget.CO_DRIVER -> handleCoDriver(identify(raw, expected))
+                ScannerTarget.OCCUPANT -> handleOccupant(identify(raw, expected))
                 ScannerTarget.PAIRING -> Unit
             }
         }
@@ -534,6 +534,46 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
+
+    /**
+     * Resolves a scanned code. In Receive-only mode the Command Center verifies it online (nothing personal is stored
+     * on the phone); in Full / Minimal mode the encrypted local registry is used, so scanning also works offline.
+     */
+    private suspend fun identify(raw: String, expected: EntityType, location: String = ""): com.teamxv.qrmonitor.data.IdentityResult {
+        if (config.sharingMode == "FULL") return repo.lookupIdentity(raw, expected, location)
+        if (config.sharingMode != "RECEIVE_ONLY") {
+            // Minimal mode: the badge is checked offline against its hash; names are fetched for this screen only and never stored.
+            val local = repo.lookupIdentity(raw, expected, location)
+            val id = local.person?.id ?: local.vehicle?.id ?: return local
+            val v = kotlinx.coroutines.withTimeoutOrNull(3_500) {
+                kotlinx.coroutines.withContext(Dispatchers.IO) { api.verify(id, if (local.person != null) "PERSON" else "VEHICLE").getOrNull() }
+            } ?: return local
+            return when {
+                local.person != null && v.type == "PERSON" -> local.copy(person = local.person.copy(
+                    name = v.name.ifBlank { local.person.name }, rank = v.rank, serviceNo = v.serviceNo, unit = v.unit, company = v.company))
+                local.vehicle != null && v.type == "VEHICLE" -> local.copy(vehicle = local.vehicle.copy(
+                    registration = v.registration.ifBlank { local.vehicle.registration }, type = v.vehicleType.ifBlank { local.vehicle.type }))
+                else -> local
+            }
+        }
+        val parsed = com.teamxv.qrmonitor.scanner.QrPayloadParser.parse(raw)
+        val res = kotlinx.coroutines.withContext(Dispatchers.IO) { api.verify(parsed.code, expected.name) }
+        return res.fold(
+            onSuccess = { v ->
+                val r = repo.applyOnlineVerification(v)
+                val mismatch = parsed.location.isNotBlank() && location.isNotBlank() &&
+                    com.teamxv.qrmonitor.scanner.QrPayloadParser.normalizeLocation(parsed.location) != com.teamxv.qrmonitor.scanner.QrPayloadParser.normalizeLocation(location)
+                r.copy(scannedLocation = parsed.location, locationMismatch = mismatch)
+            },
+            onFailure = { e ->
+                com.teamxv.qrmonitor.data.IdentityResult(error = (e as? HttpFailure)?.message
+                    ?: "Receive-only mode: this terminal must be connected to the Command Center to verify credentials.")
+            }
+        )
+    }
+
+    /** Data Sharing mode set by the Command Center administrator (FULL / MINIMAL / RECEIVE_ONLY). */
+    val sharingMode: String get() = config.sharingMode
 
     /** Display name for a record: person name or vehicle plate from the local registry. */
     fun titleFor(event: MovementEvent): String = when (event.entityType) {

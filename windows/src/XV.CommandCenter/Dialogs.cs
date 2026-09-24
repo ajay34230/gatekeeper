@@ -243,6 +243,7 @@ public static class Dialogs
             }, "BtnDanger");
             AddButton("Save PNG", () =>
             {
+                if (!AdminGate.Require(this, $"Save credential image {DisplayId(id)}")) return;
                 var dlg = new SaveFileDialog { FileName = $"{DisplayId(id)}-credential.png", Filter = "PNG image|*.png" };
                 if (dlg.ShowDialog() != true) return;
                 card.UpdateLayout();
@@ -251,7 +252,7 @@ public static class Dialogs
                 var enc = new PngBitmapEncoder(); enc.Frames.Add(BitmapFrame.Create(rtb));
                 using var fs = File.Create(dlg.FileName); enc.Save(fs);
             });
-            AddButton("Print", () => { var pd = new PrintDialog(); if (pd.ShowDialog() == true) pd.PrintVisual(card, "XV credential " + id); }, "BtnAmber");
+            AddButton("Print", () => { if (!AdminGate.Require(this, $"Print credential {DisplayId(id)}")) return; var pd = new PrintDialog(); if (pd.ShowDialog() == true) pd.PrintVisual(card, "XV credential " + id); }, "BtnAmber");
         }
     }
 
@@ -353,6 +354,7 @@ public static class Dialogs
             {
                 try
                 {
+                    if (!AdminGate.Require(this, $"Export {kind.ToUpperInvariant()} report")) return;
                     var c = comp.SelectedIndex <= 0 ? "ALL" : Companies[comp.SelectedIndex - 1];
                     var req = new XV.Core.ReportRequest(c, personIds, from.SelectedDate ?? DateTime.Today.AddDays(-30), to.SelectedDate ?? DateTime.Today, withRecords.IsChecked == true);
                     if (req.From > req.To) throw new Exception("'From' must be before 'To'.");
@@ -379,8 +381,9 @@ public static class Dialogs
 
     // ------------------------------------------------------------------ import / export
 
-    static void SaveCsv(string name, string csv)
+    static void SaveCsv(string name, string csv, bool containsData = true)
     {
+        if (containsData && !AdminGate.Require(null, "Export " + name)) return;
         var dlg = new SaveFileDialog { FileName = name, Filter = "CSV (Excel)|*.csv" };
         if (dlg.ShowDialog() == true) File.WriteAllText(dlg.FileName, csv, new System.Text.UTF8Encoding(true));
     }
@@ -405,10 +408,10 @@ public static class Dialogs
         {
             Section("PERSONNEL REGISTRY",
                 ("Import CSV", () => Import(true), "BtnEmerald"), ("Export CSV", () => SaveCsv("xv-personnel.csv", Csv.Build(App.Store.Persons(), PersonCols)), "BtnBase"),
-                ("Blank template", () => SaveCsv("xv-personnel-template.csv", Csv.Build([], PersonCols)), "BtnBase"));
+                ("Blank template", () => SaveCsv("xv-personnel-template.csv", Csv.Build([], PersonCols), containsData: false), "BtnBase"));
             Section("VEHICLE FLEET",
                 ("Import CSV", () => Import(false), "BtnEmerald"), ("Export CSV", () => SaveCsv("xv-vehicles.csv", Csv.Build(App.Store.Vehicles(), VehicleCols)), "BtnBase"),
-                ("Blank template", () => SaveCsv("xv-vehicles-template.csv", Csv.Build([], VehicleCols)), "BtnBase"));
+                ("Blank template", () => SaveCsv("xv-vehicles-template.csv", Csv.Build([], VehicleCols), containsData: false), "BtnBase"));
             Section("REPORTS (EXCEL • PDF • CSV)", ("Company-wise report…", () => Report(this, "ALL", []), "BtnAmber"));
             Section("GATE RECORDS & AUDIT", ("Export gate records", () => ExportEvents(this), "BtnBase"), ("Export audit trail", () => ExportAudit(this), "BtnBase"));
             Section("ENCRYPTED BACKUP", ("Open data folder", () => System.Diagnostics.Process.Start("explorer.exe", Paths.DataDir), "BtnBase"));

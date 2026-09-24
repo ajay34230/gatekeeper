@@ -50,6 +50,12 @@ Building it yourself instead: `cd android && ./gradlew :app:assembleDebug` (JDK 
 - **At rest (phone):** SQLCipher-encrypted database; its passphrase and all tokens/keys are wrapped by the Android Keystore.
 - **Credentials:** QR codes contain a random secret code (not the ID), so a badge cannot be forged by typing an ID; *Re-issue QR* invalidates a lost card. Operators sign in with passwords (PBKDF2, lockout after 5 failures); terminals can be revoked instantly from the PC.
 - When *Cloud Link* internet access is **off**, the PC refuses every connection that is not from a private/LAN/VPN address.
+- **Data sharing (Stations & Settings → Data protection):** the PC only answers requests; it never pushes data anywhere. The administrator chooses what terminals may receive:
+  - *Full* — names, ranks, units and badge secrets are copied to terminals (fully offline scanning).
+  - *Minimal* (default) — terminals keep only IDs, status and SHA-256 hashes of badge codes; names are fetched for the screen during an online check and never stored.
+  - *Receive-only* — terminals store no registry at all; every scan is verified online (`credential.verify`). Gate records still flow phone → PC.
+- **Outbound block:** the installer adds a Windows Firewall rule that stops the Command Center from opening connections to public internet addresses (LAN, VPN `100.64.0.0/10` and IPv6 unique-local stay allowed). It can be switched off in *Data protection* (administrator approval required).
+- **Administrator password:** every export (reports, CSV, connection details), credential save/print, record wipe and data-protection change asks for the administrator password (set on first use, PBKDF2-hashed, unlock remembered for 5 minutes). Each use and each failed attempt is written to the Audit Trail.
 
 ## 5. Connecting over the internet (Cloud Link)
 

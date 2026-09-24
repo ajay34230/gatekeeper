@@ -54,6 +54,9 @@ Section "Install"
   nsExec::Exec 'netsh advfirewall firewall delete rule name="XV Command Center Discovery"'
   nsExec::Exec 'netsh advfirewall firewall add rule name="XV Command Center HTTPS" dir=in action=allow protocol=TCP program="$INSTDIR\XVCommandCenter.exe" enable=yes'
   nsExec::Exec 'netsh advfirewall firewall add rule name="XV Command Center Discovery" dir=in action=allow protocol=UDP localport=47913 program="$INSTDIR\XVCommandCenter.exe" enable=yes'
+  ; Data protection: the Command Center may not open connections to public internet addresses (LAN / VPN ranges stay allowed).
+  nsExec::Exec 'netsh advfirewall firewall delete rule name="XV Command Center - Block Internet Outbound"'
+  nsExec::Exec 'netsh advfirewall firewall add rule name="XV Command Center - Block Internet Outbound" dir=out action=block program="$INSTDIR\XVCommandCenter.exe" remoteip=0.0.0.0-9.255.255.255,11.0.0.0-100.63.255.255,100.128.0.0-126.255.255.255,128.0.0.0-169.253.255.255,169.255.0.0-172.15.255.255,172.32.0.0-192.167.255.255,192.169.0.0-223.255.255.255,2000::-3fff:ffff:ffff:ffff:ffff:ffff:ffff:ffff enable=yes'
   WriteRegStr HKLM "Software\XVCommandCenter" "InstallDir" "$INSTDIR"
   WriteRegStr HKLM "${UNINST}" "DisplayName" "${APP}"
   WriteRegStr HKLM "${UNINST}" "DisplayVersion" "${VERSION}"
@@ -69,6 +72,7 @@ Section "Uninstall"
   nsExec::Exec 'taskkill /IM XVCommandCenter.exe /F'
   nsExec::Exec 'netsh advfirewall firewall delete rule name="XV Command Center HTTPS"'
   nsExec::Exec 'netsh advfirewall firewall delete rule name="XV Command Center Discovery"'
+  nsExec::Exec 'netsh advfirewall firewall delete rule name="XV Command Center - Block Internet Outbound"'
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "XVCommandCenter"
   Delete "$DESKTOP\XV Command Center.lnk"
   RMDir /r "$SMPROGRAMS\XV Access Control"

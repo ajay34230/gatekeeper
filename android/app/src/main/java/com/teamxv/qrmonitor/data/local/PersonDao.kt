@@ -20,11 +20,20 @@ interface PersonDao {
     @Query("SELECT * FROM persons WHERE UPPER(secretCode)=UPPER(:code) LIMIT 1")
     suspend fun findBySecret(code: String): PersonEntity?
 
+    @Query("SELECT * FROM persons WHERE secretHash=:hash AND secretHash<>'' LIMIT 1")
+    suspend fun findBySecretHash(hash: String): PersonEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(item: PersonEntity)
+
     @Query("SELECT * FROM persons WHERE UPPER(serviceNo)=UPPER(:no) AND serviceNo<>'' LIMIT 1")
     suspend fun findByServiceNo(no: String): PersonEntity?
 
     @Query("DELETE FROM persons WHERE id NOT IN (:keep)")
     suspend fun deleteAllExcept(keep: List<String>)
+
+    @Query("UPDATE persons SET name='', rank='', serviceNo='', unit='', company='', role='', secretCode='', secretHash=''")
+    suspend fun blankDetails()
 
     @Query("DELETE FROM persons")
     suspend fun deleteAll()

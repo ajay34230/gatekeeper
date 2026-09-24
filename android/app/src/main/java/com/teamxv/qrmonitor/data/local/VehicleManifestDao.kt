@@ -19,6 +19,13 @@ interface VehicleManifestDao {
     @Query("SELECT * FROM vehicle_manifests WHERE eventId=:eventId LIMIT 1")
     suspend fun findManifestByEvent(eventId: String): VehicleManifestEntity?
 
+    @Query("SELECT * FROM vehicle_manifests WHERE state='ACTIVE'")
+    suspend fun activeAll(): List<VehicleManifestEntity>
+
+    /** Marks a manifest closed because the vehicle left through another gate (already known to the server). */
+    @Query("UPDATE vehicle_manifests SET state='EXITED', syncStatus='SYNCED' WHERE manifestId=:id AND state='ACTIVE'")
+    suspend fun markExitedElsewhere(id: String): Int
+
     @Query("SELECT * FROM vehicle_manifests WHERE exitEventId=:eventId LIMIT 1")
     suspend fun findManifestByExitEvent(eventId: String): VehicleManifestEntity?
 

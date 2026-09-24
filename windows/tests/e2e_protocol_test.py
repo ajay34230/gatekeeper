@@ -40,6 +40,14 @@ code, login, _ = rpc("auth.login", {"username": "GK-01", "password": "Operator#1
 tok = login["accessToken"]
 code, boot, _ = rpc("master.bootstrap", token=tok); assert code == 200
 print("bootstrap persons", len(boot["persons"]), "vehicles", len(boot["vehicles"]))
+# default Data Sharing mode is MINIMAL: no names or secrets on terminals, only IDs, status and secret hashes
+assert boot["sharingMode"] == "MINIMAL", boot["sharingMode"]
+assert boot["persons"] and all(p["name"] == "" and p["secretCode"] == "" and len(p["secretHash"]) == 64 for p in boot["persons"]), boot["persons"][:1]
+assert all(v["registration"] == "" and v["secretCode"] == "" for v in boot["vehicles"])
+# online badge check returns the details for that one scan only
+code, who, _ = rpc("credential.verify", {"code": "CI-0001", "expected": "PERSON"}, tok); assert code == 200 and who["name"] == "CI Test Soldier", (code, who)
+code, who, _ = rpc("credential.verify", {"code": "NO-SUCH-BADGE", "expected": ""}, tok); assert code == 404, (code, who)
+assert rpc("credential.verify", {"code": "CI-0001"})[0] == 401, "verify requires operator login"
 def ev(eid, etype, ent, typ, extra=None):
     now = int(time.time() * 1000)
     e = {"eventId": eid, "entityType": etype, "entityId": ent, "eventType": typ, "locationId": "LOC07", "gateId": "G02",
@@ -68,6 +76,7 @@ e6["operatorId"] = "GK-03"; code, body, _ = rpc("events.create", e6, tok); asser
 vi = ev("EVT-7", "VEHICLE", "V014", "ENTRY"); m3 = dict(man, manifestId="MNF-2", entryEventId="EVT-7", occupants=["P002"], driverId="P002", createdAt=vi["createdAt"])
 code, body, _ = rpc("vehicle.transaction", {"event": vi, "manifest": m3}, tok); assert code == 201, (code, body)
 code, body, _ = rpc("events.create", ev("EVT-8", "PERSON", "P002", "EXIT", {"sourceType": "VEHICLE", "sourceId": "MNF-2"}), tok); assert code == 201, (code, body)
+code, boot2, _ = rpc("master.bootstrap", token=tok); assert any(m["manifestId"] == "MNF-2" for m in boot2["manifests"]), boot2["manifests"]
 print("hb", rpc("heartbeat", {"locationId": "LOC07", "gateId": "G02", "operatorId": "GK-01", "pending": 0, "appVersion": "t"}, tok)[:2])
 # discovery
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.settimeout(3); s.sendto(b"XVGK_DISCOVER_V1", ("127.0.0.1", 47913))

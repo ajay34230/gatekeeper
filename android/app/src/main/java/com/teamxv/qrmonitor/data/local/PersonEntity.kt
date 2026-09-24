@@ -18,5 +18,7 @@ data class PersonEntity(
     val company: String = "",
     val role: String = "",
     val status: String = "ACTIVE",
-    val accessLocations: String = ""
+    val accessLocations: String = "",
+    /** SHA-256 of the QR secret (Minimal mode keeps only this, never the secret or personal details). */
+    val secretHash: String = ""
 )

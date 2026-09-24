@@ -15,5 +15,6 @@ data class VehicleEntity(
     val milReg: String = "",
     val model: String = "",
     val company: String = "",
-    val status: String = "ACTIVE"
+    val status: String = "ACTIVE",
+    val secretHash: String = ""
 )

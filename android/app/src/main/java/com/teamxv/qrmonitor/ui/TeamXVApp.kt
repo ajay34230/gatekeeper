@@ -1098,6 +1098,16 @@ private fun SyncStatusScreen(vm: MainViewModel) {
         CloudLinkCard(vm)
 
         Spacer(Modifier.height(10.dp))
+        StatusBanner(
+            when (vm.sharingMode) {
+                "FULL" -> "Data sharing: Full — the registry (names, ranks, units) is kept encrypted on this terminal for offline scanning."
+                "RECEIVE_ONLY" -> "Data sharing: Receive-only — no registry is stored on this terminal; every scan is verified online with the Command Center."
+                else -> "Data sharing: Minimal — this terminal keeps only IDs and hashed badge codes; names are shown after an online check and never stored."
+            },
+            BannerTone.Neutral
+        )
+
+        Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
             StatCard(Modifier.weight(1f), "LAST SYNC", formatSyncTime(vm.syncUi.lastSuccessfulSyncAt))
             StatCard(Modifier.weight(1f), "PENDING BUFFER", "${vm.pending} records", vm.pending > 0)

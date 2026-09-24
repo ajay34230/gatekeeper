@@ -180,6 +180,7 @@ public sealed class ApiServer : IAsyncDisposable
         switch (op)
         {
             case "master.bootstrap": return (200, _store.Bootstrap());
+            case "credential.verify": return (200, _store.Verify(data["code"]?.ToString() ?? "", (data["expected"]?.ToString() ?? "").ToUpperInvariant(), operatorId));
             case "heartbeat": _store.Heartbeat(deviceId, data, ip, viaInternet); return (200, new JsonObject { ["status"] = "ok", ["deviceId"] = deviceId });
             case "events.create": { var r = _store.PersonEvent(data, deviceId, operatorId); return (r["status"]!.ToString() == "duplicate" ? 200 : 201, r); }
             case "vehicle.transaction": { var r = _store.VehicleTransaction(data, deviceId, operatorId); return (r["status"]!.ToString() == "duplicate" ? 200 : 201, r); }

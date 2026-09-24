@@ -65,6 +65,32 @@ public sealed class Settings
 
     public bool RequireApproval { get; set; } = true;
 
+    /// <summary>FULL | MINIMAL | RECEIVE_ONLY — how much registry data terminals receive (see Store.Bootstrap).</summary>
+    public string DataSharing { get; set; } = "MINIMAL";
+
+    /// <summary>Administrator password (PBKDF2) protecting exports and data-protection settings. Empty until first set.</summary>
+    public string AdminSalt { get; set; } = "";
+    public string AdminHash { get; set; } = "";
+
+    /// <summary>When true a Windows Firewall rule blocks this program from opening connections to public internet addresses.</summary>
+    public bool BlockOutbound { get; set; } = true;
+
+    [JsonIgnore]
+    public bool HasAdminPassword => AdminHash.Length > 0;
+
+    public void SetAdminPassword(string password)
+    {
+        if (password.Length < 8) throw new InvalidOperationException("The administrator password must be at least 8 characters.");
+        AdminSalt = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
+        AdminHash = HashAdmin(password, AdminSalt);
+    }
+
+    public bool CheckAdminPassword(string password) =>
+        HasAdminPassword && CryptographicOperations.FixedTimeEquals(Convert.FromHexString(HashAdmin(password, AdminSalt)), Convert.FromHexString(AdminHash));
+
+    static string HashAdmin(string password, string saltHex) =>
+        Convert.ToHexString(Rfc2898DeriveBytes.Pbkdf2(password, Convert.FromHexString(saltHex), 120_000, HashAlgorithmName.SHA256, 32));
+
     /// <summary>Extra personnel fields defined by the administrator (shown in forms, cards and exports).</summary>
     public List<string> CustomFields { get; set; } = [];
 

@@ -57,15 +57,28 @@ class HttpFailure(val code: Int, val bodyText: String) : Exception(
 @Serializable data class MasterPerson(
     val personId: String, val name: String, val category: String = "PERSONNEL", val active: Boolean = true,
     val secretCode: String = "", val rank: String = "", val serviceNo: String = "", val unit: String = "",
-    val company: String = "", val role: String = "", val status: String = "ACTIVE", val accessLocations: String = ""
+    val company: String = "", val role: String = "", val status: String = "ACTIVE", val accessLocations: String = "",
+    val secretHash: String = ""
 )
 @Serializable data class MasterVehicle(
     val vehicleId: String, val registration: String, val type: String = "", val active: Boolean = true,
-    val secretCode: String = "", val milReg: String = "", val model: String = "", val company: String = "", val status: String = "ACTIVE"
+    val secretCode: String = "", val milReg: String = "", val model: String = "", val company: String = "", val status: String = "ACTIVE",
+    val secretHash: String = ""
 )
 @Serializable data class NamedItem(val id: String, val name: String)
 @Serializable data class PresenceItem(val personId: String, val entryAt: Long)
+@Serializable data class ManifestItem(
+    val manifestId: String, val vehicleId: String, val entryEventId: String, val locationId: String = "", val gateId: String = "",
+    val driverId: String, val coDriverId: String? = null, val occupants: List<String> = emptyList(), val createdAt: Long = 0L
+)
+/** Result of an online credential check (Receive-only mode). Shown on screen, never stored with personal details. */
+@Serializable data class VerifyResponse(
+    val type: String, val id: String, val name: String = "", val rank: String = "", val serviceNo: String = "", val unit: String = "",
+    val company: String = "", val category: String = "", val status: String = "ACTIVE", val inside: Boolean = false, val insideSince: Long = 0L,
+    val registration: String = "", val vehicleType: String = "", val manifest: ManifestItem? = null
+)
 @Serializable data class MasterBootstrapResponse(
+    val sharingMode: String = "FULL", val manifests: List<ManifestItem> = emptyList(),
     val version: String = "", val persons: List<MasterPerson> = emptyList(), val vehicles: List<MasterVehicle> = emptyList(),
     val locations: List<NamedItem> = emptyList(), val gates: List<NamedItem> = emptyList(),
     val presence: List<PresenceItem> = emptyList(), val serverTime: Long = 0L
@@ -135,6 +148,10 @@ class ApiClient(private val profile: ConnectionProfile? = null) {
         val r = rpc("stations.list", JsonObject(emptyMap()), withToken = false).jsonObject
         fun list(k: String) = json.decodeFromJsonElement(kotlinx.serialization.builtins.ListSerializer(NamedItem.serializer()), r[k] ?: kotlinx.serialization.json.JsonArray(emptyList())).map { it.id to it.name }
         list("locations") to list("gates")
+    }
+
+    fun verify(code: String, expected: String): Result<VerifyResponse> = runCatching {
+        json.decodeFromJsonElement(VerifyResponse.serializer(), rpc("credential.verify", buildJsonObject { put("code", code); put("expected", expected) }))
     }
 
     fun logout(baseUrl: String): Result<String> = runCatching { rpc("auth.logout", JsonObject(emptyMap())).toString() }

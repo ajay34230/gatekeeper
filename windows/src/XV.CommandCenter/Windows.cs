@@ -108,6 +108,7 @@ public sealed class CloudLinkWindow : DarkWindow
 
         AddButton("Export details…", () =>
         {
+            if (!AdminGate.Require(this, "Export connection details")) return;
             var dlg = new SaveFileDialog { FileName = $"XV-Connection-{s.ServerId}", Filter = "PDF connection sheet|*.pdf|Text|*.txt|JSON|*.json" };
             if (dlg.ShowDialog() != true) return;
             try
@@ -169,9 +170,20 @@ public sealed class StationsWindow : DarkWindow
         var tokenH = Field("Operator session length (hours)", s.TokenHours.ToString(), mono: true);
         var graceH = Field("Offline grace period after session expiry (hours)", s.OfflineGraceHours.ToString(), mono: true);
 
+        Body.Children.Add(Label("Data protection"));
+        Body.Children.Add(Para("Terminals only ever receive data when they ask for it. Choose how much of the registry they are given. Gate records always flow from the terminals to this PC.", "#71717A"));
+        string[] modes = ["FULL", "MINIMAL", "RECEIVE_ONLY"];
+        var sharing = Choice("Data sharing with terminals", ["Full — names, ranks and units are copied to terminals (works fully offline)", "Minimal — terminals get IDs, secret-code hashes and status only; details shown after an online check (recommended)", "Receive-only — terminals hold nothing; every scan is verified online against this PC"], "");
+        sharing.SelectedIndex = Math.Max(0, Array.IndexOf(modes, s.DataSharing));
+        var block = new CheckBox { Content = "Block this program from opening connections to the internet (Windows Firewall, needs administrator approval)", IsChecked = s.BlockOutbound, Margin = new Thickness(0, 10, 0, 0) };
+        Body.Children.Add(block);
+        Body.Children.Add(Para("Incoming connections from paired terminals, the local network and VPN addresses keep working. The Command Center itself never uploads data anywhere.", "#71717A"));
+        Body.Children.Add(Row(Btn(s.HasAdminPassword ? "Change administrator password" : "Set administrator password", (_, _) => AdminGate.ChangePassword(this), "BtnGold")).M(0, 6));
+
         Body.Children.Add(Label("Maintenance"));
         Body.Children.Add(Row(Btn("Wipe gate records", (_, _) =>
         {
+            if (!AdminGate.Require(this, "Wipe gate records")) return;
             if (MessageBox.Show("Permanently delete ALL entry/exit records and presence? Registry, accounts and terminals are kept.", "Wipe records", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes) App.Store.PurgeRecords();
         }, "BtnDanger")));
 
@@ -180,6 +192,16 @@ public sealed class StationsWindow : DarkWindow
         {
             if (!int.TryParse(port.Text, out var p) || p is < 1 or > 65535 || !int.TryParse(tokenH.Text, out var th) || th < 1 || !int.TryParse(graceH.Text, out var gh) || gh < 0)
             { MessageBox.Show("Check the numeric fields."); return; }
+            var newMode = modes[Math.Max(0, sharing.SelectedIndex)];
+            var protectionChanged = newMode != s.DataSharing || (block.IsChecked == true) != s.BlockOutbound;
+            if (protectionChanged && !AdminGate.Require(this, $"Change data protection (sharing {s.DataSharing} → {newMode}, outbound block {(block.IsChecked == true ? "ON" : "OFF")})")) return;
+            if ((block.IsChecked == true) != s.BlockOutbound)
+            {
+                if (!OutboundGuard.Apply(block.IsChecked == true)) { MessageBox.Show("Windows Firewall was not changed (administrator approval was cancelled or failed). Other settings were not saved.", "Data protection"); return; }
+                App.Store.AdminAudit("OUTBOUND_BLOCK", block.IsChecked == true ? "ON" : "OFF");
+            }
+            if (newMode != s.DataSharing) App.Store.AdminAudit("DATA_SHARING_MODE", $"{s.DataSharing} -> {newMode}");
+            s.DataSharing = newMode; s.BlockOutbound = block.IsChecked == true;
             var restart = p != s.Port;
             s.ServerName = name.Text.Trim().Length > 0 ? name.Text.Trim() : Environment.MachineName; s.Port = p; s.RequireApproval = approval.IsChecked == true;
             s.StartWithWindows = autostart.IsChecked == true; s.TokenHours = th; s.OfflineGraceHours = gh;

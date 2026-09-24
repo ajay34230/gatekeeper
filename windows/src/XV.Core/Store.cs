@@ -144,6 +144,9 @@ public sealed class Store : IDisposable
     void Audit(string actor, string action, string? type = null, string? id = null, string? detail = null) =>
         Exec("INSERT INTO audit(actor,action,entity_type,entity_id,detail,created_at) VALUES($1,$2,$3,$4,$5,$6)", actor, action, type, id, detail, NowMs);
 
+    /// <summary>Records an administrator action taken in the Command Center (exports, data-protection changes).</summary>
+    public void AdminAudit(string action, string? detail = null) => Audit("ADMIN@" + Environment.MachineName, action, null, null, detail);
+
     void Notify() { try { Changed?.Invoke(); } catch { /* UI listeners must not break the server */ } }
 
     static string S(object? o) => o?.ToString() ?? "";
@@ -393,28 +396,97 @@ public sealed class Store : IDisposable
 
     // ------------------------------------------------------------------ master data for terminals
 
-    public JsonObject Bootstrap() => new()
+    /// <summary>SHA-256 of a QR secret, so terminals can verify a badge without holding the secret itself (Minimal mode).</summary>
+    public static string SecretHash(string code) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes((code ?? "").Trim().ToUpperInvariant()))).ToLowerInvariant();
+
+    /// <summary>
+    /// Registry sent to terminals, limited by the Data Sharing mode chosen by the administrator:
+    ///   FULL         – names, ranks, units and QR secrets (fully offline scanning)
+    ///   MINIMAL      – IDs, status and hashed QR secrets only; no names or personal details
+    ///   RECEIVE_ONLY – no registry at all; every scan is verified online and nothing is stored on the phone
+    /// Active vehicle manifests and presence are IDs only and are shared in FULL and MINIMAL modes.
+    /// </summary>
+    public JsonObject Bootstrap()
     {
-        ["version"] = S(Scalar("SELECT MAX(updated_at) FROM (SELECT updated_at FROM persons UNION ALL SELECT updated_at FROM vehicles)")),
-        ["serverTime"] = NowMs,
-        ["persons"] = new JsonArray(Query("SELECT id,secret_code,name,rank,service_no,unit,company,role,category,status,access_locations FROM persons ORDER BY id").Select(r => (JsonNode)new JsonObject
+        var mode = Settings.DataSharing;
+        var full = mode == "FULL";
+        var shareRegistry = mode != "RECEIVE_ONLY";
+        return new JsonObject
         {
-            ["personId"] = S(r["id"]), ["secretCode"] = S(r["secret_code"]), ["name"] = S(r["name"]), ["rank"] = S(r["rank"]),
-            ["serviceNo"] = S(r["service_no"]), ["unit"] = S(r["unit"]), ["company"] = S(r["company"]), ["role"] = S(r["role"]),
-            ["category"] = S(r["category"]), ["status"] = S(r["status"]), ["active"] = S(r["status"]) == "ACTIVE",
-            ["accessLocations"] = S(r["access_locations"]),
-        }).ToArray()),
-        ["vehicles"] = new JsonArray(Query("SELECT id,secret_code,plate,mil_reg,type,model,company,status FROM vehicles ORDER BY id").Select(r => (JsonNode)new JsonObject
-        {
-            ["vehicleId"] = S(r["id"]), ["secretCode"] = S(r["secret_code"]), ["registration"] = S(r["plate"]), ["milReg"] = S(r["mil_reg"]),
-            ["type"] = S(r["type"]), ["model"] = S(r["model"]), ["company"] = S(r["company"]), ["status"] = S(r["status"]),
-            ["active"] = S(r["status"]) == "ACTIVE",
-        }).ToArray()),
-        ["locations"] = new JsonArray(Locations().Select(r => (JsonNode)new JsonObject { ["id"] = S(r["id"]), ["name"] = S(r["name"]) }).ToArray()),
-        ["gates"] = new JsonArray(Gates().Select(r => (JsonNode)new JsonObject { ["id"] = S(r["id"]), ["name"] = S(r["name"]) }).ToArray()),
-        ["presence"] = new JsonArray(Query("SELECT person_id, entry_at FROM presence WHERE status='ACTIVE'").Select(r => (JsonNode)new JsonObject
-        { ["personId"] = S(r["person_id"]), ["entryAt"] = Convert.ToInt64(r["entry_at"]) }).ToArray()),
+            ["sharingMode"] = mode,
+            ["version"] = S(Scalar("SELECT MAX(updated_at) FROM (SELECT updated_at FROM persons UNION ALL SELECT updated_at FROM vehicles)")),
+            ["serverTime"] = NowMs,
+            ["persons"] = new JsonArray(!shareRegistry ? [] : Query("SELECT id,secret_code,name,rank,service_no,unit,company,role,category,status,access_locations FROM persons ORDER BY id").Select(r => (JsonNode)new JsonObject
+            {
+                ["personId"] = S(r["id"]), ["secretCode"] = full ? S(r["secret_code"]) : "", ["secretHash"] = SecretHash(S(r["secret_code"])),
+                ["name"] = full ? S(r["name"]) : "", ["rank"] = full ? S(r["rank"]) : "", ["serviceNo"] = full ? S(r["service_no"]) : "",
+                ["unit"] = full ? S(r["unit"]) : "", ["company"] = full ? S(r["company"]) : "", ["role"] = full ? S(r["role"]) : "",
+                ["category"] = S(r["category"]), ["status"] = S(r["status"]), ["active"] = S(r["status"]) == "ACTIVE",
+                ["accessLocations"] = S(r["access_locations"]),
+            }).ToArray()),
+            ["vehicles"] = new JsonArray(!shareRegistry ? [] : Query("SELECT id,secret_code,plate,mil_reg,type,model,company,status FROM vehicles ORDER BY id").Select(r => (JsonNode)new JsonObject
+            {
+                ["vehicleId"] = S(r["id"]), ["secretCode"] = full ? S(r["secret_code"]) : "", ["secretHash"] = SecretHash(S(r["secret_code"])),
+                ["registration"] = full ? S(r["plate"]) : "", ["milReg"] = full ? S(r["mil_reg"]) : "",
+                ["type"] = full ? S(r["type"]) : "", ["model"] = full ? S(r["model"]) : "", ["company"] = full ? S(r["company"]) : "", ["status"] = S(r["status"]),
+                ["active"] = S(r["status"]) == "ACTIVE",
+            }).ToArray()),
+            ["locations"] = new JsonArray(Locations().Select(r => (JsonNode)new JsonObject { ["id"] = S(r["id"]), ["name"] = S(r["name"]) }).ToArray()),
+            ["gates"] = new JsonArray(Gates().Select(r => (JsonNode)new JsonObject { ["id"] = S(r["id"]), ["name"] = S(r["name"]) }).ToArray()),
+            ["presence"] = new JsonArray(!shareRegistry ? [] : Query("SELECT person_id, entry_at FROM presence WHERE status='ACTIVE'").Select(r => (JsonNode)new JsonObject
+            { ["personId"] = S(r["person_id"]), ["entryAt"] = Convert.ToInt64(r["entry_at"]) }).ToArray()),
+            ["manifests"] = new JsonArray(!shareRegistry ? [] : ActiveManifests().ToArray()),
+        };
+    }
+
+    IEnumerable<JsonNode> ActiveManifests() => Query("SELECT * FROM manifests WHERE state='ACTIVE'").Select(m => (JsonNode)ManifestJson(m));
+
+    static JsonObject ManifestJson(Dictionary<string, object?> m) => new()
+    {
+        ["manifestId"] = S(m["manifest_id"]), ["vehicleId"] = S(m["vehicle_id"]), ["entryEventId"] = S(m["entry_event_id"]),
+        ["locationId"] = S(m["location_id"]), ["gateId"] = S(m["gate_id"]), ["driverId"] = S(m["driver_id"]), ["coDriverId"] = m["co_driver_id"] == null ? null : S(m["co_driver_id"]),
+        ["occupants"] = JsonNode.Parse(S(m["occupants"])), ["createdAt"] = Convert.ToInt64(m["created_at"]),
     };
+
+    /// <summary>
+    /// Online badge check used in Receive-only mode: returns only what the gate screen shows for this one scan.
+    /// Nothing here is meant to be stored on the terminal.
+    /// </summary>
+    public JsonObject Verify(string rawCode, string expected, string operatorId)
+    {
+        var code = (rawCode ?? "").Trim();
+        var canon = CanonId(code);
+        JsonObject? result = null;
+        if (expected != "VEHICLE")
+        {
+            var p = One("SELECT * FROM persons WHERE UPPER(secret_code)=UPPER($1) OR id=$2 OR (service_no<>'' AND UPPER(service_no)=UPPER($1)) LIMIT 1", code, canon);
+            if (p != null)
+            {
+                var since = Scalar("SELECT entry_at FROM presence WHERE person_id=$1 AND status='ACTIVE' ORDER BY entry_at DESC LIMIT 1", S(p["id"]));
+                result = new JsonObject
+                {
+                    ["type"] = "PERSON", ["id"] = S(p["id"]), ["name"] = S(p["name"]), ["rank"] = S(p["rank"]), ["serviceNo"] = S(p["service_no"]),
+                    ["unit"] = S(p["unit"]), ["company"] = S(p["company"]), ["category"] = S(p["category"]), ["status"] = S(p["status"]),
+                    ["inside"] = since != null, ["insideSince"] = since == null ? 0 : Convert.ToInt64(since),
+                };
+            }
+        }
+        if (result == null && expected != "PERSON")
+        {
+            var v = One("SELECT * FROM vehicles WHERE UPPER(secret_code)=UPPER($1) OR id=$2 OR REPLACE(REPLACE(UPPER(plate),'-',''),' ','')=$3 LIMIT 1", code, canon, code.ToUpperInvariant().Replace("-", "").Replace(" ", ""));
+            if (v != null)
+            {
+                var m = One("SELECT * FROM manifests WHERE vehicle_id=$1 AND state='ACTIVE' LIMIT 1", S(v["id"]));
+                result = new JsonObject
+                {
+                    ["type"] = "VEHICLE", ["id"] = S(v["id"]), ["registration"] = S(v["plate"]), ["vehicleType"] = S(v["type"]), ["status"] = S(v["status"]),
+                    ["inside"] = m != null, ["manifest"] = m == null ? null : ManifestJson(m),
+                };
+            }
+        }
+        Audit(operatorId, "VERIFY_CREDENTIAL", result?["type"]?.ToString(), result?["id"]?.ToString(), result == null ? "NOT_FOUND" : "OK");
+        return result ?? throw new StoreException("NOT_REGISTERED", $"Code {code} is not registered in the Command Center", 404);
+    }
 
     // ------------------------------------------------------------------ movement records (ported from the Flask server rules)
 

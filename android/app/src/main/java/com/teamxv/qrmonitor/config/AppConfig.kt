@@ -169,6 +169,11 @@ class AppConfig(context: Context) : ConnectionProfile {
         get() = prefs.getLong("shiftStartedAt", 0L)
         set(value) = prefs.edit().putLong("shiftStartedAt", value).apply()
 
+    /** Data Sharing mode set by the Command Center administrator: FULL, MINIMAL or RECEIVE_ONLY. */
+    var sharingMode: String
+        get() = prefs.getString("sharingMode", "MINIMAL") ?: "MINIMAL"
+        set(value) = prefs.edit().putString("sharingMode", value).apply()
+
     var soundEnabled: Boolean
         get() = prefs.getBoolean("soundEnabled", true)
         set(value) = prefs.edit().putBoolean("soundEnabled", value).apply()

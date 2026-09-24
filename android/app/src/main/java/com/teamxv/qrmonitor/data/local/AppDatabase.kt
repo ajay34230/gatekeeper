@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         VehicleManifestEntity::class,
         VehicleManifestMemberEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -64,6 +64,14 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v6: hashed QR secrets for the Minimal data-sharing mode (keeps any queued, unsynced records). */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE persons ADD COLUMN secretHash TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE vehicles ADD COLUMN secretHash TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
 
         fun get(context: Context): AppDatabase =
@@ -75,6 +83,7 @@ abstract class AppDatabase : RoomDatabase() {
                     val passphrase = com.teamxv.qrmonitor.security.SecureStore(context.applicationContext).databasePassphrase()
                     Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "xv_access_control_secure.db")
                         .openHelperFactory(net.zetetic.database.sqlcipher.SupportOpenHelperFactory(passphrase))
+                        .addMigrations(MIGRATION_5_6)
                         .fallbackToDestructiveMigration()
                         .build()
                 }
