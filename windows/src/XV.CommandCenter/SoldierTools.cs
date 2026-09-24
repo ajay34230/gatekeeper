@@ -220,7 +220,8 @@ public static class Photo
     public static byte[] Prepare(byte[] input)
     {
         var src = new BitmapImage();
-        using (var ms = new MemoryStream(input)) { src.BeginInit(); src.CacheOption = BitmapCacheOption.OnLoad; src.StreamSource = ms; src.EndInit(); }
+        // Decode at most 1600 px wide: a crafted image with huge dimensions cannot exhaust memory.
+        using (var ms = new MemoryStream(input)) { src.BeginInit(); src.CacheOption = BitmapCacheOption.OnLoad; src.DecodePixelWidth = 1600; src.StreamSource = ms; src.EndInit(); }
         src.Freeze();
         double w = src.PixelWidth, h = src.PixelHeight, target = 4.0 / 5.0;
         var crop = w / h > target ? new Int32Rect((int)((w - h * target) / 2), 0, (int)(h * target), (int)h) : new Int32Rect(0, (int)((h - w / target) / 5), (int)w, (int)(w / target));

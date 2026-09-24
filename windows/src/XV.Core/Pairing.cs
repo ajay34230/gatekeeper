@@ -37,7 +37,20 @@ public static class Csv
         return sb.ToString();
     }
 
-    static string Esc(string v) => v.IndexOfAny([',', '"', '\n', '\r']) >= 0 ? "\"" + v.Replace("\"", "\"\"") + "\"" : v;
+    static string Esc(string v)
+    {
+        v = Neutralize(v);
+        return v.IndexOfAny([',', '"', '\n', '\r']) >= 0 ? "\"" + v.Replace("\"", "\"\"") + "\"" : v;
+    }
+
+    /// <summary>
+    /// Spreadsheet formula-injection guard (CWE-1236): a cell starting with = + - @ or a tab/CR is prefixed with an apostrophe,
+    /// so Excel shows it as text instead of running it. Values typed on terminals (remarks, reasons) are untrusted.
+    /// </summary>
+    public static string Neutralize(string v) => v.Length > 0 && "=+-@\t\r".Contains(v[0]) ? "'" + v : v;
+
+    /// <summary>Reverses <see cref="Neutralize"/> when a file exported here is imported again.</summary>
+    public static string Restore(string v) => v.Length > 1 && v[0] == '\'' && "=+-@\t\r".Contains(v[1]) ? v[1..] : v;
 
     /// <summary>Minimal RFC-4180 reader used by the registry import.</summary>
     public static List<Dictionary<string, string>> Parse(string text)
@@ -46,7 +59,7 @@ public static class Csv
         if (rows.Count == 0) return [];
         var head = rows[0].Select(h => h.Trim()).ToList();
         return rows.Skip(1).Where(r => r.Any(c => c.Trim().Length > 0))
-            .Select(r => head.Select((h, i) => (h, v: i < r.Count ? r[i].Trim() : "")).Where(x => x.h.Length > 0).DistinctBy(x => x.h, StringComparer.OrdinalIgnoreCase)
+            .Select(r => head.Select((h, i) => (h, v: i < r.Count ? Restore(r[i].Trim()) : "")).Where(x => x.h.Length > 0).DistinctBy(x => x.h, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(x => x.h, x => x.v, StringComparer.OrdinalIgnoreCase)).ToList();
     }
 

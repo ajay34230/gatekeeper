@@ -81,7 +81,16 @@ jobs:
         with: { distribution: temurin, java-version: '17' }
       - name: Build APK
         working-directory: android
-        run: chmod +x gradlew && ./gradlew --no-daemon :app:assembleDebug :app:assembleRelease
+        env:
+          # Optional repository secrets for a stable release signature (see README → Security).
+          XV_KEYSTORE_B64: ${{ secrets.XV_KEYSTORE_B64 }}
+          XV_KEYSTORE_PASSWORD: ${{ secrets.XV_KEYSTORE_PASSWORD }}
+          XV_KEY_ALIAS: ${{ secrets.XV_KEY_ALIAS }}
+          XV_KEY_PASSWORD: ${{ secrets.XV_KEY_PASSWORD }}
+        run: |
+          if [ -n "$XV_KEYSTORE_B64" ]; then echo "$XV_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/xv-release.jks"; export XV_KEYSTORE_FILE="$RUNNER_TEMP/xv-release.jks"; fi
+          chmod +x gradlew && ./gradlew --no-daemon :app:assembleDebug :app:assembleRelease
+          rm -f "$RUNNER_TEMP/xv-release.jks"
       - uses: actions/upload-artifact@v4
         with: { name: XV-Gatekeeper-APK, path: android/app/build/outputs/apk/release/*.apk }
       - name: Publish APK to the ci-apk branch

@@ -57,7 +57,18 @@ public sealed class ApiServer : IAsyncDisposable
                 });
             });
         });
+        builder.Services.AddRateLimiter(o =>
+        {
+            o.RejectionStatusCode = 429;
+            // Per source address: generous for terminals syncing many records, tight for pairing attempts.
+            o.GlobalLimiter = System.Threading.RateLimiting.PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
+                ctx.Request.Path.StartsWithSegments("/api/v1/pair")
+                    ? System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter("pair|" + Ip(ctx), _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) })
+                    : System.Threading.RateLimiting.RateLimitPartition.GetTokenBucketLimiter("api|" + Ip(ctx), _ => new System.Threading.RateLimiting.TokenBucketRateLimiterOptions
+                        { TokenLimit = 300, TokensPerPeriod = 60, ReplenishmentPeriod = TimeSpan.FromSeconds(1), AutoReplenishment = true }));
+        });
         var app = builder.Build();
+        app.UseRateLimiter();
 
         app.Use(async (ctx, next) =>
         {
@@ -113,7 +124,7 @@ public sealed class ApiServer : IAsyncDisposable
         _ = long.TryParse(ctx.Request.Headers["X-GK-Ts"].ToString(), out var ts);
         var key = _store.DeviceKey(deviceId);
         if (key == null) { ctx.Response.StatusCode = 401; await ctx.Response.WriteAsJsonAsync(new { reason = "UNKNOWN_DEVICE" }); return; }
-        if (!Envelope.AcceptFresh(deviceId, ts, nonce)) { ctx.Response.StatusCode = 401; await ctx.Response.WriteAsJsonAsync(new { reason = "STALE_OR_REPLAYED" }); return; }
+        if (!Envelope.InWindow(ts, nonce)) { ctx.Response.StatusCode = 401; await ctx.Response.WriteAsJsonAsync(new { reason = "STALE_OR_REPLAYED" }); return; }
 
         JsonObject request;
         try
@@ -128,13 +139,15 @@ public sealed class ApiServer : IAsyncDisposable
             await ctx.Response.WriteAsJsonAsync(new { reason = "DECRYPT_FAILED" });
             return;
         }
+        // Authenticated now (the AAD binds device, timestamp and nonce): reject replays.
+        if (!Envelope.AcceptFresh(deviceId, ts, nonce)) { ctx.Response.StatusCode = 401; await ctx.Response.WriteAsJsonAsync(new { reason = "STALE_OR_REPLAYED" }); return; }
 
         var viaInternet = !IsLocal(ctx);
         _store.Touch(deviceId, Ip(ctx), viaInternet);
         int code; JsonNode body;
         try { (code, body) = Dispatch(request, deviceId, Ip(ctx), viaInternet); }
         catch (StoreException ex) { code = ex.Status; body = new JsonObject { ["status"] = "rejected", ["reason"] = ex.Code, ["message"] = ex.Message }; }
-        catch (Exception ex) { code = 500; body = new JsonObject { ["status"] = "error", ["reason"] = "SERVER_ERROR", ["message"] = ex.Message }; LastError = ex.ToString(); }
+        catch (Exception ex) { code = 500; body = new JsonObject { ["status"] = "error", ["reason"] = "SERVER_ERROR", ["message"] = "The Command Center could not process the request." }; LastError = ex.ToString(); Log?.Invoke("RPC error: " + ex.Message); }
 
         var plain = new JsonObject { ["code"] = code, ["body"] = body }.ToJsonString();
         var (iv, ct) = Envelope.Seal(key, plain, Envelope.ResponseAad(deviceId, nonce));
@@ -211,6 +224,8 @@ public sealed class DiscoveryResponder : IDisposable
                 try
                 {
                     var r = await _udp.ReceiveAsync(_cts.Token);
+                    // LAN discovery only: never answer internet addresses (no reflection / amplification, no disclosure).
+                    if (!NetUtil.IsPrivate(r.RemoteEndPoint.Address) || r.Buffer.Length > 64) continue;
                     if (Encoding.UTF8.GetString(r.Buffer).Trim() != "XVGK_DISCOVER_V1") continue;
                     var reply = JsonSerializer.SerializeToUtf8Bytes(new { app = "XVGK", serverId = settings.ServerId, serverName = settings.ServerName, port = settings.Port, fingerprint });
                     await _udp.SendAsync(reply, r.RemoteEndPoint, _cts.Token);

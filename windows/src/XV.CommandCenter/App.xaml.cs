@@ -40,6 +40,7 @@ public partial class App : Application
 
         try
         {
+            if (screenshotDir == null) DataFolderSecurity.Apply();
             var settings = Settings.Load();
             Store = new Store(settings);
             var cert = CertManager.LoadOrCreate(settings);
@@ -54,7 +55,9 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            MessageBox.Show("The secure server could not start:\n\n" + ex.Message, "XV Command Center", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(ex is UnauthorizedAccessException
+                ? "This Windows account is not allowed to open the XV Command Center data.\n\nThe encrypted data folder is restricted to the Windows user who set up the Command Center (and Administrators). Sign in with that account, or ask an administrator."
+                : "The secure server could not start:\n\n" + ex.Message, "XV Command Center", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(1);
             return;
         }

@@ -194,6 +194,7 @@ public sealed class Store : IDisposable
 
     public string NextId(string prefix, string table)
     {
+        if (table is not ("persons" or "vehicles")) throw new ArgumentException("Unknown table", nameof(table));
         var ids = Query($"SELECT id FROM {table}").Select(r => S(r["id"])).Where(i => i.StartsWith(prefix)).Select(i => int.TryParse(i[prefix.Length..], out var n) ? n : 0);
         return prefix + ((ids.DefaultIfEmpty(0).Max()) + 1).ToString("000");
     }
@@ -281,6 +282,7 @@ public sealed class Store : IDisposable
     /// <summary>Issues a new QR secret, instantly invalidating the old printed credential.</summary>
     public void RotateSecret(string table, string id)
     {
+        if (table is not ("persons" or "vehicles")) throw new ArgumentException("Unknown table", nameof(table));
         Exec($"UPDATE {table} SET secret_code=$1, updated_at=$2 WHERE id=$3", (table == "persons" ? "XVP" : "XVV") + RandomCode(10), NowMs, id);
         Audit("PC-ADMIN", "ROTATE_QR_SECRET", table, id); Notify();
     }

@@ -118,4 +118,16 @@ csend({"t": "call", "op": "invite", "callId": "c" * 32, "video": True, "from": "
 assert crecv() == {"t": "call", "op": "busy", "callId": "c" * 32}, "call signalling must round-trip through the Comms engine"
 ws.close()
 print("comms ok")
+# ---- security hardening
+# forged requests (wrong key) are refused and do not consume nonces of the real terminal
+ts, n = int(time.time() * 1000), base64.urlsafe_b64encode(os.urandom(16)).decode().rstrip("=")
+iv = os.urandom(12); c = AES.new(os.urandom(32), AES.MODE_GCM, nonce=iv); c.update(f"XVGK1|req|{dev}|{ts}|{n}".encode())
+ct, tag = c.encrypt_and_digest(b'{"op":"health","data":{}}')
+r = S.post(host + "/api/v1/rpc", headers={"X-GK-Device": dev, "X-GK-Ts": str(ts), "X-GK-Nonce": n}, json={"iv": base64.b64encode(iv).decode(), "ct": base64.b64encode(ct + tag).decode()})
+assert r.status_code == 400, r.status_code
+assert rpc("health", replay=(ts, n))[0] == 200, "a nonce used by a forged request must still be usable by the real terminal"
+# pairing is rate limited per source address
+codes = [S.post(host + "/api/v1/pair/enroll", json={"code": "WRONG" + str(i)}).status_code for i in range(12)]
+assert 429 in codes, codes
+print("security ok")
 print("ALL CHECKS PASSED")

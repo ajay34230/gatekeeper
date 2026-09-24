@@ -74,7 +74,15 @@ public sealed class CommsEngine : IAsyncDisposable
                 });
             });
         });
+        builder.Services.AddRateLimiter(o =>
+        {
+            o.RejectionStatusCode = 429;
+            o.GlobalLimiter = System.Threading.RateLimiting.PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
+                System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(ctx.Connection.RemoteIpAddress?.ToString() ?? "", _ =>
+                    new System.Threading.RateLimiting.FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1) }));
+        });
         var app = builder.Build();
+        app.UseRateLimiter();
         app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(20) });
         app.Use(async (ctx, next) =>
         {
@@ -203,6 +211,7 @@ public sealed class CommsEngine : IAsyncDisposable
         switch (f["t"]?.ToString())
         {
             case "msg":
+                if (!link.Allow(f["kind"]?.ToString() == "ALERT")) return; // flood protection; the terminal re-sends later
                 var id = f["id"]?.ToString() ?? "";
                 var body = (f["body"]?.ToString() ?? "").Trim();
                 if (id.Length is < 8 or > 64 || body.Length == 0 || body.Length > MaxBody) return;
@@ -219,6 +228,7 @@ public sealed class CommsEngine : IAsyncDisposable
                 await link.SendAsync(new JsonObject { ["t"] = "pong" });
                 break;
             case "call":
+                if (!link.AllowSignal()) return;
                 Signal?.Invoke(link.DeviceId, f);
                 break;
         }
@@ -237,7 +247,31 @@ public sealed class CommsEngine : IAsyncDisposable
     {
         readonly SemaphoreSlim _send = new(1, 1);
         long _outSeq, _inSeq;
+        readonly Queue<long> _recent = new(), _recentAlerts = new();
         public string DeviceId => deviceId;
+
+        readonly Queue<long> _recentSignals = new();
+        /// <summary>Call signalling (offer / answer / ICE): at most 400 frames per minute.</summary>
+        public bool AllowSignal()
+        {
+            var now = Environment.TickCount64;
+            while (_recentSignals.Count > 0 && now - _recentSignals.Peek() > 60_000) _recentSignals.Dequeue();
+            if (_recentSignals.Count >= 400) return false;
+            _recentSignals.Enqueue(now); return true;
+        }
+
+        /// <summary>At most 60 messages and 10 alerts per terminal per minute.</summary>
+        public bool Allow(bool alert)
+        {
+            var now = Environment.TickCount64;
+            static bool Take(Queue<long> q, int max, long now)
+            {
+                while (q.Count > 0 && now - q.Peek() > 60_000) q.Dequeue();
+                if (q.Count >= max) return false;
+                q.Enqueue(now); return true;
+            }
+            return Take(_recent, 60, now) && (!alert || Take(_recentAlerts, 10, now));
+        }
 
         public async Task SendAsync(JsonObject frame)
         {

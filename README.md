@@ -70,6 +70,17 @@ The **Comms** button on the PC opens the Comms Center: pick a paired terminal, s
 **Voice and video calls** work both ways: *Voice call* / *Video call* in the Comms Center (PC) or on the phone's Comms tab. The phone rings like a normal call (full-screen, even when locked); the PC shows a ringing pop-up. Media goes directly between the two devices, encrypted with DTLS-SRTP, and no external servers are used — so calls work on the same network or over a VPN such as Tailscale (not through plain port forwarding). The PC needs the Microsoft Edge WebView2 Runtime (built into Windows 11 and current Windows 10) and a microphone/camera; without them you can still hear/see the phone.
 Comms is a separate engine: its own port (8444), its own encrypted databases on both sides and its own key per terminal, so it never touches the gate records. Messages to an offline terminal are queued and delivered when it reconnects. For reliable alerts, allow the app to run in the background (the Comms tab offers a shortcut to the battery setting). For internet use, forward/tunnel port 8444 as well (see Cloud Link).
 
+### Hardening (security review)
+
+- **Request authentication before state:** every RPC is decrypted (AES-GCM authenticates device, timestamp and nonce) *before* its nonce is recorded, so forged traffic cannot fill or poison the replay cache. Server errors return a generic message; details stay in the PC log.
+- **Rate limits:** gate API per source address (burst 300, 60/s), pairing 10 attempts/min, Comms connections 30/min; each terminal may send at most 60 messages and 10 alerts per minute on Comms.
+- **LAN discovery** answers only private / VPN addresses (no reflection or amplification from the internet).
+- **Exports:** CSV cells starting with `=`, `+`, `-`, `@` are prefixed with `'` so Excel cannot execute them as formulas (values typed on terminals are untrusted); Excel files are written as text cells. Imports are limited to 30 MB and Excel archives that expand beyond 250 MB are refused; images are decoded at most 1600 px wide.
+- **Data folder on the PC** (`%ProgramData%\XVAccessControl`): on first start it is restricted to SYSTEM, Administrators and the Windows account that set up the Command Center, because the database key is protected for the machine. Use a Windows account with a password and BitLocker on the PC.
+- **Terminal:** Android backup and device transfer are disabled; nothing on the phone leaves it except the encrypted sync. Revoking a terminal on the PC cuts its Comms connection immediately.
+- **App signing:** to give the APK a permanent signature (updates install over the old app, and nobody else can publish an "update"), create a keystore once and add four repository secrets — `XV_KEYSTORE_B64` (base64 of the .jks), `XV_KEYSTORE_PASSWORD`, `XV_KEY_ALIAS`, `XV_KEY_PASSWORD`:
+  `keytool -genkeypair -v -keystore xv-release.jks -alias xv -keyalg RSA -keysize 4096 -validity 10000` then `base64 -w0 xv-release.jks`. Without them CI signs with its temporary debug key.
+
 ## 5. Connecting over the internet (Cloud Link)
 
 Open **Cloud Link** on the PC. It lists every detail a remote connection needs (server ID, ports, LAN addresses, certificate fingerprint, endpoints) and supports:

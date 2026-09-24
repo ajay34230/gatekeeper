@@ -44,7 +44,14 @@ public static class Envelope
         return Encoding.UTF8.GetString(pt);
     }
 
-    /// <summary>True when the timestamp is fresh and the nonce has not been used before.</summary>
+    /// <summary>Cheap pre-check before any decryption: timestamp inside the window and a well-formed nonce.</summary>
+    public static bool InWindow(long ts, string nonce) =>
+        Math.Abs(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - ts) <= MaxSkewMs && nonce.Length is >= 16 and <= 64;
+
+    /// <summary>
+    /// True when the timestamp is fresh and the nonce has not been used before. Call only after the request
+    /// has been authenticated (decrypted), so unauthenticated traffic cannot fill the nonce cache.
+    /// </summary>
     public static bool AcceptFresh(string deviceId, long ts, string nonce)
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();

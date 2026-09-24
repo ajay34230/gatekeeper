@@ -219,6 +219,7 @@ public static class Calls
                     core.PermissionRequested += (_, e) => e.State =
                         e.PermissionKind is CoreWebView2PermissionKind.Camera or CoreWebView2PermissionKind.Microphone ? CoreWebView2PermissionState.Allow : CoreWebView2PermissionState.Deny;
                     core.NewWindowRequested += (_, e) => e.Handled = true;
+                    core.NavigationStarting += (_, e) => { if (!e.Uri.StartsWith("https://xv-call.local/", StringComparison.OrdinalIgnoreCase)) e.Cancel = true; };
                     core.WebMessageReceived += (_, e) =>
                     {
                         try { if (JsonNode.Parse(e.TryGetWebMessageAsString()) is JsonObject m) _onPage(m); } catch (JsonException) { }

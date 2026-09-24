@@ -20,6 +20,17 @@ android {
 
     }
 
+    // Release signing key from the environment (CI secrets); falls back to the build machine's debug key.
+    val releaseKeystore = System.getenv("XV_KEYSTORE_FILE")?.let { file(it) }?.takeIf { it.exists() }
+    signingConfigs {
+        if (releaseKeystore != null) create("release") {
+            storeFile = releaseKeystore
+            storePassword = System.getenv("XV_KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("XV_KEY_ALIAS")
+            keyPassword = System.getenv("XV_KEY_PASSWORD")
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
@@ -31,8 +42,9 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Signed with the build machine's key so the APK installs directly; use your own keystore for store releases.
-            signingConfig = signingConfigs.getByName("debug")
+            // Your own release key when XV_KEYSTORE_FILE is set (stable signature: updates install over the old app);
+            // otherwise the build machine's debug key so the APK still installs directly.
+            signingConfig = if (releaseKeystore != null) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
         }
     }
 

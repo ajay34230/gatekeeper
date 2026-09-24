@@ -103,7 +103,7 @@ public static class SoldierFile
         var headers = BuiltIn.Select(c => c.Header).Concat(custom).ToList();
         if (Path.GetExtension(path).Equals(".xlsx", StringComparison.OrdinalIgnoreCase)) { Xlsx(persons, custom, headers, path, title); return; }
         var sb = new StringBuilder();
-        static string Q(string v) => v.IndexOfAny([',', '"', '\n', '\r']) >= 0 ? "\"" + v.Replace("\"", "\"\"") + "\"" : v;
+        static string Q(string v) { v = Csv.Neutralize(v); return v.IndexOfAny([',', '"', '\n', '\r']) >= 0 ? "\"" + v.Replace("\"", "\"\"") + "\"" : v; }
         sb.Append(string.Join(",", headers.Select(Q))).Append("\r\n");
         foreach (var p in persons) sb.Append(string.Join(",", Row(p, custom).Select(Q))).Append("\r\n");
         File.WriteAllText(path, sb.ToString(), new UTF8Encoding(true));
@@ -155,12 +155,16 @@ public static class SoldierFile
     /// <summary>Reads header + rows from .csv or .xlsx (first worksheet, header in row 1).</summary>
     public static (List<string> headers, List<Dictionary<string, string>> rows) Read(string path)
     {
+        if (new FileInfo(path).Length > 30 * 1024 * 1024) throw new InvalidDataException("The file is larger than 30 MB. Split it into smaller files.");
         if (!Path.GetExtension(path).Equals(".xlsx", StringComparison.OrdinalIgnoreCase))
         {
             var text = File.ReadAllText(path);
             var head = Csv.ParseRows(text).FirstOrDefault()?.Select(h => h.Trim()).Where(h => h.Length > 0).ToList() ?? [];
             return (head, Csv.Parse(text));
         }
+        // Zip-bomb guard: an .xlsx is a zip archive; refuse archives that expand beyond 250 MB.
+        using (var zip = System.IO.Compression.ZipFile.OpenRead(path))
+            if (zip.Entries.Sum(e => e.Length) > 250L * 1024 * 1024) throw new InvalidDataException("The Excel file expands to more than 250 MB and was not opened.");
         using var wb = new XLWorkbook(path);
         var ws = wb.Worksheets.First();
         var last = ws.LastColumnUsed()?.ColumnNumber() ?? 0;
