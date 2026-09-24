@@ -145,6 +145,11 @@ public sealed class StationsWindow : DarkWindow
         var approval = new CheckBox { Content = "Operators who self-register must be approved here", IsChecked = s.RequireApproval, Margin = new Thickness(0, 10, 0, 0) };
         var autostart = new CheckBox { Content = "Start XV Command Center when Windows starts", IsChecked = s.StartWithWindows, Margin = new Thickness(0, 8, 0, 0) };
         Body.Children.Add(approval); Body.Children.Add(autostart);
+        Body.Children.Add(Label("Customisation"));
+        var fields = Field("Custom personnel fields (one per line, e.g. Blood Group, Weapon No, Next of Kin)", string.Join(Environment.NewLine, s.CustomFields));
+        fields.AcceptsReturn = true; fields.MinHeight = 80; fields.TextWrapping = TextWrapping.Wrap;
+        var types = Field("History record types besides ENTRY / EXIT (one per line)", string.Join(Environment.NewLine, s.EventTypes));
+        types.AcceptsReturn = true; types.MinHeight = 110; types.TextWrapping = TextWrapping.Wrap;
         var tokenH = Field("Operator session length (hours)", s.TokenHours.ToString(), mono: true);
         var graceH = Field("Offline grace period after session expiry (hours)", s.OfflineGraceHours.ToString(), mono: true);
 
@@ -161,7 +166,12 @@ public sealed class StationsWindow : DarkWindow
             { MessageBox.Show("Check the numeric fields."); return; }
             var restart = p != s.Port;
             s.ServerName = name.Text.Trim().Length > 0 ? name.Text.Trim() : Environment.MachineName; s.Port = p; s.RequireApproval = approval.IsChecked == true;
-            s.StartWithWindows = autostart.IsChecked == true; s.TokenHours = th; s.OfflineGraceHours = gh; s.Save();
+            s.StartWithWindows = autostart.IsChecked == true; s.TokenHours = th; s.OfflineGraceHours = gh;
+            static List<string> Lines(string t) => t.Split('\n', '\r', ',').Select(x => x.Trim()).Where(x => x.Length > 0 && x.Length <= 40).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            s.CustomFields = Lines(fields.Text);
+            s.EventTypes = Lines(types.Text).Where(t => !t.Equals("ENTRY", StringComparison.OrdinalIgnoreCase) && !t.Equals("EXIT", StringComparison.OrdinalIgnoreCase)).ToList();
+            s.Save();
+            if (Owner is MainWindow mw) mw.Refresh();
             ApplyAutostart(s.StartWithWindows);
             if (restart) await App.StartServerAsync();
             Close();

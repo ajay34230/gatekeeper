@@ -10,6 +10,7 @@ namespace XV.CommandCenter;
 public partial class MainWindow : Window
 {
     string _feedFilter = "ALL", _company = "ALL";
+    readonly HashSet<string> _selected = [];
     readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(3) };
     bool _refreshQueued;
 
@@ -167,18 +168,19 @@ public partial class MainWindow : Window
         foreach (var r in rows)
         {
             var entry = S(r["event_type"]) == "ENTRY";
+            var other = S(r["event_type"]) is not ("ENTRY" or "EXIT");
             var flag = L(r["loc_mismatch"]) == 1;
             var arrow = new Border
             {
-                Width = 28, Height = 28, CornerRadius = new CornerRadius(8), Background = B(entry ? "#0D2A20" : "#2A1F08"), BorderBrush = B(entry ? "#065F46" : "#92400E"), BorderThickness = new Thickness(1),
-                Child = T(entry ? "↙" : "↗", 14, entry ? "#34D399" : "#FBBF24", bold: true).Center(),
+                Width = 28, Height = 28, CornerRadius = new CornerRadius(8), Background = B(other ? "#0B1B33" : entry ? "#0D2A20" : "#2A1F08"), BorderBrush = B(other ? "#1D4ED8" : entry ? "#065F46" : "#92400E"), BorderThickness = new Thickness(1),
+                Child = T(other ? "●" : entry ? "↙" : "↗", 14, other ? "#93C5FD" : entry ? "#34D399" : "#FBBF24", bold: true).Center(),
             };
             var body = Col(
                 Spread(Row(arrow, Col(T(DisplayId(S(r["entity_id"])), 11.5, "#E4E4E7", bold: true, mono: true), T(S(r["title"]), 12, "#F4F4F5", weight: FontWeights.SemiBold)).M(8)),
                        Col(T(Time(L(r["event_ts"])), 11, "#A1A1AA", mono: true), T(Time(L(r["event_ts"]), "dd MMM"), 10, "#52525B", mono: true))),
                 Spread(T($"⌖ {S(r["location_name"])} • {S(r["gate_name"])}", 10.5, "#A1A1AA", mono: true),
                        L(r["stay_ms"]) > 0 ? T("Stayed: " + Duration(L(r["stay_ms"])), 10.5, "#D4D4D8", mono: true) : T(S(r["entity_type"]) == "VEHICLE" ? "VEHICLE" : "PERSON", 10, "#52525B", mono: true)).M(0, 10),
-                T($"Op {S(r["operator_id"])} • Terminal {S(r["device_id"])} • Seq #{L(r["seq"])}", 10, "#52525B", mono: true).M(0, 5));
+                T((other ? S(r["event_type"]).ToUpperInvariant() + " • " : "") + (S(r["remarks"]).Length > 0 ? S(r["remarks"]) + " • " : "") + $"Op {S(r["operator_id"])} • {(S(r["source"]) == "PC" ? "Command Center" : "Terminal " + S(r["device_id"]))} • Seq #{L(r["seq"])}", 10, other ? "#93C5FD" : "#52525B", mono: true).M(0, 5));
             if (flag)
                 body.Children.Add(Card(Spread(T("⚠ LOCATION MISMATCH", 10, "#FCD34D", bold: true, mono: true), T("QR: " + (S(r["scanned_loc"]) is { Length: > 0 } q ? q : "Diff Loc"), 10, "#FCD34D", mono: true)), "#3A2A0A", "#B45309", 7).M(0, 8));
             if (S(r["occupants"]).Length > 2)
@@ -200,35 +202,79 @@ public partial class MainWindow : Window
     {
         var all = App.Store.Persons(Query);
         var rows = _company == "ALL" ? all : all.Where(p => string.Equals(S(p["company"]), _company, StringComparison.OrdinalIgnoreCase)).ToList();
-        Header("MILITARY & CIVILIAN PERSONNEL DOSSIER", $"{rows.Count} / {all.Count} Personnel", "Entries organized company-wise with printable QR ID cards. Terminals receive changes on their next sync.");
+        _selected.IntersectWith(all.Select(p => S(p["id"])));
+        Header("MILITARY & CIVILIAN PERSONNEL DOSSIER", $"{rows.Count} / {all.Count} Personnel", "Company-wise registry with printable QR ID cards, custom fields and full movement history. Tick cards to export selected personnel.");
         SectionActions.Children.Add(Btn("+ Add Soldier Details", AddSoldier_Click, "BtnAmber"));
-        SectionActions.Children.Add(Btn("Import / Export", ImportExport_Click, "BtnEmerald"));
-        Chip($"All Companies ({all.Count})", _company == "ALL", () => { _company = "ALL"; RenderTab(); });
+        var exportSel = Btn(_selected.Count > 0 ? $"Export Selected ({_selected.Count})" : "Export Selected", (_, _) => Dialogs.Report(this, _company, _selected.ToList()), "BtnGold");
+        exportSel.IsEnabled = _selected.Count > 0;
+        SectionActions.Children.Add(exportSel);
+        SectionActions.Children.Add(Btn("Reports", (_, _) => Dialogs.Report(this, _company, []), "BtnEmerald"));
+        SectionActions.Children.Add(Btn("Import / Export", ImportExport_Click));
+
+        // Select Company dropdown + chips
+        var pick = new ComboBox { Width = 190, Margin = new Thickness(0, 0, 10, 6), VerticalAlignment = VerticalAlignment.Center };
+        pick.Items.Add("All Companies");
+        foreach (var c in Companies) pick.Items.Add(c + " Company");
+        pick.SelectedIndex = _company == "ALL" ? 0 : Array.IndexOf(Companies, _company) + 1;
+        pick.SelectionChanged += (_, _) => { _company = pick.SelectedIndex <= 0 ? "ALL" : Companies[pick.SelectedIndex - 1]; RenderTab(); };
+        FilterChips.Children.Add(Row(T("Select Company  ", 11.5, "#A1A1AA", bold: true), pick));
+        Chip($"All ({all.Count})", _company == "ALL", () => { _company = "ALL"; RenderTab(); });
         foreach (var c in Companies)
             Chip($"{c} ({all.Count(p => string.Equals(S(p["company"]), c, StringComparison.OrdinalIgnoreCase))})", _company == c, () => { _company = c; RenderTab(); });
-        if (rows.Count == 0) { ContentHost.Content = Empty(all.Count == 0 ? "The personnel registry is empty.\nAdd soldiers with '+ Add Soldier Details' or import a CSV file." : "No personnel match the current filter."); return; }
-        var grid = CardGrid();
-        foreach (var p in rows)
+        if (rows.Count > 0) Chip(rows.All(p => _selected.Contains(S(p["id"]))) ? "Clear selection" : "Select all shown", false, () =>
         {
-            var id = S(p["id"]);
-            var inside = L(p["inside_since"]) > 0;
-            var status = S(p["status"]);
-            var avatar = new Border { Width = 42, Height = 42, CornerRadius = new CornerRadius(10), Background = B("#27272A"), Child = T(Initials(S(p["name"])), 14, "#E4E4E7", bold: true).Center() };
-            var body = Col(
-                Spread(Row(avatar, Col(Row(T(DisplayId(id), 11, "#FBBF24", bold: true, mono: true), T("  " + S(p["company"]) + (S(p["company"]).Length > 0 ? " Co" : ""), 10.5, "#71717A", mono: true)),
-                                     T(S(p["name"]), 13.5, "#F4F4F5", bold: true), T(string.Join(" • ", new[] { S(p["rank"]), S(p["role"]) }.Where(x => x.Length > 0)), 11, "#A1A1AA")).M(10)),
-                       StatusPill(status)),
-                Divider(),
-                Kv("Service No", S(p["service_no"])), Kv("Unit", S(p["unit"])), Kv("I-Card", S(p["id_card"])), Kv("Category", S(p["category"])),
-                Spread(T("Presence", 11, "#71717A"), inside ? Pill("INSIDE • " + Duration(Store.NowMs - L(p["inside_since"])), "#34D399", "#0D2A20", "#047857", 9.5) : Pill("OUTSIDE", "#A1A1AA", "#27272A", "#3F3F46", 9.5)).M(0, 3),
-                Kv("Last seen", L(p["last_seen"]) > 0 ? Time(L(p["last_seen"]), "dd MMM HH:mm") : "No gate activity"),
-                Wrap(Btn("Edit", (_, _) => Dialogs.EditPerson(this, id)), Btn("ID Card & QR", (_, _) => Dialogs.Credential(this, "PERSON", id), "BtnGold"),
-                     Btn("History", (_, _) => Dialogs.History(this, "PERSON", id)),
-                     Btn(status == "ACTIVE" ? "Suspend" : "Activate", (_, _) => Dialogs.SetPersonStatus(this, id, status == "ACTIVE" ? "SUSPENDED" : "ACTIVE")),
-                     Btn("Delete", (_, _) => Dialogs.DeletePerson(this, id, S(p["name"])), "BtnDanger")).M(0, 10));
-            grid.Children.Add(Card(body, "#131316").M(0, 0, 10, 10));
+            if (rows.All(p => _selected.Contains(S(p["id"])))) _selected.Clear(); else foreach (var p in rows) _selected.Add(S(p["id"]));
+            RenderTab();
+        });
+        if (rows.Count == 0) { ContentHost.Content = Empty(all.Count == 0 ? "The personnel registry is empty.\nAdd soldiers with '+ Add Soldier Details' or import a CSV file." : "No personnel in this company match the current filter."); return; }
+
+        var panel = new StackPanel();
+        var groups = rows.GroupBy(p => Companies.FirstOrDefault(c => string.Equals(c, S(p["company"]), StringComparison.OrdinalIgnoreCase)) ?? (S(p["company"]).Length > 0 ? S(p["company"]) : "Unassigned"))
+            .OrderBy(g => Array.IndexOf(Companies, g.Key) is var i && i >= 0 ? i : 99);
+        foreach (var g in groups)
+        {
+            var color = XV.Core.Reports.CompanyColor(g.Key);
+            var inside = g.Count(p => L(p["inside_since"]) > 0);
+            panel.Children.Add(new Border
+            {
+                Margin = new Thickness(0, panel.Children.Count == 0 ? 0 : 14, 10, 10), Padding = new Thickness(14, 8, 14, 8), CornerRadius = new CornerRadius(10),
+                Background = B(color), Child = Spread(T($"{g.Key.ToUpperInvariant()} COMPANY", 13.5, "#FFFFFF", bold: true),
+                    T($"{g.Count()} personnel • {inside} inside", 11.5, "#F4F4F5", mono: true)),
+            });
+            var grid = CardGrid();
+            foreach (var p in g) grid.Children.Add(PersonCard(p));
+            panel.Children.Add(grid);
         }
-        ContentHost.Content = grid;
+        ContentHost.Content = panel;
+    }
+
+    Border PersonCard(Dictionary<string, object?> p)
+    {
+        var id = S(p["id"]);
+        var inside = L(p["inside_since"]) > 0;
+        var status = S(p["status"]);
+        var check = new CheckBox { IsChecked = _selected.Contains(id), ToolTip = "Select for export", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
+        check.Click += (_, _) => { if (check.IsChecked == true) _selected.Add(id); else _selected.Remove(id); RenderTab(); };
+        var avatar = new Border { Width = 42, Height = 42, CornerRadius = new CornerRadius(10), Background = B("#27272A"), Child = T(Initials(S(p["name"])), 14, "#E4E4E7", bold: true).Center() };
+        var body = Col(
+            Spread(Row(check, avatar, Col(Row(T(DisplayId(id), 11, "#FBBF24", bold: true, mono: true), T("  " + S(p["company"]) + (S(p["company"]).Length > 0 ? " Co" : ""), 10.5, "#71717A", mono: true)),
+                                 T(S(p["name"]), 13.5, "#F4F4F5", bold: true), T(string.Join(" • ", new[] { S(p["rank"]), S(p["role"]) }.Where(x => x.Length > 0)), 11, "#A1A1AA")).M(10)),
+                   StatusPill(status)),
+            Divider(),
+            Kv("Service No", S(p["service_no"])), Kv("Unit", S(p["unit"])), Kv("I-Card", S(p["id_card"])), Kv("Category", S(p["category"])));
+        try
+        {
+            var custom = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(S(p["custom_json"]).Length > 1 ? S(p["custom_json"]) : "{}") ?? [];
+            foreach (var f in App.Settings.CustomFields) body.Children.Add(Kv(f, custom.GetValueOrDefault(f, "")));
+        }
+        catch { /* malformed custom data is shown as empty */ }
+        body.Children.Add(Spread(T("Presence", 11, "#71717A"), inside ? Pill("INSIDE • " + Duration(Store.NowMs - L(p["inside_since"])), "#34D399", "#0D2A20", "#047857", 9.5) : Pill("OUTSIDE", "#A1A1AA", "#27272A", "#3F3F46", 9.5)).M(0, 3));
+        body.Children.Add(Kv("Last seen", L(p["last_seen"]) > 0 ? Time(L(p["last_seen"]), "dd MMM HH:mm") : "No gate activity"));
+        body.Children.Add(Wrap(Btn("Edit", (_, _) => Dialogs.EditPerson(this, id)), Btn("ID Card & QR", (_, _) => Dialogs.Credential(this, "PERSON", id), "BtnGold"),
+                 Btn("History", (_, _) => Dialogs.History(this, "PERSON", id)), Btn("+ Add Record", (_, _) => Dialogs.AddRecord(this, id), "BtnBlue"),
+                 Btn(status == "ACTIVE" ? "Suspend" : "Activate", (_, _) => Dialogs.SetPersonStatus(this, id, status == "ACTIVE" ? "SUSPENDED" : "ACTIVE")),
+                 Btn("Delete", (_, _) => Dialogs.DeletePerson(this, id, S(p["name"])), "BtnDanger")).M(0, 10));
+        return Card(body, _selected.Contains(id) ? "#1C1508" : "#131316", _selected.Contains(id) ? "#B45309" : "#27272A").M(0, 0, 10, 10);
     }
 
     void RenderVehicles()

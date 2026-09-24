@@ -92,6 +92,11 @@ public static class Dialogs
             var fBlood = Choice("Blood group", ["", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"], V("blood_group"));
             var fAccess = Field("Authorized locations (comma separated IDs, blank = all)", V("access_locations"), mono: true);
             var fNotes = Field("Notes", V("notes"));
+            var existingCustom = new Dictionary<string, string>();
+            try { existingCustom = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(p == null || V("custom_json").Length < 2 ? "{}" : V("custom_json")) ?? []; } catch { }
+            var customBoxes = new Dictionary<string, TextBox>();
+            if (App.Settings.CustomFields.Count > 0) Body.Children.Add(Label("— Custom fields (Stations & Settings) —"));
+            foreach (var f in App.Settings.CustomFields) customBoxes[f] = Field(f, existingCustom.GetValueOrDefault(f, ""));
             AddButton("Cancel", Close);
             AddButton(id == null ? "Add to Registry" : "Save Changes", () =>
             {
@@ -102,6 +107,7 @@ public static class Dialogs
                         ["id"] = fId.Text, ["name"] = fName.Text, ["rank"] = fRank.Text, ["serviceNo"] = fService.Text, ["company"] = fCompany.Text, ["unit"] = fUnit.Text,
                         ["role"] = fRole.Text, ["category"] = fCat.Text, ["status"] = fStatus.Text, ["idCard"] = fCard.Text, ["mobile"] = fMobile.Text,
                         ["bloodGroup"] = fBlood.Text, ["accessLocations"] = fAccess.Text, ["notes"] = fNotes.Text,
+                        ["custom"] = new JsonObject(customBoxes.Select(kv => new KeyValuePair<string, System.Text.Json.Nodes.JsonNode?>(kv.Key, kv.Value.Text.Trim()))),
                     });
                     DialogResult = true;
                 }
@@ -143,7 +149,7 @@ public static class Dialogs
     {
         var p = App.Store.Persons().First(x => S(x["id"]) == id);
         var o = new JsonObject { ["id"] = id, ["name"] = S(p["name"]), ["rank"] = S(p["rank"]), ["serviceNo"] = S(p["service_no"]), ["unit"] = S(p["unit"]), ["company"] = S(p["company"]), ["role"] = S(p["role"]), ["category"] = S(p["category"]), ["status"] = status, ["mobile"] = S(p["mobile"]), ["idCard"] = S(p["id_card"]), ["bloodGroup"] = S(p["blood_group"]), ["accessLocations"] = S(p["access_locations"]), ["notes"] = S(p["notes"]) };
-        App.Store.UpsertPerson(o);
+        App.Store.UpsertPerson(o); // custom fields are left unchanged because "custom" is not sent
     }
 
     public static void SetVehicleStatus(Window owner, string id, string status)
@@ -276,14 +282,100 @@ public static class Dialogs
                         T("  " + Time(L(r["event_ts"]), "ddd dd MMM yyyy  HH:mm:ss"), 12, "#F4F4F5", mono: true),
                         T($"   {S(r["location_name"])} • {S(r["gate_name"])}", 11.5, "#A1A1AA")),
                     Row(L(r["loc_mismatch"]) == 1 ? T("⚠ LOC FLAG  ", 10.5, "#FCD34D", bold: true, mono: true) : new TextBlock(),
-                        T(L(r["stay_ms"]) > 0 ? "Stayed " + Duration(L(r["stay_ms"])) : "Op " + S(r["operator_id"]), 11, "#D4D4D8", mono: true))), "#131316", pad: 10).M(0, 0, 0, 6));
+                        T((S(r["remarks"]).Length > 0 ? S(r["remarks"]) + "  •  " : "") + (L(r["stay_ms"]) > 0 ? "Stayed " + Duration(L(r["stay_ms"])) : "Op " + S(r["operator_id"])), 11, "#D4D4D8", mono: true))), "#131316", pad: 10).M(0, 0, 0, 6));
             }
             if (rows.Count > 0) Body.Children.Insert(0, Para($"{rows.Count} records • total recorded time on site: {Duration(total ?? 0)}", "#FBBF24"));
+            if (type == "PERSON")
+            {
+                AddButton("+ Add Record", () => { Close(); AddRecord(Owner, id); History(Owner, type, id); }, "BtnBlue");
+                AddButton("Export…", () => Report(this, "ALL", [id]), "BtnEmerald");
+            }
             AddButton("Close", Close, "BtnAmber");
         }
     }
 
     public static void History(Window owner, string type, string id) => new HistoryWindow(type, id) { Owner = owner }.ShowDialog();
+
+    sealed class AddRecordDialog : DarkWindow
+    {
+        public AddRecordDialog(string personId) : base("+ Add Record to History • " + DisplayId(personId),
+            "ENTRY / EXIT update who is inside, exactly like a gate scan. Other types (Leave, Duty, Course…) are dated history entries. Types are configured in Stations & Settings.", 560, 640)
+        {
+            var person = App.Store.Persons().First(x => S(x["id"]) == personId);
+            Body.Children.Add(Para($"{S(person["name"])} • {S(person["rank"])} • {S(person["company"])} Co • currently {(L(person["inside_since"]) > 0 ? "INSIDE" : "OUTSIDE")}", "#FBBF24"));
+            var type = Choice("Record type", new[] { "ENTRY", "EXIT" }.Concat(App.Settings.EventTypes), L(person["inside_since"]) > 0 ? "EXIT" : "ENTRY");
+            Body.Children.Add(Label("Date"));
+            var date = new DatePicker { SelectedDate = DateTime.Today, DisplayDateEnd = DateTime.Today };
+            Body.Children.Add(date);
+            var time = Field("Time (HH:mm)", DateTime.Now.ToString("HH:mm"), mono: true);
+            var locs = App.Store.Locations().Select(l => $"{S(l["id"])} — {S(l["name"])}").ToList();
+            var gates = App.Store.Gates().Select(g => $"{S(g["id"])} — {S(g["name"])}").ToList();
+            var loc = Choice("Location", locs, locs.FirstOrDefault() ?? "");
+            var gate = Choice("Gate", gates, gates.FirstOrDefault() ?? "");
+            var remarks = Field("Remarks (reason, authority, pass number…)");
+            AddButton("Cancel", Close);
+            AddButton("Save Record", () =>
+            {
+                try
+                {
+                    if (!TimeSpan.TryParse(time.Text.Trim(), out var tod)) throw new Exception("Enter the time as HH:mm, e.g. 14:30");
+                    var when = (date.SelectedDate ?? DateTime.Today).Date + tod;
+                    App.Store.AddManualRecord(personId, type.Text, new DateTimeOffset(when).ToUnixTimeMilliseconds(),
+                        loc.Text.Split(' ')[0], gate.Text.Split(' ')[0], remarks.Text);
+                    DialogResult = true;
+                }
+                catch (Exception ex) { Fail(ex); }
+            }, "BtnAmber");
+        }
+    }
+
+    public static void AddRecord(Window owner, string personId) => new AddRecordDialog(personId) { Owner = owner }.ShowDialog();
+
+    sealed class ReportDialog : DarkWindow
+    {
+        public ReportDialog(string company, List<string> personIds) : base("Reports & Export",
+            "Excel: summary sheet plus one colour-coded sheet per company (roster + records). PDF: printable A4 report. CSV: plain records for any software.", 600, 620)
+        {
+            var scope = personIds.Count > 0 ? $"{personIds.Count} selected: " + string.Join(", ", personIds.Take(8).Select(DisplayId)) + (personIds.Count > 8 ? "…" : "") : "";
+            if (scope.Length > 0) Body.Children.Add(Para(scope, "#FBBF24"));
+            var comp = Choice("Company", new[] { "All Companies" }.Concat(Companies.Select(c => c + " Company")), company == "ALL" || personIds.Count > 0 ? "All Companies" : company + " Company");
+            comp.IsEnabled = personIds.Count == 0;
+            Body.Children.Add(Label("From"));
+            var from = new DatePicker { SelectedDate = DateTime.Today.AddDays(-30) };
+            Body.Children.Add(from);
+            Body.Children.Add(Label("To"));
+            var to = new DatePicker { SelectedDate = DateTime.Today };
+            Body.Children.Add(to);
+            var withRecords = new CheckBox { Content = "Include gate & history records (untick for roster only)", IsChecked = true, Margin = new Thickness(0, 12, 0, 0) };
+            Body.Children.Add(withRecords);
+
+            void Export(string kind)
+            {
+                try
+                {
+                    var c = comp.SelectedIndex <= 0 ? "ALL" : Companies[comp.SelectedIndex - 1];
+                    var req = new XV.Core.ReportRequest(c, personIds, from.SelectedDate ?? DateTime.Today.AddDays(-30), to.SelectedDate ?? DateTime.Today, withRecords.IsChecked == true);
+                    if (req.From > req.To) throw new Exception("'From' must be before 'To'.");
+                    var name = $"XV-{(personIds.Count == 1 ? DisplayId(personIds[0]) : personIds.Count > 1 ? "Selected" : c == "ALL" ? "AllCompanies" : c)}-{req.From:yyyyMMdd}-{req.To:yyyyMMdd}";
+                    var (filter, ext) = kind switch { "xlsx" => ("Excel workbook|*.xlsx", ".xlsx"), "pdf" => ("PDF document|*.pdf", ".pdf"), _ => ("CSV|*.csv", ".csv") };
+                    var dlg = new SaveFileDialog { FileName = name + ext, Filter = filter };
+                    if (dlg.ShowDialog() != true) return;
+                    if (kind == "xlsx") XV.Core.Reports.Excel(App.Store, req, dlg.FileName);
+                    else if (kind == "pdf") XV.Core.Reports.Pdf(App.Store, req, dlg.FileName);
+                    else XV.Core.Reports.Csv(App.Store, req, dlg.FileName);
+                    if (MessageBox.Show("Report saved. Open it now?", "Export finished", MessageBoxButton.YesNo) == MessageBoxResult.Yes)
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dlg.FileName) { UseShellExecute = true });
+                }
+                catch (Exception ex) { Fail(ex); }
+            }
+            AddButton("Close", Close);
+            AddButton("CSV", () => Export("csv"));
+            AddButton("PDF", () => Export("pdf"), "BtnDanger");
+            AddButton("Excel", () => Export("xlsx"), "BtnEmerald");
+        }
+    }
+
+    public static void Report(Window owner, string company, List<string> personIds) => new ReportDialog(company, personIds) { Owner = owner }.ShowDialog();
 
     // ------------------------------------------------------------------ import / export
 
@@ -317,6 +409,7 @@ public static class Dialogs
             Section("VEHICLE FLEET",
                 ("Import CSV", () => Import(false), "BtnEmerald"), ("Export CSV", () => SaveCsv("xv-vehicles.csv", Csv.Build(App.Store.Vehicles(), VehicleCols)), "BtnBase"),
                 ("Blank template", () => SaveCsv("xv-vehicles-template.csv", Csv.Build([], VehicleCols)), "BtnBase"));
+            Section("REPORTS (EXCEL • PDF • CSV)", ("Company-wise report…", () => Report(this, "ALL", []), "BtnAmber"));
             Section("GATE RECORDS & AUDIT", ("Export gate records", () => ExportEvents(this), "BtnBase"), ("Export audit trail", () => ExportAudit(this), "BtnBase"));
             Section("ENCRYPTED BACKUP", ("Open data folder", () => System.Diagnostics.Process.Start("explorer.exe", Paths.DataDir), "BtnBase"));
             Body.Children.Add(Para("The database is encrypted with a key protected by Windows for this PC. To move to another PC, export CSV files and import them there."));
@@ -349,5 +442,8 @@ public static class Dialogs
         yield return (() => new CloudLinkWindow(), "07-cloud-link");
         yield return (() => new StationsWindow(), "08-stations-settings");
         yield return (() => new PersonDialog(null), "09-add-soldier");
+        yield return (() => new ReportDialog("ALL", []), "10-reports-export");
+        var first = App.Store.Persons().FirstOrDefault();
+        if (first != null) yield return (() => new AddRecordDialog(S(first["id"])), "11-add-history-record");
     }
 }

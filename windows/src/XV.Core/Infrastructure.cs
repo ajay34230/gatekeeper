@@ -64,6 +64,12 @@ public sealed class Settings
     public bool CloudUsesPublicCertificate { get; set; }    // tunnel terminates TLS with a CA certificate
 
     public bool RequireApproval { get; set; } = true;
+
+    /// <summary>Extra personnel fields defined by the administrator (shown in forms, cards and exports).</summary>
+    public List<string> CustomFields { get; set; } = [];
+
+    /// <summary>History record types besides ENTRY / EXIT that can be added to a person's history from the PC.</summary>
+    public List<string> EventTypes { get; set; } = ["Leave", "Returned from Leave", "Duty", "Course", "Medical", "Guard Duty", "Out Pass", "Temporary Duty"];
     public int TokenHours { get; set; } = 12;
     public int OfflineGraceHours { get; set; } = 12;
     public bool StartWithWindows { get; set; } = true;

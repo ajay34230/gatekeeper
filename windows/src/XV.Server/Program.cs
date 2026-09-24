@@ -16,6 +16,20 @@ for (var i = 0; i + 1 < args.Length; i++)
     if (args[i] == "--add-location" && i + 2 < args.Length) store.UpsertLocation(args[i + 1], args[i + 2]);
     if (args[i] == "--add-gate" && i + 2 < args.Length) store.UpsertGate(args[i + 1], args[i + 2]);
 }
+for (var i = 0; i + 3 < args.Length; i++)
+    if (args[i] == "--add-record")
+        store.AddManualRecord(args[i + 1], args[i + 2], Store.NowMs - (i * 3_600_000L), "LOC07", "G02", args[i + 3]);
+var ri = Array.IndexOf(args, "--report");
+if (ri >= 0 && ri + 1 < args.Length)
+{
+    Directory.CreateDirectory(args[ri + 1]);
+    var req = new ReportRequest("ALL", [], DateTime.Today.AddDays(-30), DateTime.Today);
+    Reports.Excel(store, req, Path.Combine(args[ri + 1], "XV-Report.xlsx"));
+    Reports.Pdf(store, req, Path.Combine(args[ri + 1], "XV-Report.pdf"));
+    Reports.Csv(store, req, Path.Combine(args[ri + 1], "XV-Report.csv"));
+    Console.WriteLine("Reports written to " + args[ri + 1]);
+    return;
+}
 var ei = Array.IndexOf(args, "--export");
 if (ei >= 0 && ei + 1 < args.Length)
 {

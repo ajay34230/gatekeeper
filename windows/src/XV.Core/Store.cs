@@ -40,6 +40,7 @@ public sealed class Store : IDisposable
         _db.Open();
         Exec("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;");
         CreateSchema();
+        Migrate();
     }
 
     public void Dispose() => _db.Dispose();
@@ -77,6 +78,19 @@ public sealed class Store : IDisposable
         CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY AUTOINCREMENT, actor TEXT NOT NULL, action TEXT NOT NULL,
           entity_type TEXT, entity_id TEXT, detail TEXT, created_at INTEGER NOT NULL);
         """);
+
+    /// <summary>Adds columns introduced after the first release without touching existing data.</summary>
+    void Migrate()
+    {
+        void Ensure(string table, string column, string definition)
+        {
+            if (!Query($"PRAGMA table_info({table})").Any(r => string.Equals(S(r["name"]), column, StringComparison.OrdinalIgnoreCase)))
+                Exec($"ALTER TABLE {table} ADD COLUMN {column} {definition}");
+        }
+        Ensure("persons", "custom_json", "TEXT NOT NULL DEFAULT '{}'");
+        Ensure("events", "remarks", "TEXT NOT NULL DEFAULT ''");
+        Ensure("events", "source", "TEXT NOT NULL DEFAULT 'TERMINAL'");
+    }
 
     // ------------------------------------------------------------------ low level helpers
 
@@ -183,6 +197,8 @@ public sealed class Store : IDisposable
             """, id, secret, name, T(p, "rank"), T(p, "serviceNo"), T(p, "unit"), T(p, "company"), T(p, "role"),
             Upper(T(p, "category")) is { Length: > 0 } c ? c : "PERSONNEL", Upper(T(p, "status")) is { Length: > 0 } st ? st : "ACTIVE",
             T(p, "mobile"), T(p, "idCard"), T(p, "bloodGroup"), T(p, "accessLocations"), T(p, "notes"), now);
+        if (p["custom"] is JsonObject custom)
+            Exec("UPDATE persons SET custom_json=$1 WHERE id=$2", custom.ToJsonString(), id);
         Audit(actor, existing == null ? "ADD_PERSON" : "EDIT_PERSON", "PERSON", id);
         Notify();
     }
@@ -530,6 +546,68 @@ public sealed class Store : IDisposable
         });
         Notify();
         return result;
+    }
+
+    // ------------------------------------------------------------------ history records added on the PC
+
+    /// <summary>
+    /// Adds a record to a person's history from the Command Center. ENTRY / EXIT follow the same presence
+    /// rules as a gate scan; any other type (Leave, Duty, Course…) is a dated history note that does not change presence.
+    /// </summary>
+    public long AddManualRecord(string personId, string type, long ts, string locationId, string gateId, string remarks, string actor = "PC-ADMIN")
+    {
+        personId = CanonId(personId);
+        type = (type ?? "").Trim();
+        if (type.Length == 0 || type.Length > 40) throw new StoreException("INVALID_TYPE", "Choose a record type", 400);
+        if (ts <= 0 || ts > NowMs + 3_600_000) throw new StoreException("INVALID_TIME", "The record time cannot be in the future", 400);
+        var eventId = "PC-" + RandomCode(12);
+        var upper = type.ToUpperInvariant();
+        var result = Tx(() =>
+        {
+            var person = One("SELECT status FROM persons WHERE id=$1", personId) ?? throw new StoreException("PERSON_NOT_FOUND", "Person is not in the registry");
+            long? stay = null;
+            if (upper is "ENTRY" or "EXIT")
+            {
+                var current = One("SELECT * FROM presence WHERE person_id=$1 AND status='ACTIVE' ORDER BY entry_at DESC LIMIT 1", personId);
+                if (upper == "ENTRY" && current != null) throw new StoreException("ALREADY_INSIDE", "Person is already recorded inside. Record an EXIT first.");
+                if (upper == "EXIT" && current == null) throw new StoreException("NOT_INSIDE", "Person is not recorded inside.");
+                if (upper == "EXIT")
+                {
+                    stay = ts - Convert.ToInt64(current!["entry_at"]);
+                    if (stay < 0) throw new StoreException("EXIT_BEFORE_ENTRY", "The exit time is earlier than the recorded entry (" + DateTimeOffset.FromUnixTimeMilliseconds(Convert.ToInt64(current["entry_at"])).LocalDateTime.ToString("dd MMM yyyy HH:mm") + ").", 400);
+                }
+                if (upper == "ENTRY")
+                    Exec("INSERT INTO presence(session_id,person_id,source_type,entry_event_id,entry_at,location_id,gate_id) VALUES($1,$2,'DIRECT',$3,$4,$5,$6)",
+                        "SES-" + eventId, personId, eventId, ts, Upper(locationId), Upper(gateId));
+                else
+                    Exec("UPDATE presence SET status='CLOSED', exit_event_id=$1, exit_at=$2 WHERE session_id=$3", eventId, ts, current!["session_id"]);
+                type = upper;
+            }
+            var seq = NextSeq();
+            Exec("""
+                INSERT INTO events(event_id,entity_type,entity_id,event_type,location_id,gate_id,device_id,operator_id,event_ts,created_at,received_at,seq,
+                  source_type,stay_ms,payload_hash,remarks,source) VALUES($1,'PERSON',$2,$3,$4,$5,'PC',$6,$7,$8,$8,$9,'DIRECT',$10,'',$11,'PC')
+                """, eventId, personId, type, Upper(locationId), Upper(gateId), actor, ts, NowMs, seq, stay, (remarks ?? "").Trim());
+            Audit(actor, "ADD_HISTORY_RECORD", "PERSON", personId, $"{type} {(remarks ?? "").Trim()}".Trim());
+            return seq;
+        });
+        Notify();
+        return result;
+    }
+
+    /// <summary>Rows for reports: people filtered by company / explicit IDs, and their records in a date range.</summary>
+    public (List<Dictionary<string, object?>> persons, List<Dictionary<string, object?>> records) ReportData(IReadOnlyCollection<string>? personIds, string? company, long fromMs, long toMs)
+    {
+        var persons = Persons().Where(p =>
+            (personIds == null || personIds.Count == 0 || personIds.Contains(S(p["id"]))) &&
+            (string.IsNullOrEmpty(company) || company == "ALL" || string.Equals(S(p["company"]), company, StringComparison.OrdinalIgnoreCase))).ToList();
+        var ids = persons.Select(p => S(p["id"])).ToHashSet();
+        var records = Query("""
+            SELECT e.*, COALESCE(l.name, e.location_id) AS location_name, COALESCE(g.name, e.gate_id) AS gate_name
+            FROM events e LEFT JOIN locations l ON l.id=e.location_id LEFT JOIN gates g ON g.id=e.gate_id
+            WHERE e.entity_type='PERSON' AND e.event_ts BETWEEN $1 AND $2 ORDER BY e.event_ts
+            """, fromMs, toMs).Where(r => ids.Contains(S(r["entity_id"]))).ToList();
+        return (persons, records);
     }
 
     // ------------------------------------------------------------------ dashboard queries
