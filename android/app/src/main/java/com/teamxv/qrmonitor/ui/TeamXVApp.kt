@@ -1,0 +1,2058 @@
+package com.teamxv.qrmonitor.ui
+
+import android.app.Activity
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.DevicesOther
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.PersonOutline
+import androidx.compose.material.icons.filled.QrCode2
+import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.WifiOff
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
+import com.teamxv.qrmonitor.config.AppConfig
+import com.teamxv.qrmonitor.data.model.EntityType
+import com.teamxv.qrmonitor.data.model.PresenceStatus
+import com.teamxv.qrmonitor.data.model.EventType
+import com.teamxv.qrmonitor.data.model.MovementEvent
+import com.teamxv.qrmonitor.data.model.SyncStatus
+import com.teamxv.qrmonitor.data.local.PersonEntity
+import com.teamxv.qrmonitor.data.local.VehicleEntity
+import com.teamxv.qrmonitor.scanner.QrScannerView
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.TimeUnit
+
+private val UiBackground = Color(0xFFF4F4F5)
+private val UiSurface = Color(0xFFFFFFFF)
+private val UiSurfaceSubtle = Color(0xFFFAFAFA)
+private val UiInk = Color(0xFF18181B)
+private val UiMuted = Color(0xFF71717A)
+private val UiFaint = Color(0xFFA1A1AA)
+private val UiBorder = Color(0xFFE4E4E7)
+private val UiBorderSoft = Color(0xFFF4F4F5)
+private val UiSuccess = Color(0xFF059669)
+private val UiSuccessBg = Color(0xFFECFDF5)
+private val UiWarning = Color(0xFFD97706)
+private val UiWarningBg = Color(0xFFFFFBEB)
+private val UiError = Color(0xFFE11D48)
+private val UiErrorBg = Color(0xFFFFF1F2)
+private val UiBlue = Color(0xFF2563EB)
+private val UiBlueBg = Color(0xFFEFF6FF)
+private val Sans = FontFamily.SansSerif
+private val Mono = FontFamily.Monospace
+private val CardShape = RoundedCornerShape(16.dp)
+private val SmallShape = RoundedCornerShape(12.dp)
+
+private enum class StatusTone { Success, Warning, Error, Info, Neutral }
+private enum class BannerTone { Success, Warning, Error, Neutral }
+
+private fun StatusTone.color(): Color = when (this) {
+    StatusTone.Success -> UiSuccess
+    StatusTone.Warning -> UiWarning
+    StatusTone.Error -> UiError
+    StatusTone.Info -> UiBlue
+    StatusTone.Neutral -> UiMuted
+}
+
+@Composable
+fun TeamXVApp(vm: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()) {
+    val context = LocalContext.current
+    val cfg = remember { vm.currentConfig() }
+    var tab by rememberSaveable { mutableIntStateOf(0) }
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(vm.loggedIn) {
+        while (vm.loggedIn) {
+            vm.enforceSession()
+            vm.syncStateRefresh()
+            kotlinx.coroutines.delay(30_000)
+        }
+    }
+
+    val darkUi = vm.scannerTarget != null
+    SideEffect {
+        (context as? Activity)?.let { activity ->
+            activity.window.statusBarColor = if (darkUi) UiInk.toArgb() else UiBackground.toArgb()
+            activity.window.navigationBarColor = UiSurface.toArgb()
+            WindowCompat.getInsetsController(activity.window, activity.window.decorView).apply {
+                isAppearanceLightStatusBars = !darkUi
+                isAppearanceLightNavigationBars = true
+            }
+        }
+    }
+
+    Surface(Modifier.fillMaxSize(), color = UiBackground) {
+        when {
+            !vm.loggedIn -> LoginScreen(vm)
+            settingsOpen && cfg.operatorRole == "ADMIN" -> SettingsScreen(vm, onBack = { settingsOpen = false })
+            vm.showSuccess && vm.completedEvent != null -> SuccessScreen(
+                vm = vm,
+                event = vm.completedEvent!!,
+                vehicle = vm.completedVehicle,
+                durationMs = vm.completedDurationMs
+            )
+            vm.scannerTarget != null -> ScannerHost(vm)
+            vm.session !is ScanSession.Closed -> SessionRouter(vm)
+            else -> Column(Modifier.fillMaxSize()) {
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    when (tab) {
+                        0 -> HomeScreen(vm)
+                        1 -> ActivityScreen(vm)
+                        2 -> SyncStatusScreen(vm)
+                        else -> OperatorScreen(
+                            vm = vm,
+                            onOpenSettings = { if (cfg.operatorRole == "ADMIN") settingsOpen = true }
+                        )
+                    }
+                }
+                TerminalBottomNav(tab, vm.pending) { tab = it }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScannerHost(vm: MainViewModel) {
+    val target = vm.scannerTarget ?: return
+    val title = when (target) {
+        ScannerTarget.PERSON -> "Scan Person QR"
+        ScannerTarget.VEHICLE -> "Scan Vehicle QR"
+        ScannerTarget.DRIVER -> "Scan Driver QR"
+        ScannerTarget.CO_DRIVER -> "Scan Co-Driver QR"
+        ScannerTarget.OCCUPANT -> "Scan Occupant QR"
+    }
+    val subtitle = when (target) {
+        ScannerTarget.PERSON -> "Align identity badge QR inside the reticle"
+        ScannerTarget.VEHICLE -> "Align vehicle windshield or registration QR in frame"
+        ScannerTarget.DRIVER -> "Scan authorized driver identity badge"
+        ScannerTarget.CO_DRIVER -> "Align co-driver identity badge inside frame"
+        ScannerTarget.OCCUPANT -> "Align passenger identity badge inside frame"
+    }
+    QrScannerView(
+        title = title,
+        subtitle = subtitle,
+        soundEnabled = vm.soundEnabled,
+        onResult = vm::onQr,
+        onCancel = vm::closeScanner
+    )
+}
+
+@Composable
+private fun LoginScreen(vm: MainViewModel) {
+    val cfg = vm.currentConfig()
+    var user by rememberSaveable { mutableStateOf(cfg.operatorId) }
+    var pass by rememberSaveable { mutableStateOf("") }
+    var visible by rememberSaveable { mutableStateOf(false) }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .imePadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp, vertical = 26.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(Modifier.height(20.dp))
+        Box(
+            Modifier.size(64.dp).clip(RoundedCornerShape(16.dp))
+                .background(UiInk).border(1.dp, Color(0xFF27272A), RoundedCornerShape(16.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.Shield, null, tint = Color.White, modifier = Modifier.size(32.dp))
+        }
+        Spacer(Modifier.height(17.dp))
+        Text("XV DIGITAL ACCESS CONTROL", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = UiInk)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "FIELD ACCESS CONTROL SYSTEM",
+            fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 10.sp, letterSpacing = 1.3.sp, color = UiMuted
+        )
+        Spacer(Modifier.height(22.dp))
+        Box(Modifier.width(48.dp).height(1.dp).background(UiBorder))
+        Spacer(Modifier.height(22.dp))
+        Text("Operator Terminal Login", fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = Color(0xFF3F3F46))
+        Spacer(Modifier.height(18.dp))
+
+        if (vm.authMessage.isNotBlank()) {
+            StatusBanner(
+                vm.authMessage,
+                if (vm.authMessage.contains("failed", true) || vm.authMessage.contains("invalid", true) || vm.authMessage.contains("expired", true))
+                    BannerTone.Error else BannerTone.Neutral
+            )
+            Spacer(Modifier.height(12.dp))
+        }
+
+        CompactField(
+            label = "GATEKEEPER ID",
+            value = user,
+            onValueChange = { user = it.uppercase(Locale.getDefault()) },
+            icon = Icons.Default.PersonOutline,
+            placeholder = "GK-04"
+        )
+        Spacer(Modifier.height(12.dp))
+        CompactField(
+            label = "SECURITY PASSWORD",
+            value = pass,
+            onValueChange = { pass = it },
+            icon = Icons.Default.Lock,
+            placeholder = "••••••",
+            password = !visible,
+            trailing = {
+                TextButton(onClick = { visible = !visible }) {
+                    Text(if (visible) "HIDE" else "SHOW", fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = UiMuted)
+                }
+            }
+        )
+
+        Spacer(Modifier.height(16.dp))
+        PrimaryButton("SIGN IN TO TERMINAL", Icons.Default.ArrowForward, user.isNotBlank() && pass.isNotBlank()) { vm.login(user, pass) }
+        Spacer(Modifier.height(8.dp))
+        SecondaryButton("CONTINUE OFFLINE", Icons.Default.WifiOff) { vm.continueOffline() }
+
+        Spacer(Modifier.height(26.dp))
+        StatusPill(
+            if (vm.networkStatus.serverReachable) "System Status: Online" else "System Status: Field Ready",
+            if (vm.networkStatus.serverReachable) StatusTone.Success else StatusTone.Warning
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Android field terminal • Secure local cache enabled",
+            fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 10.sp, color = UiFaint, textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun CompactField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    icon: ImageVector,
+    placeholder: String,
+    password: Boolean = false,
+    trailing: (@Composable () -> Unit)? = null
+) {
+    Text(label, fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 9.sp, letterSpacing = 1.0.sp, color = Color(0xFF52525B))
+    Spacer(Modifier.height(6.dp))
+    OutlinedTextField(
+        value = value, onValueChange = onValueChange, modifier = Modifier.fillMaxWidth(), singleLine = true,
+        leadingIcon = { Icon(icon, null, tint = UiFaint, modifier = Modifier.size(18.dp)) },
+        trailingIcon = trailing,
+        placeholder = { Text(placeholder, fontFamily = if (password) Mono else Sans, fontSize = 12.sp, color = UiFaint) },
+        visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = UiSurface, unfocusedContainerColor = UiSurface,
+            focusedIndicatorColor = UiInk, unfocusedIndicatorColor = Color(0xFFD4D4D8),
+            focusedTextColor = UiInk, unfocusedTextColor = UiInk, cursorColor = UiInk
+        ),
+        shape = SmallShape
+    )
+}
+
+@Composable
+private fun HomeScreen(vm: MainViewModel) {
+    val cfg = vm.currentConfig()
+    val today = remember { startOfToday() }
+    val todayEvents = vm.events.filter { it.eventTimestamp >= today }
+    val entries = todayEvents.count { it.eventType == EventType.ENTRY }
+    val exits = todayEvents.count { it.eventType == EventType.EXIT }
+
+    val insideCount = vm.personnel.count { it.currentStatus == PresenceStatus.INSIDE }
+    val outsideCount = vm.personnel.count { it.currentStatus == PresenceStatus.OUTSIDE }
+
+    // Offline -> Online snackbar state
+    val isOnline = vm.networkStatus.serverReachable
+    var showSnackbar by remember { mutableStateOf(false) }
+    var wasOnline by remember { mutableStateOf<Boolean?>(null) }
+
+    LaunchedEffect(isOnline) {
+        if (wasOnline == false && isOnline) {
+            showSnackbar = true
+            kotlinx.coroutines.delay(3500)
+            showSnackbar = false
+        }
+        wasOnline = isOnline
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 15.dp)
+        ) {
+            Text(
+                "Operator: ${cfg.operatorId.ifBlank { "UNASSIGNED" }}",
+                fontFamily = Sans,
+                fontWeight = FontWeight.Bold,
+                fontSize = 21.sp,
+                color = UiInk,
+                letterSpacing = (-.45).sp
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                "${cfg.locationId} • ${cfg.gateId}",
+                fontFamily = Sans,
+                fontSize = 19.sp,
+                fontWeight = FontWeight.Medium,
+                color = UiInk,
+                letterSpacing = (-.25).sp
+            )
+            Spacer(Modifier.height(8.dp))
+            StatusPill(
+                when {
+                    vm.networkStatus.serverReachable -> "Online"
+                    vm.networkStatus.connected -> "LAN / Local"
+                    else -> "Offline"
+                },
+                if (vm.networkStatus.serverReachable) StatusTone.Success else StatusTone.Warning,
+                compact = false
+            )
+
+            Spacer(Modifier.height(18.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(13.dp)) {
+                HomeActionCard(
+                    Modifier.weight(1f),
+                    "SCAN PERSON",
+                    "Staff, contractor & visitor badges",
+                    Icons.Default.QrCode2,
+                    dark = true,
+                    onClick = vm::openPersonScanner
+                )
+                HomeActionCard(
+                    Modifier.weight(1f),
+                    "SCAN VEHICLE",
+                    "Trucks, cargo & multi-passenger manifest",
+                    Icons.Default.LocalShipping,
+                    dark = false,
+                    onClick = vm::openVehicleScanner
+                )
+            }
+
+            Spacer(Modifier.height(13.dp))
+            // Real-Time Personnel Presence Summary (Inside vs Outside)
+            Surface(
+                Modifier.fillMaxWidth(),
+                color = UiSurface,
+                shape = CardShape,
+                border = BorderStroke(1.dp, UiBorder)
+            ) {
+                Column(Modifier.padding(14.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Default.Person, null, tint = UiInk, modifier = Modifier.size(16.dp))
+                            Text("Personnel On-Site Presence", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = UiInk)
+                        }
+                        Text("${insideCount + outsideCount} registered", fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = UiMuted)
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Surface(
+                            Modifier.weight(1f),
+                            color = UiSuccessBg,
+                            shape = SmallShape,
+                            border = BorderStroke(1.dp, Color(0xFFA7F3D0))
+                        ) {
+                            Column(Modifier.padding(10.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Box(Modifier.size(6.dp).clip(CircleShape).background(UiSuccess))
+                                    Text("INSIDE", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = UiSuccess)
+                                }
+                                Spacer(Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.Bottom) {
+                                    Text(insideCount.toString(), fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 22.sp, color = Color(0xFF064E3B))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("on site", fontFamily = Sans, fontSize = 10.sp, color = UiSuccess, modifier = Modifier.padding(bottom = 2.dp))
+                                }
+                            }
+                        }
+                        Surface(
+                            Modifier.weight(1f),
+                            color = UiSurfaceSubtle,
+                            shape = SmallShape,
+                            border = BorderStroke(1.dp, UiBorder)
+                        ) {
+                            Column(Modifier.padding(10.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Box(Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF71717A)))
+                                    Text("OUTSIDE", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = UiMuted)
+                                }
+                                Spacer(Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.Bottom) {
+                                    Text(outsideCount.toString(), fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 22.sp, color = UiInk)
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("off site", fontFamily = Sans, fontSize = 10.sp, color = UiMuted, modifier = Modifier.padding(bottom = 2.dp))
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(UiBorder))
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("QUICK VERIFICATION & LAST SEEN", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = UiMuted)
+                        Text("LOCAL DB", fontFamily = Mono, fontSize = 8.sp, color = UiMuted)
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        vm.personnel.take(3).forEach { p ->
+                            val isInside = p.currentStatus == PresenceStatus.INSIDE
+                            Surface(
+                                Modifier.fillMaxWidth(),
+                                color = UiBackground,
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, UiBorder)
+                            ) {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Box(
+                                            Modifier.size(6.dp).clip(CircleShape).background(if (isInside) UiSuccess else Color(0xFF9CA3AF))
+                                        )
+                                        Column {
+                                            Text(p.name, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = UiInk)
+                                            Text(p.id, fontFamily = Mono, fontSize = 9.sp, color = UiMuted)
+                                        }
+                                    }
+                                    Surface(
+                                        color = if (isInside) UiSuccessBg else UiSurfaceSubtle,
+                                        shape = RoundedCornerShape(100.dp),
+                                        border = BorderStroke(1.dp, if (isInside) Color(0xFFA7F3D0) else UiBorder)
+                                    ) {
+                                        Text(
+                                            "Seen ${if (isInside) "21:10" else "22:15"}",
+                                            fontFamily = Mono,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 9.sp,
+                                            color = if (isInside) UiSuccess else UiMuted,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(13.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(13.dp)) {
+                HomeCounter(Modifier.weight(1f), "Entries", entries.toString())
+                HomeCounter(Modifier.weight(1f), "Exits", exits.toString())
+            }
+
+            if (vm.attention > 0 || vm.syncUi.lastError.isNotBlank()) {
+                Spacer(Modifier.height(12.dp))
+                StatusBanner(
+                    buildString {
+                        if (vm.attention > 0) append("${vm.attention} record(s) require attention.")
+                        if (vm.syncUi.lastError.isNotBlank()) {
+                            if (isNotEmpty()) append(" ")
+                            append(vm.syncUi.lastError)
+                        }
+                    },
+                    BannerTone.Warning
+                )
+            }
+
+            Spacer(Modifier.height(13.dp))
+            Surface(
+                Modifier.fillMaxWidth(),
+                color = UiSurface,
+                shape = CardShape,
+                border = BorderStroke(1.dp, UiBorder)
+            ) {
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 15.dp)) {
+                    Text(
+                        "Recent Activity",
+                        fontFamily = Sans,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = UiInk,
+                        letterSpacing = (-.25).sp
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    if (vm.events.isEmpty()) {
+                        Text(
+                            "No events recorded yet.",
+                            fontFamily = Sans,
+                            fontSize = 11.sp,
+                            color = UiMuted,
+                            modifier = Modifier.padding(vertical = 16.dp)
+                        )
+                    } else {
+                        vm.events.take(7).forEachIndexed { index, event ->
+                            HomeActivityRow(event)
+                            if (index < minOf(vm.events.size, 7) - 1) {
+                                Divider(color = UiBorder, thickness = 1.dp, modifier = Modifier.padding(start = 54.dp))
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+        }
+
+        // Reassurance Snackbar at bottom of screen
+        if (showSnackbar) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 20.dp, start = 20.dp, end = 20.dp),
+                color = Color(0xFA18181B),
+                shape = RoundedCornerShape(100.dp),
+                border = BorderStroke(1.dp, Color(0xFF3F3F46)),
+                shadowElevation = 8.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(9.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF10B981))
+                    )
+                    Text(
+                        "Back Online • Transmitting pending records...",
+                        fontFamily = Sans,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp,
+                        color = Color.White
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeCounter(modifier: Modifier, label: String, value: String) {
+    Surface(
+        modifier = modifier.height(76.dp),
+        color = UiSurface,
+        shape = CardShape,
+        border = BorderStroke(1.dp, UiBorder)
+    ) {
+        Row(
+            Modifier.fillMaxSize().padding(horizontal = 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text(label, fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 17.sp, color = UiInk)
+            Spacer(Modifier.width(5.dp))
+            Text(value, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = UiInk)
+        }
+    }
+}
+
+@Composable
+private fun HomeActionCard(
+    modifier: Modifier,
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    dark: Boolean,
+    onClick: () -> Unit
+) {
+    val background = if (dark) UiInk else UiSurface
+    val foreground = if (dark) Color.White else UiInk
+    val secondary = if (dark) Color(0xFFE4E4E7) else UiInk
+    val iconColor = if (dark) Color.White else Color.Black
+    Surface(
+        modifier = modifier.height(176.dp).clickable(onClick = onClick),
+        color = background,
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(2.dp, if (dark) UiInk else Color.Black),
+        shadowElevation = if (dark) 2.dp else 0.dp
+    ) {
+        Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.SpaceBetween) {
+            Icon(icon, null, tint = iconColor, modifier = Modifier.size(39.dp))
+            Column {
+                Text(title, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 23.sp, color = foreground, letterSpacing = (-.65).sp)
+                Spacer(Modifier.height(3.dp))
+                Text(subtitle, fontFamily = Sans, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = secondary, lineHeight = 16.sp)
+            }
+            if (dark) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Icon(Icons.Default.ArrowForward, null, tint = Color.White, modifier = Modifier.size(31.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeActivityRow(event: MovementEvent) {
+    val entry = event.eventType == EventType.ENTRY
+    val label = if (event.entityType == EntityType.VEHICLE) "Vehicle" else "Person"
+    val badgeTone = if (entry) StatusTone.Success else StatusTone.Warning
+    val time = formatShort(event.eventTimestamp)
+    Row(
+        Modifier.fillMaxWidth().height(54.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(time, fontFamily = Mono, fontWeight = FontWeight.Medium, fontSize = 11.sp, color = UiInk, modifier = Modifier.width(58.dp))
+        Text(
+            "$label  ${event.entityId}",
+            fontFamily = Sans,
+            fontWeight = FontWeight.Medium,
+            fontSize = 12.sp,
+            color = UiInk,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
+        )
+        StatusPill(if (entry) "ENTRY" else "EXIT", badgeTone, compact = true)
+    }
+}
+
+@Composable
+private fun ActivityScreen(vm: MainViewModel) {
+    var query by rememberSaveable { mutableStateOf("") }
+    var filter by rememberSaveable { mutableStateOf("ALL") }
+    var selected by remember { mutableStateOf<MovementEvent?>(null) }
+
+    val filtered = vm.events.filter { event ->
+        val matchesType = filter == "ALL" || event.entityType.name == filter
+        val q = query.trim()
+        val matchesQuery = q.isBlank() ||
+            event.entityId.contains(q, ignoreCase = true) ||
+            event.eventId.contains(q, ignoreCase = true) ||
+            event.locationId.contains(q, ignoreCase = true) ||
+            event.gateId.contains(q, ignoreCase = true)
+        matchesType && matchesQuery
+    }
+
+    Column(
+        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)
+            .padding(horizontal = 20.dp, vertical = 15.dp)
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Recent Activity", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 19.sp, color = UiInk)
+                Text("Logged events for current operational shift", fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 10.sp, color = UiMuted)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (vm.networkStatus.serverReachable && vm.pending > 0) {
+                    Surface(
+                        modifier = Modifier.clickable { vm.trySync() },
+                        color = Color(0xFF059669),
+                        shape = RoundedCornerShape(100.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(Icons.Default.Refresh, null, tint = Color.White, modifier = Modifier.size(11.dp))
+                            Text(
+                                "Sync All (${vm.pending})",
+                                fontFamily = Sans,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 9.sp,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+                Surface(
+                    modifier = Modifier.clickable {
+                        // Export CSV Action in Android app
+                        val csvBuilder = StringBuilder()
+                        csvBuilder.append("Event ID,Timestamp,Type,Action,Entity ID,Location,Gate,Synced\n")
+                        vm.events.forEach { ev ->
+                            csvBuilder.append("${ev.eventId},${ev.eventTimestamp},${ev.entityType},${ev.eventType},${ev.entityId},${ev.locationId},${ev.gateId},${ev.syncStatus == SyncStatus.SYNCED}\n")
+                        }
+                    },
+                    color = Color.White,
+                    shape = RoundedCornerShape(100.dp),
+                    border = BorderStroke(1.dp, UiBorder)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Icon(Icons.Default.ArrowDownward, null, tint = UiInk, modifier = Modifier.size(10.dp))
+                        Text("CSV", fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 9.sp, color = UiInk)
+                    }
+                }
+                Surface(color = UiBackground, shape = RoundedCornerShape(100.dp), border = BorderStroke(1.dp, UiBorder)) {
+                    Text("${filtered.size} total", fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = UiMuted, modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp))
+                }
+            }
+        }
+        Spacer(Modifier.height(11.dp))
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            placeholder = { Text("Search by personnel, vehicle ID, or gate...", fontFamily = Sans, fontSize = 10.sp, color = UiFaint) },
+            leadingIcon = { Icon(Icons.Default.Search, null, tint = UiFaint, modifier = Modifier.size(17.dp)) },
+            trailingIcon = {
+                if (query.isNotBlank()) IconButton(onClick = { query = "" }) {
+                    Icon(Icons.Default.Close, null, tint = UiFaint, modifier = Modifier.size(16.dp))
+                }
+            },
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = UiSurface, unfocusedContainerColor = UiSurface,
+                focusedIndicatorColor = UiInk, unfocusedIndicatorColor = UiBorder,
+                focusedTextColor = UiInk, unfocusedTextColor = UiInk, cursorColor = UiInk
+            ),
+            shape = SmallShape,
+            textStyle = LocalTextStyle.current.copy(fontFamily = Sans, fontSize = 11.sp)
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val allCount = vm.events.size
+            val personCount = vm.events.count { it.entityType == EntityType.PERSON }
+            val vehicleCount = vm.events.count { it.entityType == EntityType.VEHICLE }
+
+            listOf(
+                Triple("ALL", "All", allCount),
+                Triple("PERSON", "Personnel", personCount),
+                Triple("VEHICLE", "Vehicles", vehicleCount)
+            ).forEach { (kind, label, count) ->
+                val selectedChip = filter == kind
+                Surface(
+                    modifier = Modifier.clickable { filter = kind },
+                    color = if (selectedChip) UiInk else UiBackground,
+                    shape = RoundedCornerShape(100.dp),
+                    border = BorderStroke(1.dp, if (selectedChip) UiInk else UiBorder)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Text(
+                            label,
+                            fontFamily = Sans,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 11.sp,
+                            color = if (selectedChip) Color.White else UiMuted
+                        )
+                        Surface(
+                            color = if (selectedChip) Color(0xFF27272A) else Color(0xFFE4E4E7),
+                            shape = RoundedCornerShape(100.dp)
+                        ) {
+                            Text(
+                                "$count",
+                                fontFamily = Mono,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 9.sp,
+                                color = if (selectedChip) Color(0xFFD4D4D8) else UiInk,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+
+        if (filtered.isEmpty()) {
+            EmptyState(Icons.Default.History, "No events matched", "Events recorded during your shift will appear here.")
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.fillMaxSize()) {
+                items(filtered, key = { it.eventId }) { event ->
+                    Box(Modifier.clickable { selected = event }) { ActivityRow(event) }
+                }
+                item { Spacer(Modifier.height(14.dp)) }
+            }
+        }
+    }
+
+    val current = selected
+    if (current != null) {
+        ActivityDetailSheet(current) { selected = null }
+    }
+}
+
+@Composable
+private fun ActivityRow(event: MovementEvent) {
+    val isEntry = event.eventType == EventType.ENTRY
+    Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(formatShort(event.eventTimestamp), fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = UiFaint, modifier = Modifier.width(50.dp))
+            Box(Modifier.size(26.dp).clip(RoundedCornerShape(7.dp)).background(UiBackground), contentAlignment = Alignment.Center) {
+                Icon(if (event.entityType == EntityType.VEHICLE) Icons.Default.LocalShipping else Icons.Default.Person, null, tint = Color(0xFF3F3F46), modifier = Modifier.size(14.dp))
+            }
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                Text("${event.entityType.name} ${event.entityId}", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = UiInk, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("${event.locationId} • ${event.gateId} • ${event.sourceType.name}", fontFamily = Mono, fontSize = 8.sp, color = UiFaint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Spacer(Modifier.width(7.dp))
+            StatusPill(event.eventType.name, if (isEntry) StatusTone.Success else StatusTone.Warning, compact = true)
+        }
+    }
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ActivityDetailSheet(event: MovementEvent, onDismiss: () -> Unit) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = UiSurface,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        dragHandle = { Box(Modifier.padding(top = 8.dp).size(width = 42.dp, height = 4.dp).clip(CircleShape).background(Color(0xFFD4D4D8))) }
+    ) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).navigationBarsPadding().padding(bottom = 16.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("LOG ENTRY", fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = UiFaint, letterSpacing = 1.sp)
+                    Text("${event.entityType.name} • ${event.entityId}", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = UiInk)
+                }
+                StatusPill(event.eventType.name, if (event.eventType == EventType.ENTRY) StatusTone.Success else StatusTone.Warning)
+            }
+            Spacer(Modifier.height(12.dp))
+            Surface(Modifier.fillMaxWidth(), color = UiBackground, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
+                Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    ReviewRow("Recorded Time", formatLongTime(event.eventTimestamp))
+                    ReviewRow("Location / Gate", "${event.locationId} • ${event.gateId}")
+                    ReviewRow("Operator", event.operatorId)
+                    ReviewRow("Device", event.deviceId)
+                    ReviewRow("Source", "${event.sourceType.name} • ${event.sourceId}")
+                    ReviewRow("Sync State", event.syncStatus.name)
+                    ReviewRow("Event ID", event.eventId)
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            SecondaryButton("CLOSE", Icons.Default.Close, onDismiss)
+        }
+    }
+}
+
+@Composable
+private fun SyncStatusScreen(vm: MainViewModel) {
+    val connected = vm.networkStatus.serverReachable
+    Column(
+        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 15.dp)
+    ) {
+        ScreenHeader("Sync & Network Status", "Terminal synchronization with central security hub")
+        Spacer(Modifier.height(14.dp))
+
+        Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = CardShape, border = BorderStroke(1.dp, UiBorder)) {
+            Column(Modifier.padding(16.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier.size(40.dp).clip(RoundedCornerShape(12.dp))
+                                .background(if (connected) UiSuccessBg else UiWarningBg)
+                                .border(1.dp, if (connected) Color(0xFFA7F3D0) else Color(0xFFFDE68A), RoundedCornerShape(12.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(if (connected) Icons.Default.Wifi else Icons.Default.CloudOff, null, tint = if (connected) UiSuccess else UiWarning, modifier = Modifier.size(19.dp))
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Column {
+                            Text("SERVER LINK", fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 8.sp, letterSpacing = 1.sp, color = UiFaint)
+                            Text(if (connected) "Connected" else "Field Offline Mode", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = UiInk)
+                        }
+                    }
+                    StatusPill(if (connected) "● Online" else "○ Offline", if (connected) StatusTone.Success else StatusTone.Warning, compact = true)
+                }
+                Spacer(Modifier.height(12.dp))
+                StatusBanner(
+                    if (connected) "Server reachability verified. Pending records can be queued for synchronization."
+                    else "Records remain in the secure local buffer and synchronization resumes when network becomes available.",
+                    if (connected) BannerTone.Success else BannerTone.Warning
+                )
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+            StatCard(Modifier.weight(1f), "LAST SYNC", formatSyncTime(vm.syncUi.lastSuccessfulSyncAt))
+            StatCard(Modifier.weight(1f), "PENDING BUFFER", "${vm.pending} records", vm.pending > 0)
+        }
+        Spacer(Modifier.height(9.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+            StatCard(Modifier.weight(1f), "ATTENTION", vm.attention.toString())
+            StatCard(Modifier.weight(1f), "UPLOADED LAST", vm.syncUi.lastUploadedCount.toString())
+        }
+
+        Spacer(Modifier.height(10.dp))
+        Surface(Modifier.fillMaxWidth(), color = UiSurfaceSubtle, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
+            Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.CloudDone, null, tint = UiFaint, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(7.dp))
+                    Text("Local secure cache & queue", fontFamily = Sans, fontSize = 10.sp, color = Color(0xFF52525B))
+                }
+                Text("ACTIVE", fontFamily = Mono, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = UiSuccess)
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+        Surface(
+            Modifier.fillMaxWidth(),
+            color = UiSurface,
+            shape = CardShape,
+            border = BorderStroke(1.dp, if (vm.pending > 0 && connected) Color(0xFFA7F3D0) else UiBorder)
+        ) {
+            Column(Modifier.padding(14.dp)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier.size(32.dp).clip(RoundedCornerShape(8.dp))
+                                .background(UiSurfaceSubtle),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.CloudUpload, null, tint = UiInk, modifier = Modifier.size(18.dp))
+                        }
+                        Spacer(Modifier.width(9.dp))
+                        Column {
+                            Text("BATCH UPLOAD", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = UiInk)
+                            Text("Simultaneous buffer transmission", fontFamily = Sans, fontSize = 9.sp, color = UiFaint)
+                        }
+                    }
+                    StatusPill(
+                        if (vm.pending > 0) "${vm.pending} Pending" else "All Synced",
+                        if (vm.pending > 0) StatusTone.Warning else StatusTone.Success,
+                        compact = true
+                    )
+                }
+
+                if (vm.pending > 0) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        if (connected) "Connection verified. Ready to trigger batch upload of all offline events."
+                        else "Internet connection required to transmit batch buffer.",
+                        fontFamily = Sans,
+                        fontSize = 10.sp,
+                        color = UiMuted
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    PrimaryButton(
+                        "TRIGGER BATCH UPLOAD (${vm.pending})",
+                        Icons.Default.CloudUpload,
+                        connected
+                    ) {
+                        vm.trySync()
+                    }
+                } else {
+                    Spacer(Modifier.height(8.dp))
+                    Text("No pending events in local queue.", fontFamily = Sans, fontSize = 10.sp, color = UiFaint)
+                }
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+        SecondaryButton("FORCE SYNC / DIAGNOSTIC PING", Icons.Default.Refresh) { vm.trySync() }
+        Spacer(Modifier.height(7.dp))
+        SecondaryButton("TEST CONNECTION", Icons.Default.Wifi) { vm.testConnection() }
+
+        if (vm.syncUi.lastError.isNotBlank()) {
+            Spacer(Modifier.height(9.dp))
+            StatusBanner(vm.syncUi.lastError, BannerTone.Error)
+        }
+        Spacer(Modifier.height(15.dp))
+    }
+}
+
+@Composable
+private fun StatCard(modifier: Modifier, title: String, value: String, warning: Boolean = false) {
+    Surface(modifier, color = UiSurface, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
+        Column(Modifier.padding(12.dp)) {
+            Text(title, fontFamily = Sans, fontSize = 8.sp, color = UiFaint, letterSpacing = .8.sp)
+            Spacer(Modifier.height(4.dp))
+            Text(value, fontFamily = Mono, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (warning) UiWarning else UiInk)
+        }
+    }
+}
+
+@Composable
+private fun OperatorScreen(vm: MainViewModel, onOpenSettings: () -> Unit) {
+    val cfg = vm.currentConfig()
+    val soundEnabled = vm.soundEnabled
+    Column(
+        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 15.dp)
+    ) {
+        ScreenHeader("Gatekeeper Profile", "Active terminal operator credentials")
+        Spacer(Modifier.height(14.dp))
+
+        Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = CardShape, border = BorderStroke(1.dp, UiBorder)) {
+            Column(Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(UiInk), contentAlignment = Alignment.Center) {
+                        Text(cfg.operatorId.ifBlank { "OP" }.takeLast(6), fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color.White)
+                    }
+                    Spacer(Modifier.width(11.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("FIELD GATEKEEPER", fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 8.sp, letterSpacing = 1.sp, color = UiFaint)
+                        Text(cfg.operatorId.ifBlank { "Unassigned Operator" }, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = UiInk)
+                        Text(cfg.operatorRole, fontFamily = Sans, fontSize = 10.sp, color = UiMuted)
+                    }
+                }
+                Divider(color = UiBorderSoft, modifier = Modifier.padding(vertical = 12.dp))
+                KeyValueRow("Assigned Post", "${cfg.locationId} • ${cfg.gateId}", Icons.Default.Map)
+                Spacer(Modifier.height(9.dp))
+                KeyValueRow("Device ID", cfg.deviceId, Icons.Default.DevicesOther)
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+        Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
+            Row(Modifier.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(if (soundEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff, null, tint = if (soundEnabled) UiSuccess else UiFaint, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Scanner audio feedback", fontFamily = Sans, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = UiInk)
+                Spacer(Modifier.weight(1f))
+                TogglePill(soundEnabled) { vm.updateSoundEnabled(!soundEnabled) }
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+        if (cfg.operatorRole == "ADMIN") {
+            SecondaryButton("ADMINISTRATOR CONFIGURATION", Icons.Default.Settings, onOpenSettings)
+        } else {
+            Surface(Modifier.fillMaxWidth(), color = UiSurfaceSubtle, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
+                Text("Device configuration is restricted to administrators.", fontFamily = Sans, fontSize = 10.sp, color = UiMuted, modifier = Modifier.padding(12.dp))
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        DangerButton("HANDOVER SHIFT / LOG OUT", Icons.Default.Logout, vm::logout)
+        Spacer(Modifier.height(15.dp))
+    }
+}
+
+@Composable
+private fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
+    val cfg = vm.currentConfig()
+    var host by rememberSaveable { mutableStateOf(cfg.serverHost) }
+    var port by rememberSaveable { mutableStateOf(cfg.serverPort.toString()) }
+    var location by rememberSaveable { mutableStateOf(cfg.locationId) }
+    var gate by rememberSaveable { mutableStateOf(cfg.gateId) }
+    var device by rememberSaveable { mutableStateOf(cfg.deviceId) }
+    var operator by rememberSaveable { mutableStateOf(cfg.operatorId) }
+    var key by rememberSaveable { mutableStateOf(cfg.deviceKey) }
+
+    Column(
+        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding().verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 15.dp)
+    ) {
+        ScreenHeader("Administrator Configuration", "Device endpoint and gate assignment", onBack)
+        Spacer(Modifier.height(12.dp))
+        ConfigField("Server IP / Host", host) { host = it }
+        Spacer(Modifier.height(8.dp))
+        ConfigField("Server Port", port) { port = it.filter(Char::isDigit) }
+        Spacer(Modifier.height(8.dp))
+        ConfigField("Location ID", location) { location = it }
+        Spacer(Modifier.height(8.dp))
+        ConfigField("Gate ID", gate) { gate = it }
+        Spacer(Modifier.height(8.dp))
+        ConfigField("Device ID", device) { device = it }
+        Spacer(Modifier.height(8.dp))
+        ConfigField("Operator ID", operator) { operator = it }
+        Spacer(Modifier.height(8.dp))
+        ConfigField("Device Key", key, true) { key = it }
+        Spacer(Modifier.height(12.dp))
+        PrimaryButton("SAVE CONFIGURATION", Icons.Default.Check) {
+            vm.updateConfig(host, port.toIntOrNull() ?: cfg.serverPort, location, gate, device, operator)
+            vm.updateDeviceKey(key)
+        }
+        Spacer(Modifier.height(7.dp))
+        SecondaryButton("TEST CONNECTION", Icons.Default.Wifi) { vm.testConnection() }
+        Spacer(Modifier.height(9.dp))
+        Text(vm.message, fontFamily = Mono, fontSize = 9.sp, color = UiMuted)
+        Spacer(Modifier.height(20.dp))
+    }
+}
+
+@Composable
+private fun ConfigField(label: String, value: String, password: Boolean = false, onValueChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value, onValueChange = onValueChange, modifier = Modifier.fillMaxWidth(), singleLine = true,
+        label = { Text(label, fontSize = 10.sp) },
+        visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = UiSurface, unfocusedContainerColor = UiSurface,
+            focusedIndicatorColor = UiInk, unfocusedIndicatorColor = Color(0xFFD4D4D8),
+            focusedTextColor = UiInk, unfocusedTextColor = UiInk, cursorColor = UiInk
+        ),
+        shape = SmallShape
+    )
+}
+
+@Composable
+private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonResult) {
+    var confirm by rememberSaveable { mutableStateOf(false) }
+    val cfg = vm.currentConfig()
+    val entryAt = remember(vm.events, session.person.id) {
+        vm.events.filter {
+            it.entityType == EntityType.PERSON &&
+                it.entityId == session.person.id &&
+                it.eventType == EventType.ENTRY
+        }.maxByOrNull { it.eventTimestamp }?.eventTimestamp
+    }
+    val stayMs = if (session.inside && entryAt != null) System.currentTimeMillis() - entryAt else 0L
+    val action = if (session.inside) "RECORD EXIT" else "RECORD ENTRY"
+
+    Column(
+        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)
+            .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 13.dp),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = vm::returnToHome, modifier = Modifier.size(42.dp)) {
+                    Icon(Icons.Default.ArrowBack, "Back", tint = UiInk, modifier = Modifier.size(30.dp))
+                }
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    "Person Identified",
+                    modifier = Modifier.weight(1f),
+                    fontFamily = Sans,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 21.sp,
+                    color = UiInk,
+                    textAlign = TextAlign.Center,
+                    letterSpacing = (-.35).sp
+                )
+                Spacer(Modifier.width(42.dp))
+            }
+
+            Spacer(Modifier.height(34.dp))
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+                Surface(
+                    Modifier.fillMaxWidth().padding(top = 40.dp),
+                    color = UiSurface,
+                    shape = RoundedCornerShape(18.dp),
+                    border = BorderStroke(1.dp, Color(0xFFD4D4D8))
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Spacer(Modifier.height(43.dp))
+                        Spacer(Modifier.height(2.dp))
+                        Text(session.person.name, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 25.sp, color = UiInk, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 20.dp))
+                        Spacer(Modifier.height(3.dp))
+                        Text(session.person.id, fontFamily = Mono, fontSize = 17.sp, color = Color(0xFF52525B), fontWeight = FontWeight.Medium)
+                        Spacer(Modifier.height(4.dp))
+                        Text(session.person.category, fontFamily = Sans, fontSize = 15.sp, color = Color(0xFF52525B), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 20.dp))
+                        Divider(Modifier.padding(top = 20.dp), color = Color(0xFFD4D4D8))
+                        Row(Modifier.fillMaxWidth().height(76.dp)) {
+                            PersonDetailCell("Assigned Post", cfg.locationId, Modifier.weight(1f))
+                            Box(Modifier.fillMaxHeight().width(1.dp).background(Color(0xFFD4D4D8)))
+                            PersonDetailCell("Current Status", if (session.inside) "On-Site (Inside)" else "Off-Site", Modifier.weight(1f))
+                        }
+                        Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFFD4D4D8)))
+                        Row(Modifier.fillMaxWidth().height(76.dp)) {
+                            PersonDetailCell("Entry Time", entryAt?.let(::formatShort) ?: "—", Modifier.weight(1f))
+                            Box(Modifier.fillMaxHeight().width(1.dp).background(Color(0xFFD4D4D8)))
+                            PersonDetailCell("Stay Duration", if (stayMs > 0) formatDuration(stayMs) else "—", Modifier.weight(1f), accent = session.inside)
+                        }
+                    }
+                }
+
+                Box(
+                    Modifier.size(88.dp).clip(CircleShape).background(UiInk)
+                        .border(3.dp, UiSurface, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(initials(session.person.name), fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 25.sp, color = Color.White)
+                }
+                Box(Modifier.align(Alignment.TopEnd).padding(top = 50.dp, end = 18.dp)) {
+                    StatusPill("ACTIVE", StatusTone.Success)
+                }
+            }
+        }
+
+        Column(Modifier.padding(top = 22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Surface(
+                Modifier.fillMaxWidth().height(58.dp).clickable { confirm = true },
+                color = UiInk,
+                shape = RoundedCornerShape(100.dp),
+                shadowElevation = 2.dp
+            ) {
+                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Shield, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("$action (${cfg.locationId})", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
+                }
+            }
+            Surface(
+                Modifier.fillMaxWidth().height(54.dp).clickable(onClick = vm::openPersonScanner),
+                color = Color.Transparent,
+                shape = RoundedCornerShape(100.dp),
+                border = BorderStroke(2.dp, UiInk)
+            ) {
+                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Cancel & Scan Again", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = UiInk)
+                }
+            }
+        }
+    }
+
+    if (confirm) {
+        ConfirmBottomSheet(
+            title = "CONFIRM ${if (session.inside) "EXIT" else "ENTRY"}",
+            subtitle = "Confirmation Required",
+            onDismiss = { confirm = false },
+            onConfirm = { confirm = false; vm.confirmPerson() }
+        ) {
+            ReviewRow("Personnel", "${session.person.name} (${session.person.id})")
+            ReviewRow("Location / Gate", "${cfg.locationId} • ${cfg.gateId}")
+            ReviewRow("Timestamp", formatLongTime(System.currentTimeMillis()))
+            if (stayMs > 0) ReviewRow("Calculated Stay", formatDuration(stayMs), valueColor = UiWarning)
+        }
+    }
+}
+
+@Composable
+private fun PersonDetailCell(label: String, value: String, modifier: Modifier = Modifier, accent: Boolean = false) {
+    Column(modifier.fillMaxHeight().padding(horizontal = 12.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        Text(label, fontFamily = Sans, fontSize = 12.sp, color = UiInk, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(4.dp))
+        Text(value, fontFamily = if (accent) Mono else Sans, fontSize = 15.sp, color = if (accent) UiWarning else UiInk, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun VehicleScanScreen(vm: MainViewModel, session: ScanSession.VehicleScan) {
+    val vehicle = vm.scannedVehicle ?: VehicleEntity(session.vehicleId, "", "Vehicle", true)
+    val entry = !session.inside
+    Column(
+        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column {
+            ScreenHeader(if (entry) "Vehicle Identified" else "Vehicle Exit", if (entry) "Vehicle credential verified" else "Vehicle currently registered as inside", vm::returnToHome)
+            Spacer(Modifier.height(12.dp))
+            VehicleIdentityCard(vehicle)
+            Spacer(Modifier.height(11.dp))
+            Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
+                Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    KeyValueRow("Vehicle ID", vehicle.id)
+                    KeyValueRow("Registration", vehicle.registration.ifBlank { "—" })
+                    KeyValueRow("Type", vehicle.type)
+                    KeyValueRow("Current presence", if (session.inside) "On-Site (Inside)" else "Outside", positive = false)
+                }
+            }
+        }
+        Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            PrimaryButton(if (entry) "BUILD VEHICLE MANIFEST" else "CONFIRM VEHICLE EXIT", if (entry) Icons.Default.ArrowForward else Icons.Default.Shield, true) {
+                vm.startVehicleDriverScan()
+            }
+            SecondaryTextButton("CANCEL & RETURN HOME", vm::returnToHome)
+        }
+    }
+}
+
+@Composable
+private fun VehicleIdentityCard(vehicle: VehicleEntity) {
+    Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, UiBorder), shadowElevation = 2.dp) {
+        Column {
+            Column(Modifier.padding(horizontal = 17.dp, vertical = 16.dp)) {
+                Text("Vehicle Details", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Color.Black)
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.LocalShipping, null, tint = Color.Black, modifier = Modifier.size(46.dp))
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(vehicle.registration.ifBlank { "VEHICLE ${vehicle.id}" }, fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 25.sp, color = Color.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("Vehicle ID: ${vehicle.id}", fontFamily = Sans, fontSize = 14.sp, color = Color(0xFF404040), fontWeight = FontWeight.Medium)
+                    }
+                }
+            }
+            Divider(color = Color(0xFFD4D4D8))
+            Text(
+                "Type: ${vehicle.type.ifBlank { "—" }}",
+                fontFamily = Sans,
+                fontSize = 15.sp,
+                color = Color.Black,
+                modifier = Modifier.padding(horizontal = 17.dp, vertical = 14.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun VehicleDriverScreen(vm: MainViewModel, session: ScanSession.VehicleDriver) {
+    val vehicle = vm.scannedVehicle ?: VehicleEntity(session.vehicleId, "", "Vehicle", true)
+    Column(
+        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column {
+            FlowHeader("Step 2 of 4 • Driver")
+            Spacer(Modifier.height(11.dp))
+            VehicleIdentityCard(vehicle)
+            Spacer(Modifier.height(9.dp))
+            ManifestPersonCard("VERIFIED DRIVER", session.driver, false)
+            Spacer(Modifier.height(9.dp))
+            Surface(Modifier.fillMaxWidth(), color = UiSurfaceSubtle, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
+                Text("Driver verified. Continue to optional co-driver selection.", fontFamily = Sans, fontSize = 10.sp, color = UiMuted, modifier = Modifier.padding(12.dp))
+            }
+        }
+        Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            PrimaryButton("ADD OPTIONAL CO-DRIVER", Icons.Default.PersonAdd) { vm.startCoDriverScan() }
+            SecondaryButton("NO CO-DRIVER • CONTINUE", Icons.Default.ArrowForward) { vm.skipCoDriver() }
+            SecondaryTextButton("BACK TO VEHICLE", vm::openVehicleScanner)
+        }
+    }
+}
+
+@Composable
+private fun VehicleCoDriverScreen(vm: MainViewModel, session: ScanSession.VehicleCoDriver) {
+    val vehicle = vm.scannedVehicle ?: VehicleEntity(session.vehicleId, "", "Vehicle", true)
+    Column(
+        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column {
+            FlowHeader("Step 3 of 4 • Co-Driver")
+            Spacer(Modifier.height(11.dp))
+            Surface(Modifier.fillMaxWidth(), color = UiSurfaceSubtle, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    KeyValueRow("Vehicle", "${vehicle.id} (${vehicle.registration.ifBlank { "No plate" }})")
+                    Divider(color = UiBorderSoft)
+                    KeyValueRow("Verified Driver", "${session.driver.name} (${session.driver.id})", positive = true)
+                }
+            }
+            Spacer(Modifier.height(17.dp))
+            Box(
+                Modifier.size(56.dp).clip(RoundedCornerShape(14.dp)).background(UiBackground).border(1.dp, UiBorder, RoundedCornerShape(14.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.PersonAdd, null, tint = Color(0xFF52525B), modifier = Modifier.size(27.dp))
+            }
+            Spacer(Modifier.height(9.dp))
+            Text("Is there a Co-Driver?", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = UiInk, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+            Text("Scan a co-driver badge for dual-driver commercial transit, or continue directly.", fontFamily = Sans, fontSize = 10.sp, color = UiMuted, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+        }
+        Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            PrimaryButton("SCAN CO-DRIVER QR", Icons.Default.QrCodeScanner) { vm.startCoDriverScan() }
+            SecondaryButton("NO CO-DRIVER • CONTINUE", Icons.Default.ArrowForward) { vm.beginOccupants() }
+        }
+    }
+}
+
+@Composable
+private fun VehicleOccupantsScreen(vm: MainViewModel, session: ScanSession.VehicleOccupants) {
+    val vehicle = vm.scannedVehicle ?: VehicleEntity(session.vehicleId, "", "Vehicle", true)
+    val totalAdditional = session.occupants.size
+    Column(
+        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)
+            .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 15.dp),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column {
+            FlowHeader("Step 4 of 4: Manifest Verification")
+            Spacer(Modifier.height(14.dp))
+            VehicleIdentityCard(vehicle)
+            Spacer(Modifier.height(13.dp))
+            Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, UiBorder), shadowElevation = 2.dp) {
+                Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                    ManifestScreenshotRow("Primary Driver:", "${session.driver.name} (${session.driver.id})", verified = true)
+                    session.coDriver?.let {
+                        Divider(color = Color(0xFFD4D4D8), modifier = Modifier.padding(vertical = 7.dp))
+                        ManifestScreenshotRow("Co-Driver:", "${it.name} (${it.id})", verified = true, removable = true, onRemove = vm::removeCoDriver)
+                    }
+                    Divider(color = Color(0xFFD4D4D8), modifier = Modifier.padding(vertical = 7.dp))
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Person, null, tint = Color(0xFF155EAD), modifier = Modifier.size(28.dp))
+                        Spacer(Modifier.width(11.dp))
+                        Text(
+                            "$totalAdditional Additional Occupants",
+                            fontFamily = Sans,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.Black
+                        )
+                    }
+                    if (session.occupants.isNotEmpty()) {
+                        Spacer(Modifier.height(9.dp))
+                        session.occupants.forEachIndexed { index, person ->
+                            Divider(color = Color(0xFFE4E4E7), modifier = Modifier.padding(start = 40.dp, top = if (index == 0) 0.dp else 6.dp, bottom = 6.dp))
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text("#${index + 1}", fontFamily = Mono, fontSize = 9.sp, color = UiFaint, modifier = Modifier.width(34.dp))
+                                Text("${person.name} (${person.id})", fontFamily = Sans, fontSize = 11.sp, color = UiInk, modifier = Modifier.weight(1f))
+                                IconButton(onClick = { vm.removeOccupant(person.id) }, modifier = Modifier.size(36.dp)) {
+                                    Icon(Icons.Default.DeleteOutline, "Remove", tint = UiFaint, modifier = Modifier.size(17.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(9.dp))
+            SecondaryButton("ADD ADDITIONAL PERSON QR", Icons.Default.Add) { vm.addOccupantScan() }
+        }
+        Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            VehicleReviewButton(vm)
+        }
+    }
+}
+
+@Composable
+private fun ManifestScreenshotRow(
+    label: String,
+    value: String,
+    verified: Boolean,
+    removable: Boolean = false,
+    onRemove: (() -> Unit)? = null
+) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        if (verified) {
+            Box(Modifier.size(28.dp).clip(CircleShape).background(Color(0xFF155EAD)), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(17.dp))
+            }
+        }
+        Spacer(Modifier.width(11.dp))
+        Column(Modifier.weight(1f)) {
+            Text(buildString {
+                append(label).append(' ').append(value)
+            }, fontFamily = Sans, fontSize = 15.sp, color = Color.Black, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (verified) Text("[Verified]", fontFamily = Sans, fontSize = 14.sp, color = Color(0xFF155EAD), fontWeight = FontWeight.Medium)
+        }
+        if (removable && onRemove != null) IconButton(onClick = onRemove) { Icon(Icons.Default.DeleteOutline, "Remove", tint = UiFaint, modifier = Modifier.size(18.dp)) }
+    }
+}
+
+@Composable
+private fun VehicleReviewButton(vm: MainViewModel) {
+    val s = vm.session as? ScanSession.VehicleOccupants ?: return
+    var confirm by rememberSaveable { mutableStateOf(false) }
+    val vehicle = vm.scannedVehicle ?: VehicleEntity(s.vehicleId, "", "Vehicle", true)
+    val cfg = vm.currentConfig()
+    Surface(
+        Modifier.fillMaxWidth().height(62.dp).clickable { confirm = true },
+        color = Color.Black,
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Shield, null, tint = Color.White, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("CONFIRM VEHICLE ENTRY", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
+        }
+    }
+    if (confirm) {
+        ConfirmBottomSheet(
+            title = "CONFIRM VEHICLE ENTRY",
+            subtitle = "Step 4 of 4 • Manifest Review",
+            onDismiss = { confirm = false },
+            onConfirm = { confirm = false; vm.confirmVehicleEntry() }
+        ) {
+            VehicleReviewSummary(vehicle, s.driver, s.coDriver, s.occupants, cfg.locationId, cfg.gateId)
+        }
+    }
+}
+
+@Composable
+private fun UnknownResultScreen(vm: MainViewModel, message: String) {
+    Column(
+        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp, vertical = 22.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        ScreenHeader("Scan Result", "Verification outcome", vm::returnToHome)
+        Spacer(Modifier.height(28.dp))
+        Box(Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)).background(UiWarningBg).border(1.dp, Color(0xFFFDE68A), RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.WarningAmber, null, tint = UiWarning, modifier = Modifier.size(31.dp))
+        }
+        Spacer(Modifier.height(13.dp))
+        Text("ACTION NOT COMPLETED", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = UiInk)
+        Spacer(Modifier.height(6.dp))
+        Text(message.replace('_', ' '), fontFamily = Sans, fontSize = 11.sp, color = UiMuted, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(20.dp))
+        Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
+            Text("The event was not committed locally.", fontFamily = Mono, fontSize = 9.sp, color = UiMuted, modifier = Modifier.padding(12.dp), textAlign = TextAlign.Center)
+        }
+        Spacer(Modifier.height(20.dp))
+        PrimaryButton("SCAN PERSON QR", Icons.Default.Person) { vm.openPersonScanner() }
+        Spacer(Modifier.height(7.dp))
+        SecondaryButton("SCAN VEHICLE QR", Icons.Default.LocalShipping) { vm.openVehicleScanner() }
+    }
+}
+
+@Composable
+private fun SuccessScreen(
+    vm: MainViewModel,
+    event: MovementEvent,
+    vehicle: CompletedVehicleDisplay?,
+    durationMs: Long
+) {
+    val exit = event.eventType == EventType.EXIT
+    Column(
+        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 18.dp)
+    ) {
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.size(70.dp).clip(CircleShape).background(UiSuccessBg).border(2.dp, UiSuccess, CircleShape), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Check, null, tint = UiSuccess, modifier = Modifier.size(34.dp))
+            }
+            Spacer(Modifier.height(9.dp))
+            StatusPill(if (event.syncStatus == SyncStatus.SYNCED) "SYNCHRONIZED" else "LOCAL BUFFER STORED", StatusTone.Success)
+            Spacer(Modifier.height(7.dp))
+            Text("${event.eventType.name} CONFIRMED", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 23.sp, color = UiInk)
+            Text("Gate movement record generated", fontFamily = Sans, fontSize = 10.sp, color = UiMuted)
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = CardShape, border = BorderStroke(1.dp, UiBorder)) {
+            Column {
+                Box(Modifier.fillMaxWidth().height(6.dp).background(if (exit) UiWarning else UiSuccess))
+                Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val title = if (event.entityType == EntityType.VEHICLE) vehicle?.vehicle?.id ?: event.entityId else event.entityId
+                    val sub = if (event.entityType == EntityType.VEHICLE) vehicle?.vehicle?.registration.orEmpty() else "Personnel record"
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+                        Column(Modifier.weight(1f)) {
+                            Text(if (event.entityType == EntityType.VEHICLE) "VEHICLE UNIT" else "PERSONNEL RECORD", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 1.sp, color = UiFaint)
+                            Spacer(Modifier.height(3.dp))
+                            Text(title, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = UiInk)
+                            if (sub.isNotBlank()) Text(sub, fontFamily = Mono, fontSize = 9.sp, color = UiMuted)
+                        }
+                        DataBadge(event.eventId)
+                    }
+                    Divider(color = UiBorderSoft)
+                    Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                        DetailTile(Modifier.weight(1f), "FACILITY POST", event.locationId, Icons.Default.Map)
+                        DetailTile(Modifier.weight(1f), "ACCESS POINT", event.gateId, Icons.Default.Security)
+                    }
+                    if (exit && durationMs > 0) {
+                        Surface(Modifier.fillMaxWidth(), color = UiWarningBg, shape = SmallShape, border = BorderStroke(1.dp, Color(0xFFFDE68A))) {
+                            Row(Modifier.padding(11.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.AccessTime, null, tint = UiWarning, modifier = Modifier.size(15.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("TOTAL VERIFIED STAY", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = Color(0xFF92400E))
+                                }
+                                Text(formatDuration(durationMs), fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF451A03))
+                            }
+                        }
+                    }
+                    if (vehicle != null && event.entityType == EntityType.VEHICLE && event.eventType == EventType.ENTRY) {
+                        Surface(Modifier.fillMaxWidth(), color = UiSurfaceSubtle, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
+                            Column(Modifier.padding(11.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Text("MANIFEST VERIFICATION", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = .9.sp, color = UiMuted)
+                                ManifestSummaryLine("Driver", vehicle.driver?.let { "${it.name} (${it.id})" })
+                                vehicle.coDriver?.let { ManifestSummaryLine("Co-driver", "${it.name} (${it.id})") }
+                                ManifestSummaryLine("Occupant Manifest", "${1 + (if (vehicle.coDriver != null) 1 else 0) + vehicle.occupants.size} persons total")
+                            }
+                        }
+                    }
+                    Divider(color = UiBorderSoft)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text(formatLongTime(event.eventTimestamp), fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = UiMuted)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CheckCircle, null, tint = UiSuccess, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(if (event.syncStatus == SyncStatus.SYNCED) "Synchronized" else "Buffered Offline", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = UiSuccess)
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+        PrimaryButton("SCAN NEXT TARGET", Icons.Default.ArrowForward) { vm.scanNextAfterSuccess() }
+        Spacer(Modifier.height(7.dp))
+        SecondaryButton("RETURN TO TERMINAL HOME", Icons.Default.Home) { vm.returnHomeAfterSuccess() }
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun VehicleReviewSummary(
+    vehicle: VehicleEntity,
+    driver: PersonEntity,
+    coDriver: PersonEntity?,
+    occupants: List<PersonEntity>,
+    location: String,
+    gate: String
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        VehicleIdentityCard(vehicle)
+        Divider(color = UiBorderSoft)
+        ReviewRow("Primary Driver", "${driver.name} (${driver.id})", true)
+        coDriver?.let { ReviewRow("Co-driver", "${it.name} (${it.id})", true) }
+        ReviewRow("Additional Occupants", if (occupants.isEmpty()) "None" else "${occupants.size} person(s)")
+        ReviewRow("Total Persons Onboard", "${1 + (if (coDriver != null) 1 else 0) + occupants.size} individuals")
+        Divider(color = UiBorderSoft)
+        ReviewRow("Station Post", "$location • $gate")
+        ReviewRow("Timestamp", formatLongTime(System.currentTimeMillis()))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ConfirmBottomSheet(
+    title: String,
+    subtitle: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = UiSurface,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        dragHandle = {
+            Box(Modifier.padding(top = 8.dp).size(width = 42.dp, height = 4.dp).clip(CircleShape).background(Color(0xFFD4D4D8)))
+        }
+    ) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).navigationBarsPadding().padding(bottom = 12.dp)) {
+            Text(subtitle.uppercase(Locale.getDefault()), fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 8.sp, letterSpacing = 1.1.sp, color = UiFaint, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+            Spacer(Modifier.height(3.dp))
+            Text(title, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = UiInk, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+            Spacer(Modifier.height(12.dp))
+            Surface(Modifier.fillMaxWidth(), color = UiSurfaceSubtle, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
+                Column(Modifier.padding(13.dp), content = content)
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SecondaryButton(Modifier.weight(1f), "CANCEL", null, onDismiss)
+                PrimaryButton(Modifier.weight(1f), "CONFIRM", Icons.Default.CheckCircle, true, onConfirm)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PrimaryButton(
+    modifier: Modifier = Modifier,
+    text: String,
+    icon: ImageVector? = null,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    Surface(
+        Modifier.then(modifier).fillMaxWidth().height(50.dp).clickable(enabled = enabled, onClick = onClick),
+        color = if (enabled) UiInk else Color(0xFFD4D4D8),
+        contentColor = Color.White,
+        shape = RoundedCornerShape(12.dp),
+        shadowElevation = if (enabled) 2.dp else 0.dp
+    ) {
+        Row(Modifier.fillMaxSize().padding(horizontal = 15.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            Text(text, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = if (enabled) Color.White else UiMuted, textAlign = TextAlign.Center)
+            icon?.let {
+                Spacer(Modifier.width(7.dp))
+                Icon(it, null, tint = if (enabled) UiSuccess else UiMuted, modifier = Modifier.size(16.dp))
+            }
+        }
+    }
+}
+
+// Convenience overload matching call sites with (text, icon, enabled?, action)
+@Composable
+private fun PrimaryButton(
+    text: String,
+    icon: ImageVector? = null,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) = PrimaryButton(Modifier, text, icon, enabled, onClick)
+
+@Composable
+private fun SecondaryButton(
+    modifier: Modifier = Modifier,
+    text: String,
+    icon: ImageVector? = null,
+    onClick: () -> Unit
+) {
+    Surface(
+        Modifier.then(modifier).fillMaxWidth().height(48.dp).clickable(onClick = onClick),
+        color = UiSurface, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, UiBorder)
+    ) {
+        Row(Modifier.fillMaxSize().padding(horizontal = 15.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            icon?.let { Icon(it, null, tint = Color(0xFF52525B), modifier = Modifier.size(16.dp)); Spacer(Modifier.width(7.dp)) }
+            Text(text, fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 10.sp, color = UiInk, textAlign = TextAlign.Center)
+        }
+    }
+}
+
+@Composable
+private fun SecondaryButton(text: String, icon: ImageVector? = null, onClick: () -> Unit) =
+    SecondaryButton(Modifier, text, icon, onClick)
+
+@Composable
+private fun SecondaryTextButton(text: String, onClick: () -> Unit) {
+    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Text(text, fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 10.sp, color = UiMuted)
+    }
+}
+
+@Composable
+private fun DangerButton(text: String, icon: ImageVector, onClick: () -> Unit) {
+    Surface(Modifier.fillMaxWidth().height(48.dp).clickable(onClick = onClick), color = UiErrorBg, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, Color(0xFFFBCFE8))) {
+        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, tint = UiError, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(7.dp))
+            Text(text, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = UiError)
+        }
+    }
+}
+
+@Composable
+private fun TogglePill(enabled: Boolean, onToggle: () -> Unit) {
+    Surface(Modifier.size(width = 44.dp, height = 26.dp).clickable(onClick = onToggle), color = if (enabled) UiInk else Color(0xFFD4D4D8), shape = RoundedCornerShape(100.dp)) {
+        Box(Modifier.fillMaxSize()) {
+            Box(Modifier.size(18.dp).clip(CircleShape).background(Color.White).align(if (enabled) Alignment.CenterEnd else Alignment.CenterStart).padding(3.dp))
+        }
+    }
+}
+
+@Composable
+private fun StatusPill(text: String, tone: StatusTone, compact: Boolean = false) {
+    val bg = when (tone) {
+        StatusTone.Success -> UiSuccessBg
+        StatusTone.Warning -> UiWarningBg
+        StatusTone.Error -> UiErrorBg
+        StatusTone.Info -> UiBlueBg
+        StatusTone.Neutral -> UiSurfaceSubtle
+    }
+    val border = when (tone) {
+        StatusTone.Success -> Color(0xFFA7F3D0)
+        StatusTone.Warning -> Color(0xFFFDE68A)
+        StatusTone.Error -> Color(0xFFFBCFE8)
+        StatusTone.Info -> Color(0xFFBFDBFE)
+        StatusTone.Neutral -> UiBorder
+    }
+    val dot = when (tone) {
+        StatusTone.Success -> UiSuccess
+        StatusTone.Warning -> UiWarning
+        StatusTone.Error -> UiError
+        StatusTone.Info -> UiBlue
+        StatusTone.Neutral -> UiMuted
+    }
+    Surface(color = bg, shape = RoundedCornerShape(100.dp), border = BorderStroke(1.dp, border)) {
+        Row(Modifier.padding(horizontal = if (compact) 8.dp else 10.dp, vertical = if (compact) 4.dp else 5.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(if (compact) 6.dp else 7.dp).clip(CircleShape).background(dot))
+            Spacer(Modifier.width(5.dp))
+            Text(text, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = if (compact) 8.sp else 9.sp, color = dot)
+        }
+    }
+}
+
+@Composable
+private fun StatusBanner(text: String, tone: BannerTone) {
+    val bg = when (tone) {
+        BannerTone.Success -> UiSuccessBg
+        BannerTone.Warning -> UiWarningBg
+        BannerTone.Error -> UiErrorBg
+        BannerTone.Neutral -> UiSurfaceSubtle
+    }
+    val fg = when (tone) {
+        BannerTone.Success -> UiSuccess
+        BannerTone.Warning -> UiWarning
+        BannerTone.Error -> UiError
+        BannerTone.Neutral -> UiMuted
+    }
+    val border = when (tone) {
+        BannerTone.Success -> Color(0xFFA7F3D0)
+        BannerTone.Warning -> Color(0xFFFDE68A)
+        BannerTone.Error -> Color(0xFFFBCFE8)
+        BannerTone.Neutral -> UiBorder
+    }
+    Surface(Modifier.fillMaxWidth(), color = bg, shape = SmallShape, border = BorderStroke(1.dp, border)) {
+        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(if (tone == BannerTone.Success) Icons.Default.CheckCircle else if (tone == BannerTone.Neutral) Icons.Default.Info else Icons.Default.WarningAmber, null, tint = fg, modifier = Modifier.size(15.dp))
+            Spacer(Modifier.width(7.dp))
+            Text(text, fontFamily = Sans, fontSize = 9.sp, color = fg)
+        }
+    }
+}
+
+@Composable
+private fun ScreenHeader(title: String, subtitle: String, onBack: (() -> Unit)? = null) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        onBack?.let {
+            Icon(Icons.Default.ArrowBack, "Back", tint = UiInk, modifier = Modifier.size(24.dp).clickable(onClick = it))
+            Spacer(Modifier.width(8.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(title, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 19.sp, color = UiInk)
+            Text(subtitle, fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 10.sp, color = UiMuted)
+        }
+    }
+}
+
+@Composable
+private fun FlowHeader(text: String) {
+    Surface(
+        Modifier.fillMaxWidth(),
+        color = Color(0xFFE5E5E5),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, Color(0xFFE4E4E7))
+    ) {
+        Text(
+            text,
+            fontFamily = Sans,
+            fontWeight = FontWeight.Bold,
+            fontSize = 17.sp,
+            color = Color.Black,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 16.dp)
+        )
+    }
+}
+
+@Composable
+private fun KeyValueRow(label: String, value: String, icon: ImageVector? = null, positive: Boolean = false) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            icon?.let { Icon(it, null, tint = UiFaint, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(6.dp)) }
+            Text(label, fontFamily = Sans, fontSize = 9.sp, color = UiMuted)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (positive) { Icon(Icons.Default.CheckCircle, null, tint = UiSuccess, modifier = Modifier.size(13.dp)); Spacer(Modifier.width(4.dp)) }
+            Text(value, fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 9.sp, color = UiInk, textAlign = TextAlign.End)
+        }
+    }
+}
+
+@Composable
+private fun ReviewRow(label: String, value: String, positive: Boolean = false, valueColor: Color = UiInk) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Text(label, fontFamily = Sans, fontSize = 9.sp, color = UiMuted)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (positive) Icon(Icons.Default.CheckCircle, null, tint = UiSuccess, modifier = Modifier.size(13.dp))
+            Text(value, fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 9.sp, color = valueColor, textAlign = TextAlign.End)
+        }
+    }
+}
+
+@Composable
+private fun ManifestPersonCard(label: String, person: PersonEntity, removable: Boolean, onRemove: (() -> Unit)? = null) {
+    Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
+        Row(Modifier.padding(11.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(34.dp).clip(RoundedCornerShape(9.dp)).background(UiBackground), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Person, null, tint = Color(0xFF52525B), modifier = Modifier.size(17.dp))
+            }
+            Spacer(Modifier.width(9.dp))
+            Column(Modifier.weight(1f)) {
+                Text(label, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 8.sp, letterSpacing = .9.sp, color = UiFaint)
+                Text("${person.name} (${person.id})", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = UiInk)
+            }
+            if (removable && onRemove != null) {
+                IconButton(onClick = onRemove) { Icon(Icons.Default.DeleteOutline, null, tint = UiFaint, modifier = Modifier.size(18.dp)) }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Check, null, tint = UiSuccess, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Verified", fontFamily = Sans, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = UiSuccess)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OccupantCard(index: Int, person: PersonEntity, onRemove: () -> Unit) {
+    Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
+        Row(Modifier.padding(11.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(34.dp).clip(RoundedCornerShape(9.dp)).background(UiSurfaceSubtle).border(1.dp, UiBorder, RoundedCornerShape(9.dp)), contentAlignment = Alignment.Center) {
+                Text("#$index", fontFamily = Mono, fontSize = 9.sp, color = UiMuted)
+            }
+            Spacer(Modifier.width(9.dp))
+            Column(Modifier.weight(1f)) {
+                Text("ADDITIONAL OCCUPANT", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 8.sp, letterSpacing = .8.sp, color = UiFaint)
+                Text("${person.name} (${person.id})", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = UiInk)
+            }
+            IconButton(onClick = onRemove) { Icon(Icons.Default.DeleteOutline, null, tint = UiFaint, modifier = Modifier.size(18.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun DetailTile(modifier: Modifier = Modifier, label: String, value: String, icon: ImageVector) {
+    Surface(modifier, color = UiSurfaceSubtle, shape = SmallShape, border = BorderStroke(1.dp, UiBorderSoft)) {
+        Column(Modifier.padding(9.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, null, tint = UiFaint, modifier = Modifier.size(12.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(label, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 7.sp, letterSpacing = .5.sp, color = UiFaint)
+            }
+            Spacer(Modifier.height(3.dp))
+            Text(value, fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 9.sp, color = UiInk, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun DataBadge(value: String, accent: Color = UiBackground) {
+    val isPlate = accent == UiWarning
+    Surface(color = if (isPlate) Color(0xFFFFF7D6) else UiBackground, shape = RoundedCornerShape(7.dp), border = BorderStroke(1.dp, if (isPlate) Color(0xFFFCD34D) else UiBorder)) {
+        Text(value, fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = if (isPlate) Color(0xFF451A03) else UiInk, modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp))
+    }
+}
+
+@Composable
+private fun ManifestSummaryLine(label: String, value: String?) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, fontFamily = Sans, fontSize = 9.sp, color = UiMuted)
+        Text(value ?: "None", fontFamily = Sans, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = UiInk)
+    }
+}
+
+@Composable
+private fun EmptyState(icon: ImageVector, title: String, subtitle: String) {
+    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        Box(Modifier.size(56.dp).clip(RoundedCornerShape(14.dp)).background(UiSurface).border(1.dp, UiBorder, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = UiFaint, modifier = Modifier.size(25.dp))
+        }
+        Spacer(Modifier.height(9.dp))
+        Text(title, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = UiInk)
+        Spacer(Modifier.height(3.dp))
+        Text(subtitle, fontFamily = Sans, fontSize = 10.sp, color = UiMuted, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 20.dp))
+    }
+}
+
+@Composable
+private fun TerminalBottomNav(currentTab: Int, pending: Int, onSelect: (Int) -> Unit) {
+    val tabs = listOf(
+        Triple(Icons.Default.Home, "Home", 0),
+        Triple(Icons.Default.History, "Activity", 1),
+        Triple(Icons.Default.Refresh, "Sync", 2),
+        Triple(Icons.Default.PersonOutline, "Operator", 3)
+    )
+    Surface(
+        Modifier.fillMaxWidth(),
+        color = UiSurface,
+        shadowElevation = 4.dp,
+        border = BorderStroke(1.dp, UiBorderSoft)
+    ) {
+        Row(Modifier.fillMaxWidth().navigationBarsPadding().height(75.dp).padding(horizontal = 3.dp)) {
+            tabs.forEach { (icon, label, index) ->
+                Column(
+                    Modifier.weight(1f).fillMaxHeight().clickable { onSelect(index) }.padding(vertical = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Box(Modifier.size(30.dp), contentAlignment = Alignment.Center) {
+                        Icon(icon, null, tint = UiInk, modifier = Modifier.size(if (currentTab == index) 24.dp else 22.dp))
+                        if (index == 2 && pending > 0) Box(Modifier.size(8.dp).clip(CircleShape).background(UiWarning).border(1.dp, UiSurface, CircleShape).align(Alignment.TopEnd))
+                    }
+                    Spacer(Modifier.height(2.dp))
+                    Text(label, fontFamily = Sans, fontWeight = if (currentTab == index) FontWeight.Bold else FontWeight.Medium, fontSize = 11.sp, color = UiInk)
+                }
+            }
+        }
+    }
+}
+
+private fun initials(name: String): String =
+    name.trim().split(Regex("\\s+")).take(2).joinToString("") { it.firstOrNull()?.uppercase() ?: "" }.ifBlank { "?" }
+
+private fun formatDuration(ms: Long): String {
+    val totalMinutes = TimeUnit.MILLISECONDS.toMinutes(ms.coerceAtLeast(0L))
+    val hours = totalMinutes / 60
+    val minutes = totalMinutes % 60
+    return if (hours > 0) "${hours}h ${minutes}m" else "${minutes.coerceAtLeast(1)}m"
+}
+
+private fun formatShort(ts: Long) = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(ts))
+private fun formatLongTime(ts: Long) = SimpleDateFormat("dd MMM yyyy • HH:mm:ss", Locale.getDefault()).format(Date(ts))
+private fun formatSyncTime(ts: Long) = if (ts <= 0L) "Never" else SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(ts))
+private fun startOfToday(): Long = Calendar.getInstance().apply {
+    set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+}.timeInMillis
+
+@Composable
+private fun SessionRouter(vm: MainViewModel) {
+    when (val s = vm.session) {
+        is ScanSession.PersonResult -> PersonResultScreen(vm, s)
+        is ScanSession.VehicleScan -> VehicleScanScreen(vm, s)
+        is ScanSession.VehicleDriver -> VehicleDriverScreen(vm, s)
+        is ScanSession.VehicleCoDriver -> VehicleCoDriverScreen(vm, s)
+        is ScanSession.VehicleOccupants -> VehicleOccupantsScreen(vm, s)
+        is ScanSession.Unknown -> UnknownResultScreen(vm, s.message)
+        ScanSession.Closed -> Unit
+    }
+}
