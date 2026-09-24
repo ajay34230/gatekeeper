@@ -125,7 +125,14 @@
         </Style>
         <Style TargetType="ComboBox">
             <Setter Property="FontSize" Value="12.5"/><Setter Property="Padding" Value="8,5"/>
+            <Setter Property="Foreground" Value="#18181B"/>
+            <Style.Resources>
+                <!-- The app-wide white TextBlock style must not apply inside the light drop-down box and its list. -->
+                <Style TargetType="TextBlock"><Setter Property="Foreground" Value="#18181B"/></Style>
+            </Style.Resources>
         </Style>
+        <Style TargetType="ComboBoxItem"><Setter Property="Foreground" Value="#18181B"/></Style>
+        <Style TargetType="DatePicker"><Setter Property="Foreground" Value="#18181B"/></Style>
         <Style TargetType="ToolTip"><Setter Property="Background" Value="#27272A"/><Setter Property="Foreground" Value="White"/><Setter Property="BorderBrush" Value="#3F3F46"/></Style>
         <Style TargetType="ScrollViewer"><Setter Property="VerticalScrollBarVisibility" Value="Auto"/></Style>
     </Application.Resources>
