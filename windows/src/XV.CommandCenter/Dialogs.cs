@@ -18,7 +18,7 @@ public class DarkWindow : Window
 
     public DarkWindow(string title, string subtitle, double width = 620, double height = 720)
     {
-        Title = title; Width = width; Height = height; Background = B("#101012");
+        Title = title; Width = width; Height = Math.Min(height, SystemParameters.WorkArea.Height - 20); Background = B("#101012");
         WindowStartupLocation = WindowStartupLocation.CenterOwner; ResizeMode = ResizeMode.CanResizeWithGrip;
         Icon = new BitmapImage(new Uri("pack://application:,,,/Assets/app.ico"));
         var dock = new DockPanel();

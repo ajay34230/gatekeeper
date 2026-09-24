@@ -2,12 +2,13 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="XV Digital Access Control — HQ Central Command" Width="1600" Height="980" MinWidth="1180" MinHeight="700"
-        Background="{StaticResource Bg}" WindowStartupLocation="CenterScreen" Icon="Assets/app.ico">
+        Background="{StaticResource Bg}" WindowStartupLocation="CenterScreen" WindowState="Maximized" Icon="Assets/app.ico">
     <DockPanel>
         <!-- ============ Header bar ============ -->
         <Border DockPanel.Dock="Top" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="20,10">
-            <DockPanel LastChildFill="False">
-                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
                     <Border Width="40" Height="40" CornerRadius="10" Background="#F59E0B">
                         <TextBlock Text="&#xE7F4;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="#18181B" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
@@ -25,8 +26,8 @@
                     </StackPanel>
                 </StackPanel>
 
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border Style="{StaticResource CardBox}" Padding="12,6" Margin="0,0,8,0" CornerRadius="8" Background="#0C0C0E">
+                <WrapPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <Border Style="{StaticResource CardBox}" Padding="12,6" Margin="0,3,8,3" CornerRadius="8" Background="#0C0C0E">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource MonoText}" Text="Server:" VerticalAlignment="Center"/>
                             <TextBlock x:Name="HdrEndpoint" Style="{StaticResource MonoText}" Foreground="{StaticResource Emerald}" FontWeight="Bold" Margin="6,0" VerticalAlignment="Center"/>
@@ -34,22 +35,22 @@
                             <TextBlock Style="{StaticResource MonoText}" Foreground="{StaticResource Amber}" FontWeight="Bold" Margin="6,0,0,0" Text="SQLCipher Encrypted" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
-                    <Button Style="{StaticResource BtnAmber}" Margin="0,0,6,0" Click="AddSoldier_Click" Content="+ Add Soldier"/>
-                    <Button Style="{StaticResource BtnAmber}" Margin="0,0,6,0" Click="AddVehicle_Click" Content="+ Add Vehicle"/>
-                    <Button Style="{StaticResource BtnEmerald}" Margin="0,0,6,0" Click="ImportExport_Click" Content="Import / Export"/>
-                    <Button Style="{StaticResource BtnGold}" Margin="0,0,6,0" Click="Pair_Click">
+                    <Button Style="{StaticResource BtnAmber}" Margin="0,3,6,3" Click="AddSoldier_Click" Content="+ Add Soldier"/>
+                    <Button Style="{StaticResource BtnAmber}" Margin="0,3,6,3" Click="AddVehicle_Click" Content="+ Add Vehicle"/>
+                    <Button Style="{StaticResource BtnEmerald}" Margin="0,3,6,3" Click="ImportExport_Click" Content="Import / Export"/>
+                    <Button Style="{StaticResource BtnGold}" Margin="0,3,6,3" Click="Pair_Click">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="Local Wi-Fi &amp; Pair Device" Foreground="#FCD34D" FontWeight="SemiBold"/>
                             <Ellipse Width="7" Height="7" Fill="{StaticResource Emerald}" Margin="8,0,0,0"/>
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource BtnBlue}" Margin="0,0,6,0" Click="Cloud_Click" Content="Cloud Link"/>
-                    <Button Margin="0,0,6,0" Click="Stations_Click" Content="Stations &amp; Settings"/>
-                    <Button Click="Refresh_Click" ToolTip="Refresh now" Padding="10,7">
+                    <Button Style="{StaticResource BtnBlue}" Margin="0,3,6,3" Click="Cloud_Click" Content="Cloud Link"/>
+                    <Button Margin="0,3,6,3" Click="Stations_Click" Content="Stations &amp; Settings"/>
+                    <Button Click="Refresh_Click" ToolTip="Refresh now" Padding="10,7" Margin="0,3,0,3">
                         <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
                     </Button>
-                </StackPanel>
-            </DockPanel>
+                </WrapPanel>
+            </Grid>
         </Border>
 
         <!-- ============ Status bar ============ -->
@@ -126,8 +127,9 @@
             <!-- ============ Main area ============ -->
             <DockPanel Grid.Column="1">
                 <Border DockPanel.Dock="Top" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="16,12">
-                    <DockPanel>
-                        <Border DockPanel.Dock="Left" Background="#111113" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="10" Padding="4">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <Border Background="#111113" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="10" Padding="4">
                             <StackPanel Orientation="Horizontal">
                                 <RadioButton x:Name="TabFeed" Style="{StaticResource TabPill}" GroupName="tabs" IsChecked="True" Checked="Tab_Checked"/>
                                 <RadioButton x:Name="TabPersons" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked"/>
@@ -136,28 +138,29 @@
                                 <RadioButton x:Name="TabAudit" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked" Content="Audit Trail"/>
                             </StackPanel>
                         </Border>
-                        <Grid HorizontalAlignment="Right" Width="330">
+                        <Grid Grid.Column="1" HorizontalAlignment="Right" MaxWidth="330" MinWidth="170" Margin="12,0,0,0">
                             <TextBox x:Name="Search" TextChanged="Search_Changed" Padding="30,7,9,7" FontFamily="{StaticResource Mono}"/>
                             <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" Foreground="{StaticResource Dim}" Margin="11,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"/>
                             <TextBlock x:Name="SearchHint" Text="Filter by ID, Name, Location..." Foreground="{StaticResource Dim}" FontFamily="{StaticResource Mono}" FontSize="12" Margin="31,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"/>
                         </Grid>
-                    </DockPanel>
+                    </Grid>
                 </Border>
 
                 <ScrollViewer x:Name="MainScroll" Padding="24,18">
                     <StackPanel>
-                        <DockPanel x:Name="SectionHeader" Margin="0,0,0,12">
-                            <StackPanel DockPanel.Dock="Left">
+                        <Grid x:Name="SectionHeader" Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <StackPanel>
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock x:Name="SectionTitle" FontWeight="Bold" FontSize="13" Foreground="{StaticResource Text2}"/>
                                     <Border x:Name="SectionCountBorder" Margin="10,0,0,0" CornerRadius="10" Padding="8,1" Background="#2A1F08" BorderBrush="#92400E" BorderThickness="1" VerticalAlignment="Center">
                                         <TextBlock x:Name="SectionCount" Style="{StaticResource MonoText}" Foreground="{StaticResource Amber}" FontWeight="Bold" FontSize="10"/>
                                     </Border>
                                 </StackPanel>
-                                <TextBlock x:Name="SectionSub" FontSize="11.5" Foreground="{StaticResource Muted}" Margin="0,3,0,0"/>
+                                <TextBlock x:Name="SectionSub" FontSize="11.5" Foreground="{StaticResource Muted}" Margin="0,3,12,0" TextWrapping="Wrap"/>
                             </StackPanel>
-                            <StackPanel x:Name="SectionActions" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                        </DockPanel>
+                            <StackPanel x:Name="SectionActions" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                        </Grid>
                         <WrapPanel x:Name="FilterChips" Margin="0,0,0,12"/>
                         <Border Height="1" Background="{StaticResource Line}" Margin="0,0,0,14"/>
                         <ContentControl x:Name="ContentHost"/>
