@@ -16,6 +16,7 @@ public sealed class PairWindow : DarkWindow
     readonly TextBlock _expires = T("", 11, "#A1A1AA", mono: true);
     readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
     DateTime _expiry;
+    string _payload = "";
 
     public PairWindow() : base("Pair a Terminal (Local Wi-Fi & Internet)",
         "On the phone: open XV Access Control → 'PC Server Connection' → 'Scan PC Pairing QR'. The QR is valid for 10 minutes and works once.", 640, 860)
@@ -34,6 +35,11 @@ public sealed class PairWindow : DarkWindow
         Body.Children.Add(Para(App.Server.Fingerprint, "#D4D4D8"));
         Body.Children.Add(Label("If the phone cannot connect"));
         Body.Children.Add(Para($"• Both devices must be on the same network (guest Wi-Fi often blocks devices from seeing each other).\n• Windows Firewall must allow TCP {s.Port} and UDP {s.DiscoveryPort} — the installer adds these rules.\n• Check the phone's Sync Hub → 'Test Connection'."));
+        AddButton("Copy pairing text", () =>
+        {
+            Clipboard.SetText(_payload);
+            MessageBox.Show("Pairing text copied. Send it to the operator (valid 10 minutes, works once); they paste it under 'PC Server Connection' in the app.\n\nFor phones outside the base network, set up Cloud Link first so the text contains the internet address.", "Pairing text copied");
+        });
         AddButton("New QR", NewCode);
         AddButton("Done", Close, "BtnAmber");
         _timer.Tick += (_, _) => Tick();
@@ -47,7 +53,8 @@ public sealed class PairWindow : DarkWindow
         var code = App.Store.NewPairCode();
         _expiry = DateTime.Now.AddMinutes(10);
         _code.Text = code;
-        _qr.Source = Dialogs.Png(Pairing.QrPng(Pairing.Payload(App.Settings, App.Server.Fingerprint, code), 6));
+        _payload = Pairing.Payload(App.Settings, App.Server.Fingerprint, code);
+        _qr.Source = Dialogs.Png(Pairing.QrPng(_payload, 6));
         Tick();
     }
 

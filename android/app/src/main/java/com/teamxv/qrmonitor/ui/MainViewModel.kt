@@ -599,7 +599,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun openPairingScanner() { pairingMessage = ""; scannerTarget = ScannerTarget.PAIRING }
 
     fun pairWithQr(raw: String) {
-        val info = com.teamxv.qrmonitor.network.PairingInfo.parse(raw)
+        val parsed = com.teamxv.qrmonitor.network.PairingInfo.parse(raw)
+        // If the QR carries no internet address but one was entered on this phone, try it too.
+        val info = parsed?.let { if (it.u.isBlank() && config.publicUrl.isNotBlank()) it.copy(u = config.publicUrl, pc = config.publicUsesCaCertificate) else it }
         if (info == null) { pairingMessage = "That is not a Command Center pairing QR. On the PC click 'Local Wi-Fi & Pair Device'."; return }
         busy = true
         pairingMessage = "Pairing with ${info.n.ifBlank { info.id }}…"

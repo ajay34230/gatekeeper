@@ -338,6 +338,28 @@ private fun LoginScreen(vm: MainViewModel) {
                         }
                         Spacer(Modifier.height(10.dp))
                         PrimaryButton(if (vm.busy) "PAIRING…" else if (vm.paired) "RE-PAIR WITH PC (SCAN QR)" else "SCAN PC PAIRING QR", Icons.Default.QrCodeScanner, !vm.busy) { vm.openPairingScanner() }
+
+                        // Remote pairing: the PC admin can send the pairing text (e.g. by message) to an off-base phone.
+                        Spacer(Modifier.height(12.dp))
+                        Text("OR PASTE PAIRING TEXT FROM THE PC", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 0.8.sp, color = UiMuted)
+                        Spacer(Modifier.height(4.dp))
+                        var pairText by rememberSaveable { mutableStateOf("") }
+                        ConfigField("XVGK1:…", pairText) { pairText = it.trim() }
+                        Spacer(Modifier.height(6.dp))
+                        SecondaryButton("PAIR WITH PASTED TEXT", Icons.Default.Security) { if (pairText.isNotBlank()) vm.pairWithQr(pairText) }
+
+                        // Cloud / internet connection (same settings as Sync Hub, available before sign-in)
+                        Spacer(Modifier.height(14.dp))
+                        Text("CONNECT VIA CLOUD / INTERNET", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 0.8.sp, color = UiMuted)
+                        Spacer(Modifier.height(6.dp))
+                        CloudLinkCard(vm)
+                        if (vm.networkStatus.message.isNotBlank() && vm.networkStatus.message != "Not tested") {
+                            Spacer(Modifier.height(8.dp))
+                            StatusBanner(
+                                if (vm.networkStatus.serverReachable) "${vm.networkStatus.message} • ${vm.networkStatus.server}" else "Not reachable: ${vm.networkStatus.message}",
+                                if (vm.networkStatus.serverReachable) BannerTone.Success else BannerTone.Warning
+                            )
+                        }
                     }
                 }
             }
