@@ -10,9 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -53,10 +51,6 @@ object CommsEngine {
 
     private val _state = MutableStateFlow(CommsState())
     val state: StateFlow<CommsState> = _state
-
-    private val _signals = MutableSharedFlow<JsonObject>(extraBufferCapacity = 32)
-    /** Call-signalling frames from the Command Center (used by the call engine). */
-    val signals: SharedFlow<JsonObject> = _signals
 
     @Volatile private var socket: WebSocket? = null
     @Volatile private var link: Link? = null
@@ -160,7 +154,7 @@ object CommsEngine {
                     val id = frame["id"]?.jsonPrimitive?.content ?: continue
                     dao.advanceOut(id, if (frame["state"]?.jsonPrimitive?.content == "READ") "READ" else "DELIVERED")
                 }
-                "call" -> _signals.tryEmit(frame)
+                "call" -> CallManager.onSignal(context, frame)
             }
         }
         socket = null; link = null

@@ -17,5 +17,8 @@
   <ItemGroup>
     <ProjectReference Include="..\XV.Core\XV.Core.csproj" /><ProjectReference Include="..\XV.Comms\XV.Comms.csproj" />
     <Resource Include="Assets\app.ico" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2849.39" />
+    <!-- Call page shared with the Android terminal -->
+    <Content Include="..\..\..\shared\call\call.html" Link="call\call.html" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

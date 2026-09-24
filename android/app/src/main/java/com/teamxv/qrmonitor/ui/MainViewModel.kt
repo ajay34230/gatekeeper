@@ -702,6 +702,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun startCall(video: Boolean) {
+        commsError = com.teamxv.qrmonitor.comms.CallManager.startOutgoing(getApplication(), video) ?: ""
+    }
+
     fun commsSeen() {
         viewModelScope.launch(Dispatchers.IO) { com.teamxv.qrmonitor.comms.CommsEngine.markSeen(getApplication()) }
     }

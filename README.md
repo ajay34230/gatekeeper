@@ -60,6 +60,7 @@ Building it yourself instead: `cd android && ./gradlew :app:assembleDebug` (JDK 
 ## Comms (messages & alerts)
 
 The **Comms** button on the PC opens the Comms Center: pick a paired terminal, send a message or an **ALERT**, or broadcast an alert to every terminal. On the phone the **Comms** tab shows the conversation and can send messages or alerts back; alerts from phones pop up on the PC with a sound, and alerts from the PC ring on the phone's alarm channel even when the app is closed.
+**Voice and video calls** work both ways: *Voice call* / *Video call* in the Comms Center (PC) or on the phone's Comms tab. The phone rings like a normal call (full-screen, even when locked); the PC shows a ringing pop-up. Media goes directly between the two devices, encrypted with DTLS-SRTP, and no external servers are used — so calls work on the same network or over a VPN such as Tailscale (not through plain port forwarding). The PC needs the Microsoft Edge WebView2 Runtime (built into Windows 11 and current Windows 10) and a microphone/camera; without them you can still hear/see the phone.
 Comms is a separate engine: its own port (8444), its own encrypted databases on both sides and its own key per terminal, so it never touches the gate records. Messages to an offline terminal are queued and delivered when it reconnects. For reliable alerts, allow the app to run in the background (the Comms tab offers a shortcut to the battery setting). For internet use, forward/tunnel port 8444 as well (see Cloud Link).
 
 ## 5. Connecting over the internet (Cloud Link)

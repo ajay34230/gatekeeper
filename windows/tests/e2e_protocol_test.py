@@ -112,6 +112,8 @@ csend({"t": "ack", "id": echo["id"], "state": "READ"})
 csend({"t": "msg", "id": mid, "kind": "ALERT", "body": "Test alert from gate"})  # resend is idempotent: ack only, no second echo
 assert crecv() == {"t": "ack", "id": mid, "state": "DELIVERED"}
 csend({"t": "ping"}); assert crecv()["t"] == "pong"
+csend({"t": "call", "op": "invite", "callId": "c" * 32, "video": True, "from": "GK-01"})
+assert crecv() == {"t": "call", "op": "busy", "callId": "c" * 32}, "call signalling must round-trip through the Comms engine"
 ws.close()
 print("comms ok")
 print("ALL CHECKS PASSED")

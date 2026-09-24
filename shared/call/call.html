@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>XV Call</title>
+<!--
+  XV call engine page — shared by the Windows Command Center (WebView2) and the Android terminal (WebView).
+  Media is peer-to-peer WebRTC (DTLS-SRTP encrypted). Signalling (offer / answer / ICE) goes through the host app,
+  which carries it over the encrypted Comms engine. No external servers are used: only direct (LAN / VPN) candidates.
+  Host → page:  XVCall.start({role, video, peer, self})   XVCall.receive({t:'signal', payload} | {t:'accepted'} | {t:'end', reason})
+  Page → host:  {t:'ready'} {t:'signal', payload} {t:'state', state, detail} {t:'hangup'}
+-->
+<style>
+  :root { --bg:#09090b; --panel:#18181b; --line:#27272a; --text:#f4f4f5; --muted:#a1a1aa; --red:#e11d48; --green:#059669; --amber:#f59e0b; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { height:100%; background:var(--bg); color:var(--text); font-family:"Segoe UI", Roboto, system-ui, sans-serif; overflow:hidden; }
+  #remote { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; background:#000; }
+  #local { position:absolute; right:16px; top:16px; width:28vw; max-width:220px; aspect-ratio:3/4; object-fit:cover; border-radius:14px;
+           border:2px solid rgba(255,255,255,.18); background:#111; box-shadow:0 8px 28px rgba(0,0,0,.5); transform:scaleX(-1); }
+  #voice { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+           background:radial-gradient(circle at 50% 35%, #1f1f23, #09090b 70%); }
+  .avatar { width:120px; height:120px; border-radius:50%; background:#27272a; border:2px solid #3f3f46; display:flex; align-items:center; justify-content:center;
+            font-size:44px; font-weight:700; letter-spacing:1px; }
+  .pulse { animation:pulse 1.6s ease-out infinite; }
+  @keyframes pulse { 0% { box-shadow:0 0 0 0 rgba(245,158,11,.45); } 100% { box-shadow:0 0 0 28px rgba(245,158,11,0); } }
+  #top { position:absolute; left:0; right:0; top:0; padding:18px calc(min(28vw, 220px) + 30px) 40px 20px; background:linear-gradient(rgba(0,0,0,.65), transparent); }
+  #peer { font-size:20px; font-weight:700; }
+  #status { font-size:13px; color:var(--muted); margin-top:4px; font-family:Consolas, "Roboto Mono", monospace; }
+  #lock { font-size:11px; color:#6ee7b7; margin-top:6px; }
+  #bar { position:absolute; left:0; right:0; bottom:0; padding:22px 0 calc(26px + env(safe-area-inset-bottom)); display:flex; gap:18px; justify-content:center;
+         background:linear-gradient(transparent, rgba(0,0,0,.7)); }
+  button { width:62px; height:62px; border-radius:50%; border:1px solid #3f3f46; background:rgba(39,39,42,.9); color:#fff; cursor:pointer;
+           display:flex; align-items:center; justify-content:center; }
+  button svg { width:26px; height:26px; fill:currentColor; }
+  button.off { background:#f4f4f5; color:#18181b; }
+  button.end { background:var(--red); border-color:#be123c; }
+  button:disabled { opacity:.35; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+<video id="remote" autoplay playsinline></video>
+<div id="voice"><div class="avatar pulse" id="initials">XV</div></div>
+<video id="local" autoplay playsinline muted class="hidden"></video>
+<div id="top"><div id="peer">—</div><div id="status">Starting…</div><div id="lock">🔒 End-to-end encrypted (DTLS-SRTP) • direct connection</div></div>
+<div id="bar">
+  <button id="mic" title="Mute microphone"><svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg></button>
+  <button id="cam" title="Camera on/off"><svg viewBox="0 0 24 24"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg></button>
+  <button id="flip" title="Switch camera"><svg viewBox="0 0 24 24"><path d="M20 5h-3.17L15 3H9L7.17 5H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm-8 13a5 5 0 0 1-4.9-4H5l3-3 3 3H9.1A3 3 0 0 0 15 13h2a5 5 0 0 1-5 5zm4-5-3-3h1.9A3 3 0 0 0 9 11H7a5 5 0 0 1 9.9-1H19l-3 3z"/></svg></button>
+  <button id="hang" class="end" title="Hang up"><svg viewBox="0 0 24 24"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.99.99 0 0 1 0-1.41C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28a11.27 11.27 0 0 0-2.67-1.85.996.996 0 0 1-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg></button>
+</div>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const wv2 = window.chrome && window.chrome.webview;
+  const host = { send: m => wv2 ? wv2.postMessage(JSON.stringify(m)) : window.XVHost.send(JSON.stringify(m)) };
+  let pc = null, local = null, role = 'caller', wantVideo = false, facing = 'user', started = 0, timer = null, ended = false;
+  const pendingIce = [];
+
+  const status = (text, state) => { $('status').textContent = text; if (state) host.send({ t: 'state', state, detail: text }); };
+
+  async function getMedia(video) {
+    const tries = video ? [{ audio: true, video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } } }, { audio: true }] : [{ audio: true }];
+    for (const c of tries) { try { return await navigator.mediaDevices.getUserMedia(c); } catch (e) { /* try the next option */ } }
+    return null; // no microphone / camera: the call still receives the other side
+  }
+
+  function newPeer() {
+    // No STUN/TURN: only direct host candidates (same network or VPN), nothing leaves through third-party servers.
+    pc = new RTCPeerConnection({ iceServers: [], bundlePolicy: 'max-bundle' });
+    pc.onicecandidate = e => { if (e.candidate) host.send({ t: 'signal', payload: { op: 'ice', candidate: e.candidate.toJSON() } }); };
+    pc.ontrack = e => {
+      const r = $('remote');
+      if (r.srcObject !== e.streams[0]) r.srcObject = e.streams[0];
+      if (e.track.kind === 'video') { $('voice').classList.add('hidden'); e.track.onunmute = () => $('voice').classList.add('hidden'); }
+    };
+    pc.onconnectionstatechange = () => {
+      const s = pc.connectionState;
+      if (s === 'connected') { if (!started) { started = Date.now(); tick(); } status('Connected', 'connected'); }
+      else if (s === 'disconnected') status('Reconnecting…');
+      else if (s === 'failed') end('Could not connect directly. Calls need both devices on the same network or VPN.', true);
+    };
+    if (local) local.getTracks().forEach(t => pc.addTrack(t, local));
+    if (!local || !local.getAudioTracks().length) pc.addTransceiver('audio', { direction: 'recvonly' });
+    if (wantVideo && (!local || !local.getVideoTracks().length)) pc.addTransceiver('video', { direction: 'recvonly' });
+  }
+
+  function tick() {
+    clearInterval(timer);
+    timer = setInterval(() => {
+      const s = Math.floor((Date.now() - started) / 1000);
+      $('status').textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+    }, 1000);
+  }
+
+  async function flushIce() { while (pendingIce.length && pc && pc.remoteDescription) { try { await pc.addIceCandidate(pendingIce.shift()); } catch (e) {} } }
+
+  async function onSignal(p) {
+    if (ended) return;
+    if (p.op === 'offer') {
+      if (!pc) newPeer();
+      await pc.setRemoteDescription({ type: 'offer', sdp: p.sdp });
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      host.send({ t: 'signal', payload: { op: 'answer', sdp: answer.sdp } });
+      flushIce();
+    } else if (p.op === 'answer') {
+      await pc.setRemoteDescription({ type: 'answer', sdp: p.sdp });
+      flushIce();
+    } else if (p.op === 'ice' && p.candidate) {
+      pendingIce.push(p.candidate);
+      flushIce();
+    }
+  }
+
+  function end(reason, notify) {
+    if (ended) return;
+    ended = true;
+    clearInterval(timer);
+    if (pc) { try { pc.close(); } catch (e) {} pc = null; }
+    if (local) local.getTracks().forEach(t => t.stop());
+    status(reason || 'Call ended', 'ended');
+    if (notify) host.send({ t: 'hangup' });
+  }
+
+  function setupControls(isMobile) {
+    $('mic').onclick = () => {
+      const t = local && local.getAudioTracks()[0]; if (!t) return;
+      t.enabled = !t.enabled; $('mic').classList.toggle('off', !t.enabled);
+    };
+    $('cam').onclick = () => {
+      const t = local && local.getVideoTracks()[0]; if (!t) return;
+      t.enabled = !t.enabled; $('cam').classList.toggle('off', !t.enabled); $('local').classList.toggle('hidden', !t.enabled);
+    };
+    $('flip').onclick = async () => {
+      if (!local || !local.getVideoTracks().length) return;
+      facing = facing === 'user' ? 'environment' : 'user';
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing } });
+        const nt = s.getVideoTracks()[0];
+        const sender = pc && pc.getSenders().find(x => x.track && x.track.kind === 'video');
+        if (sender) await sender.replaceTrack(nt);
+        local.getVideoTracks().forEach(t => { t.stop(); local.removeTrack(t); });
+        local.addTrack(nt);
+        $('local').style.transform = facing === 'user' ? 'scaleX(-1)' : 'none';
+      } catch (e) { facing = facing === 'user' ? 'environment' : 'user'; }
+    };
+    $('hang').onclick = () => end('Call ended', true);
+    if (!isMobile) $('flip').classList.add('hidden');
+  }
+
+  let startDone = null;
+  window.XVCall = {
+    start(o) { startDone = this._start(o); return startDone; },
+    async _start(o) {
+      role = o.role; wantVideo = !!o.video;
+      $('peer').textContent = o.peer || 'XV';
+      $('initials').textContent = (o.peer || 'XV').split(/\s+/).map(w => w[0] || '').join('').slice(0, 2).toUpperCase() || 'XV';
+      setupControls(!!o.mobile);
+      status(role === 'caller' ? 'Starting…' : 'Connecting…');
+      local = await getMedia(wantVideo);
+      if (local && local.getVideoTracks().length) { $('local').srcObject = local; $('local').classList.remove('hidden'); }
+      else { $('cam').disabled = true; $('flip').disabled = true; }
+      if (!local) { $('mic').disabled = true; status('No microphone available — you can still hear the other side'); }
+      else if (role === 'caller') status('Ringing…', 'ringing');
+      host.send({ t: 'ready', hasAudio: !!(local && local.getAudioTracks().length), hasVideo: !!(local && local.getVideoTracks().length) });
+    },
+    async receive(m) {
+      if (typeof m === 'string') m = JSON.parse(m);
+      try {
+        if (startDone) await startDone; // local camera / microphone must be attached before any offer or answer
+        if (m.t === 'accepted' && role === 'caller' && !ended) {
+          status('Connecting…', 'connecting');
+          newPeer();
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          host.send({ t: 'signal', payload: { op: 'offer', sdp: offer.sdp } });
+        } else if (m.t === 'signal') await onSignal(m.payload);
+        else if (m.t === 'end') end(m.reason || 'Call ended', false);
+      } catch (e) { end('Call failed: ' + (e && e.message ? e.message : e), true); }
+    }
+  };
+  if (wv2) wv2.addEventListener('message', e => window.XVCall.receive(e.data));
+})();
+</script>
+</body>
+</html>

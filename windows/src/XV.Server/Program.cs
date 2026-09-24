@@ -61,7 +61,15 @@ await using var comms = new CommsEngine(settings, cert, store.DeviceKey);
 comms.Log += Console.WriteLine;
 comms.MessageReceived += m => Console.WriteLine($"COMMS {m.Kind} from {m.DeviceId}: {m.Body}");
 // CI only: answer every terminal message so the protocol test can check PC -> terminal delivery.
-if (args.Contains("--comms-test-echo")) comms.MessageReceived += m => comms.Send(m.DeviceId, "MESSAGE", "Echo: " + m.Body, "Command Center");
+if (args.Contains("--comms-test-echo"))
+{
+    comms.MessageReceived += m => comms.Send(m.DeviceId, "MESSAGE", "Echo: " + m.Body, "Command Center");
+    // The headless host has no call UI: answer call invitations with "busy" so the signalling path can be tested.
+    comms.Signal += (dev, f) =>
+    {
+        if (f["op"]?.ToString() == "invite") comms.SendSignal(dev, new System.Text.Json.Nodes.JsonObject { ["t"] = "call", ["op"] = "busy", ["callId"] = f["callId"]?.ToString() });
+    };
+}
 await comms.StartAsync();
 Console.WriteLine($"Server {settings.ServerId} fingerprint {server.Fingerprint}");
 if (args.Contains("--pair"))

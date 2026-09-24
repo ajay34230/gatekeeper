@@ -30,6 +30,8 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DevicesOther
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Home
@@ -2311,8 +2313,19 @@ private fun CommsScreen(vm: MainViewModel) {
     }
 
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding().padding(horizontal = 16.dp, vertical = 14.dp)) {
-        ScreenHeader("Comms", "Messages & alerts with ${vm.currentConfig().serverName.ifBlank { "the Command Center" }}")
+        ScreenHeader("Comms", "Messages, alerts & calls with ${vm.currentConfig().serverName.ifBlank { "the Command Center" }}")
         Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { vm.startCall(false) }, enabled = state.online, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) {
+                Icon(Icons.Default.Call, null, tint = UiSuccess, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
+                Text("Voice call", fontFamily = Sans, fontWeight = FontWeight.SemiBold, color = UiInk)
+            }
+            OutlinedButton(onClick = { vm.startCall(true) }, enabled = state.online, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) {
+                Icon(Icons.Default.Videocam, null, tint = UiBlue, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
+                Text("Video call", fontFamily = Sans, fontWeight = FontWeight.SemiBold, color = UiInk)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
         StatusBanner(
             when (state.status) {
                 "ONLINE" -> "Comms engine connected • ${state.detail} • end-to-end encrypted"

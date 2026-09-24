@@ -49,6 +49,7 @@ public partial class App : Application
             {
                 if (m.Kind == "ALERT") Current.Dispatcher.BeginInvoke(() => { if (Current.MainWindow is Window w && screenshotDir == null) CommsWindow.ShowIncomingAlert(w, m); });
             };
+            Calls.Init();
             await StartServerAsync();
         }
         catch (Exception ex)

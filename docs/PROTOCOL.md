@@ -74,8 +74,26 @@ Plaintext frames:
 | `msg` | `id`, `kind` (`MESSAGE`/`ALERT`), `body` (≤ 2000 chars), `sender`, `ts` | a message; the receiver answers `ack DELIVERED`; duplicates (same `id`) are ignored |
 | `ack` | `id`, `state` (`DELIVERED`/`READ`) | delivery / read receipt |
 | `ping` / `pong` | – | keep-alive |
-| `call` | see Phase 3 | call signalling, relayed to the call engine |
+| `call` | `op`, `callId`, … | call signalling (below) |
 
 Undelivered PC→terminal messages are sent when the terminal connects; terminals re-send unconfirmed messages on every connection.
+
+### Calls (voice / video)
+
+Signalling uses `call` frames on the Comms connection; media is direct WebRTC (DTLS-SRTP) between the two devices, rendered by the
+shared page `shared/call/call.html` (WebView2 on Windows, WebView on Android). No STUN/TURN servers are configured, so only direct
+candidates are used: calls work on the same network or over a VPN (e.g. Tailscale), and no media passes through third parties.
+
+| `op` | extra fields | sent by |
+|---|---|---|
+| `invite` | `video`, `from` | caller |
+| `accept` | – | callee, once its call page has camera/microphone ready |
+| `decline` / `busy` | – | callee |
+| `cancel` | – | caller, before the call was answered (also after 45 s without answer) |
+| `offer` / `answer` | `sdp` | caller / callee page |
+| `ice` | `candidate` (`candidate`, `sdpMid`, `sdpMLineIndex`) | both pages |
+| `hangup` | – | either side |
+
+The PC keeps a call log (direction, video, start / answer / end, outcome) in the Comms database and writes each call to the Audit Trail.
 
 `windows/tests/e2e_protocol_test.py` exercises all of the above.

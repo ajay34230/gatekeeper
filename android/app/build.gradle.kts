@@ -51,6 +51,8 @@ android {
     }
 
     sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    // Call page shared with the Windows Command Center (served from assets/call/call.html)
+    sourceSets.getByName("main").assets.srcDir("$projectDir/../../shared")
 
     packaging {
         resources {
@@ -83,6 +85,7 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("androidx.webkit:webkit:1.12.1")
     // Encrypted local database (SQLCipher for Android)
     implementation("net.zetetic:sqlcipher-android:4.6.1@aar")
     implementation("androidx.sqlite:sqlite:2.4.0")
