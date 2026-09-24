@@ -20,6 +20,7 @@ public sealed class CommsWindow : Window
     readonly ScrollViewer _threadScroll;
     readonly TextBlock _title = T("Select a terminal", 15, "#F4F4F5", bold: true);
     readonly TextBlock _subtitle = T("", 11, "#A1A1AA");
+    readonly TextBlock _engineStatus = new() { FontSize = 10.5, Foreground = B("#71717A"), FontFamily = Mono, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0) };
     readonly TextBox _input = new() { AcceptsReturn = false, MaxLength = CommsEngine.MaxBody, MinHeight = 38, VerticalContentAlignment = VerticalAlignment.Center };
     readonly StackPanel _composer;
     readonly StackPanel _headerActions = new() { Orientation = Orientation.Horizontal };
@@ -43,8 +44,8 @@ public sealed class CommsWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition());
 
         // left: terminals
-        var leftHead = Col(T("COMMS ENGINE", 10, "#A1A1AA", bold: true), T("Paired terminals", 15, "#F4F4F5", bold: true).M(0, 2),
-            T(App.CommsStatus, 10.5, "#71717A", mono: true).M(0, 4));
+        _engineStatus.Text = App.CommsStatus;
+        var leftHead = Col(T("COMMS ENGINE", 10, "#A1A1AA", bold: true), T("Paired terminals", 15, "#F4F4F5", bold: true).M(0, 2), _engineStatus);
         var broadcast = Btn("Broadcast alert to all terminals…", (_, _) => Broadcast(), "BtnDanger");
         broadcast.HorizontalAlignment = HorizontalAlignment.Stretch; broadcast.Margin = new Thickness(0, 10, 0, 0);
         leftHead.Children.Add(broadcast);
@@ -84,7 +85,7 @@ public sealed class CommsWindow : Window
     }
 
     void OnCallState() => Dispatcher.BeginInvoke(() => { if (_device != null) FillThread(); });
-    void OnChanged() => Dispatcher.BeginInvoke(() => { FillDevices(); if (_device != null) FillThread(); });
+    void OnChanged() => Dispatcher.BeginInvoke(() => { _engineStatus.Text = App.CommsStatus; FillDevices(); if (_device != null) FillThread(); });
     void OnMessage(CommsMessage m) => Dispatcher.BeginInvoke(() => { if (m.DeviceId == _device && IsActive) App.Comms.MarkRead(m.DeviceId); });
 
     void FillDevices()
