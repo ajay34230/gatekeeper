@@ -142,6 +142,12 @@ public sealed class CommsEngine : IAsyncDisposable
         return true;
     }
 
+    /// <summary>Drops a terminal's live connection at once (used when it is revoked or removed; it cannot reconnect without a valid key).</summary>
+    public void Disconnect(string deviceId)
+    {
+        if (_links.TryRemove(deviceId, out var link)) { link.Abort(); Changed?.Invoke(); }
+    }
+
     static JsonObject MessageFrame(CommsMessage m) => new()
     {
         ["t"] = "msg", ["id"] = m.Id, ["kind"] = m.Kind, ["body"] = m.Body, ["sender"] = m.Sender, ["ts"] = m.CreatedAt,
@@ -177,6 +183,7 @@ public sealed class CommsEngine : IAsyncDisposable
             {
                 var frame = await link.ReceiveAsync(ctx.RequestAborted);
                 if (frame == null) break;
+                if (_deviceKey(dev) == null) break; // revoked while connected
                 await Handle(link, frame);
             }
         }

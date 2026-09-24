@@ -2394,6 +2394,19 @@ private fun CommsScreen(vm: MainViewModel) {
 
 @Composable
 private fun CommsBubble(m: com.teamxv.qrmonitor.comms.CommsMessageEntity) {
+    if (m.kind == "CALL") {
+        val missed = m.body.startsWith("Missed")
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+            Surface(color = UiSurfaceSubtle, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, if (missed) UiError else UiBorder)) {
+                Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(if (m.body.contains("video")) Icons.Default.Videocam else Icons.Default.Call, null, tint = if (missed) UiError else UiMuted, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("${m.body} • ${SimpleDateFormat("dd MMM HH:mm", Locale.getDefault()).format(Date(m.createdAt))}", fontFamily = Sans, fontSize = 11.sp, color = if (missed) UiError else UiMuted)
+                }
+            }
+        }
+        return
+    }
     val mine = m.direction == "OUT"
     val alert = m.kind == "ALERT"
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {

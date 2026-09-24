@@ -16,6 +16,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.teamxv.qrmonitor.R
 import com.teamxv.qrmonitor.config.AppConfig
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.Json
@@ -52,6 +53,9 @@ object CallManager {
     private var ringtone: Ringtone? = null
     private var timeout: Runnable? = null
     private var answered = false
+    private var startedAt = 0L
+    private var answeredAt = 0L
+    private val io = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
 
     // Messages for the call page, queued until the page is ready.
     private val outbox = ArrayDeque<String>()
@@ -88,7 +92,7 @@ object CallManager {
         }
         if (current == null || current.id != id || current.phase == CallPhase.ENDED) return@post
         when (op) {
-            "accept" -> { answered = true; clearTimeout(); _call.value = current.copy(phase = CallPhase.ACTIVE); toPage(buildJsonObject { put("t", "accepted") }) }
+            "accept" -> { answered = true; answeredAt = System.currentTimeMillis(); clearTimeout(); _call.value = current.copy(phase = CallPhase.ACTIVE); toPage(buildJsonObject { put("t", "accepted") }) }
             "decline" -> finish("Call declined")
             "busy" -> finish("The Command Center is on another call")
             "cancel" -> finish("Missed call", missed = !answered)
@@ -119,7 +123,7 @@ object CallManager {
     fun accept() = main.post {
         val c = _call.value ?: return@post
         if (c.phase != CallPhase.RINGING_IN) return@post
-        answered = true; clearTimeout(); stopRinging()
+        answered = true; answeredAt = System.currentTimeMillis(); clearTimeout(); stopRinging()
         appContext?.let { NotificationManagerCompat.from(it).cancel(NOTIF_CALL) }
         _call.value = c.copy(phase = CallPhase.ACTIVE)
         // "accept" is sent when the call page reports ready (see onPage), so the offer never arrives before the page.
@@ -161,6 +165,7 @@ object CallManager {
 
     private fun begin(c: CallUi) {
         clearTimeout(); outbox.clear(); answered = false
+        startedAt = System.currentTimeMillis(); answeredAt = 0L
         _call.value = c
     }
 
@@ -169,6 +174,7 @@ object CallManager {
         clearTimeout(); stopRinging()
         toPage(buildJsonObject { put("t", "end"); put("reason", message) })
         _call.value = c.copy(phase = CallPhase.ENDED, message = message)
+        appContext?.let { ctx -> logCall(ctx, c, message, missed) }
         appContext?.let { ctx ->
             NotificationManagerCompat.from(ctx).cancel(NOTIF_CALL)
             if (missed && CommsNotifications.canNotify(ctx)) {
@@ -180,6 +186,19 @@ object CallManager {
                 }
             }
         }
+    }
+
+    /** Call history entry in the Comms timeline (stored only on this phone, never sent). */
+    private fun logCall(context: Context, c: CallUi, message: String, missed: Boolean) {
+        val kind = if (c.video) "video call" else "voice call"
+        val secs = if (answeredAt > 0) (System.currentTimeMillis() - answeredAt) / 1000 else 0
+        val text = when {
+            missed -> "Missed $kind"
+            answeredAt > 0 -> "${if (c.outgoing) "Outgoing" else "Incoming"} $kind • %02d:%02d".format(secs / 60, secs % 60)
+            else -> "${if (c.outgoing) "Outgoing" else "Incoming"} $kind • ${message.lowercase()}"
+        }
+        val entry = CommsMessageEntity("call-" + c.id, if (c.outgoing) "OUT" else "IN", "CALL", text, c.peer, startedAt, "SEEN")
+        io.launch { runCatching { CommsDatabase.get(context).dao().insert(entry) } }
     }
 
     private fun clearTimeout() { timeout?.let { main.removeCallbacks(it) }; timeout = null }

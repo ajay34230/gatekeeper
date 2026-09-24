@@ -162,7 +162,7 @@ public static class Dialogs
 
     public static void DeletePerson(Window o, string id, string name) { if (Confirm($"Delete {name} ({DisplayId(id)}) from the registry?\nTheir printed QR card will stop working. Movement history is kept.")) App.Store.DeletePerson(id); }
     public static void DeleteVehicle(Window o, string id, string plate) { if (Confirm($"Delete vehicle {plate} ({DisplayId(id)})?")) App.Store.DeleteVehicle(id); }
-    public static void RevokeDevice(Window o, string id) { if (Confirm($"Revoke terminal {id}?\nIt will be disconnected immediately and must be paired again.")) App.Store.RevokeDevice(id); }
+    public static void RevokeDevice(Window o, string id) { if (Confirm($"Revoke terminal {id}?\nIt will be disconnected immediately and must be paired again.")) { App.Store.RevokeDevice(id); App.Comms.Disconnect(id); } }
     public static void DeleteAccount(Window o, string id) { if (Confirm($"Delete operator account {id}?")) App.Store.DeleteAccount(id); }
 
     public static void ResetPassword(Window o, string id)

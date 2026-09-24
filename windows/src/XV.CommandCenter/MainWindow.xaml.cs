@@ -349,7 +349,7 @@ public partial class MainWindow : Window
                 Divider(),
                 Kv("Paired", Time(L(d["paired_at"]), "dd MMM yyyy HH:mm")), Kv("Last contact", $"{Ago(L(d["last_seen"]))} from {S(d["last_ip"])} ({(S(d["via"]).Length > 0 ? S(d["via"]) : "—")})"),
                 Kv("Post / Operator", $"{S(d["location_id"])} {S(d["gate_id"])} / {S(d["operator_id"])}"), Kv("App version", S(d["app_version"])),
-                Wrap(active ? Btn("Revoke Access", (_, _) => Dialogs.RevokeDevice(this, id), "BtnDanger") : Btn("Remove", (_, _) => App.Store.DeleteDevice(id), "BtnDanger")).M(0, 10));
+                Wrap(active ? Btn("Revoke Access", (_, _) => Dialogs.RevokeDevice(this, id), "BtnDanger") : Btn("Remove", (_, _) => { App.Store.DeleteDevice(id); App.Comms.Disconnect(id); }, "BtnDanger")).M(0, 10));
             g2.Children.Add(Card(body, "#131316").M(0, 0, 10, 10));
         }
         panel.Children.Add(g2);

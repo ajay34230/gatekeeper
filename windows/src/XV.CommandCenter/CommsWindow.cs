@@ -138,15 +138,54 @@ public sealed class CommsWindow : Window
         var atBottom = _threadScroll.VerticalOffset >= _threadScroll.ScrollableHeight - 4;
         _thread.Children.Clear();
         var msgs = App.Comms.Store.Conversation(_device);
-        if (msgs.Count == 0) _thread.Children.Add(Empty("No messages yet."));
+        var calls = App.Comms.Store.Calls(_device, 200);
+        // One timeline: messages and calls in time order.
+        var items = msgs.Select(m => (ts: m.CreatedAt, el: (Func<FrameworkElement>)(() => Bubble(m))))
+            .Concat(calls.Select(c => (ts: L(c["started_at"]), el: (Func<FrameworkElement>)(() => CallLine(c)))))
+            .OrderBy(x => x.ts).ToList();
+        if (items.Count == 0) _thread.Children.Add(Empty("No messages or calls yet."));
         string? day = null;
-        foreach (var m in msgs)
+        foreach (var (ts, el) in items)
         {
-            var d = Time(m.CreatedAt, "dddd, dd MMM yyyy");
+            var d = Time(ts, "dddd, dd MMM yyyy");
             if (d != day) { day = d; var sep = T(d, 10.5, "#71717A", bold: true).M(0, 10, 0, 6); sep.HorizontalAlignment = HorizontalAlignment.Center; _thread.Children.Add(sep); }
-            _thread.Children.Add(Bubble(m));
+            _thread.Children.Add(el());
         }
-        if (atBottom || msgs.Count > 0) _threadScroll.ScrollToEnd();
+        if (atBottom || items.Count > 0) _threadScroll.ScrollToEnd();
+    }
+
+    static string CallLength(long ms)
+    {
+        var t = TimeSpan.FromMilliseconds(Math.Max(0, ms));
+        return t.TotalHours >= 1 ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}" : $"{t.Minutes:00}:{t.Seconds:00}";
+    }
+
+    static FrameworkElement CallLine(Dictionary<string, object> c)
+    {
+        var video = L(c["video"]) == 1;
+        var outgoing = S(c["direction"]) == "OUT";
+        var outcome = S(c["outcome"]);
+        long answered = L(c["answered_at"]), ended = L(c["ended_at"]);
+        var kind = video ? "video call" : "voice call";
+        var text = outcome switch
+        {
+            "COMPLETED" when answered > 0 && ended > 0 => $"{(outgoing ? "Outgoing" : "Incoming")} {kind} • {CallLength(ended - answered)}",
+            "MISSED" => $"Missed {kind}",
+            "NO_ANSWER" => $"Outgoing {kind} • no answer",
+            "DECLINED" => outgoing ? $"Outgoing {kind} • declined" : $"Declined {kind}",
+            "BUSY" => $"Outgoing {kind} • terminal busy",
+            "CANCELLED" => $"{(outgoing ? "Outgoing" : "Incoming")} {kind} • cancelled",
+            "FAILED" => $"{(outgoing ? "Outgoing" : "Incoming")} {kind} • could not connect",
+            "" => $"{(outgoing ? "Outgoing" : "Incoming")} {kind} • in progress",
+            _ => $"{(outgoing ? "Outgoing" : "Incoming")} {kind}",
+        };
+        var missed = outcome is "MISSED" or "FAILED";
+        var line = T($"{(video ? "🎥" : "📞")}  {text}  •  {Time(L(c["started_at"]), "HH:mm")}", 11, missed ? "#FB7185" : "#A1A1AA");
+        return new Border
+        {
+            HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 2, 0, 10), Padding = new Thickness(12, 5, 12, 5),
+            CornerRadius = new CornerRadius(12), Background = B("#141417"), BorderBrush = B(missed ? "#9F1239" : "#27272A"), BorderThickness = new Thickness(1), Child = line,
+        };
     }
 
     static FrameworkElement Bubble(CommsMessage m)
