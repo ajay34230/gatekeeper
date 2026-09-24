@@ -1,0 +1,12 @@
+bin/
+obj/
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+.vs/
+*.user
+/windows/dist/
+/windows/testdata/
+__pycache__/
