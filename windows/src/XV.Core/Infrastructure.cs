@@ -1,0 +1,151 @@
+using System.Net;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace XV.Core;
+
+/// <summary>Where the Command Center keeps its data. Override with XV_DATA_DIR (used by tests).</summary>
+public static class Paths
+{
+    public static string DataDir { get; private set; } = Init();
+
+    static string Init()
+    {
+        var env = Environment.GetEnvironmentVariable("XV_DATA_DIR");
+        var dir = !string.IsNullOrWhiteSpace(env)
+            ? env
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "XVAccessControl");
+        Directory.CreateDirectory(dir);
+        return dir;
+    }
+
+    public static string File(string name) => Path.Combine(DataDir, name);
+}
+
+/// <summary>Protects secrets at rest. Windows: DPAPI bound to this machine. Elsewhere (tests only): plain bytes.</summary>
+public static class Protector
+{
+    static readonly byte[] Entropy = "XV-DIGITAL-ACCESS-CONTROL-v1"u8.ToArray();
+
+    public static byte[] Protect(byte[] data) =>
+        OperatingSystem.IsWindows() ? ProtectedData.Protect(data, Entropy, DataProtectionScope.LocalMachine) : data;
+
+    public static byte[] Unprotect(byte[] data) =>
+        OperatingSystem.IsWindows() ? ProtectedData.Unprotect(data, Entropy, DataProtectionScope.LocalMachine) : data;
+
+    /// <summary>Loads a protected secret, creating it with <paramref name="create"/> on first use.</summary>
+    public static byte[] LoadOrCreate(string fileName, Func<byte[]> create)
+    {
+        var path = Paths.File(fileName);
+        if (System.IO.File.Exists(path)) return Unprotect(System.IO.File.ReadAllBytes(path));
+        var value = create();
+        System.IO.File.WriteAllBytes(path, Protect(value));
+        return value;
+    }
+}
+
+public sealed class Settings
+{
+    public string ServerId { get; set; } = "";
+    public string ServerName { get; set; } = Environment.MachineName;
+    public int Port { get; set; } = 8443;
+    public int DiscoveryPort { get; set; } = 47913;
+
+    // Internet / cloud linkage
+    public bool InternetEnabled { get; set; }
+    public string CloudMode { get; set; } = "PORT_FORWARD"; // PORT_FORWARD | VPN | TUNNEL | RELAY
+    public string PublicHost { get; set; } = "";
+    public int PublicPort { get; set; } = 8443;
+    public string CloudUrl { get; set; } = "";              // full https URL when a tunnel/relay provides one
+    public bool CloudUsesPublicCertificate { get; set; }    // tunnel terminates TLS with a CA certificate
+
+    public bool RequireApproval { get; set; } = true;
+    public int TokenHours { get; set; } = 12;
+    public int OfflineGraceHours { get; set; } = 12;
+    public bool StartWithWindows { get; set; } = true;
+
+    static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
+    static string FilePath => Paths.File("settings.json");
+
+    public static Settings Load()
+    {
+        Settings s;
+        try { s = System.IO.File.Exists(FilePath) ? JsonSerializer.Deserialize<Settings>(System.IO.File.ReadAllText(FilePath)) ?? new() : new(); }
+        catch { s = new(); }
+        if (string.IsNullOrWhiteSpace(s.ServerId)) s.ServerId = "XV-" + Convert.ToHexString(RandomNumberGenerator.GetBytes(4));
+        s.Save();
+        return s;
+    }
+
+    public void Save() => System.IO.File.WriteAllText(FilePath, JsonSerializer.Serialize(this, Json));
+
+    /// <summary>The address phones should use over the internet, or empty when not configured.</summary>
+    [JsonIgnore]
+    public string PublicUrl =>
+        !string.IsNullOrWhiteSpace(CloudUrl) ? CloudUrl.Trim().TrimEnd('/')
+        : !string.IsNullOrWhiteSpace(PublicHost) ? $"https://{PublicHost.Trim()}:{PublicPort}" : "";
+}
+
+/// <summary>Self-signed TLS certificate that phones pin by SHA-256 fingerprint (set during pairing).</summary>
+public static class CertManager
+{
+    public static X509Certificate2 LoadOrCreate(Settings settings)
+    {
+        var pfx = Protector.LoadOrCreate("server-cert.pfx.bin", () =>
+        {
+            using var rsa = RSA.Create(2048);
+            var req = new CertificateRequest($"CN=XV Access Control {settings.ServerId}", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            var san = new SubjectAlternativeNameBuilder();
+            san.AddDnsName("localhost");
+            san.AddDnsName("xv-access-control.local");
+            san.AddIpAddress(IPAddress.Loopback);
+            req.CertificateExtensions.Add(san.Build());
+            req.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
+            req.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new Oid("1.3.6.1.5.5.7.3.1") }, false));
+            using var cert = req.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(15));
+            return cert.Export(X509ContentType.Pfx);
+        });
+#pragma warning disable SYSLIB0057
+        return new X509Certificate2(pfx, (string?)null, X509KeyStorageFlags.Exportable | X509KeyStorageFlags.MachineKeySet);
+#pragma warning restore SYSLIB0057
+    }
+
+    public static string Fingerprint(X509Certificate2 cert) => Convert.ToHexString(SHA256.HashData(cert.RawData)).ToLowerInvariant();
+}
+
+public static class NetUtil
+{
+    /// <summary>IPv4 addresses of active LAN adapters, most likely first.</summary>
+    public static List<string> LanAddresses()
+    {
+        var list = new List<string>();
+        try
+        {
+            foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (ni.OperationalStatus != OperationalStatus.Up || ni.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
+                foreach (var ua in ni.GetIPProperties().UnicastAddresses)
+                    if (ua.Address.AddressFamily == AddressFamily.InterNetwork && IsPrivate(ua.Address))
+                        list.Add(ua.Address.ToString());
+            }
+        }
+        catch { /* adapters unavailable */ }
+        return list.Distinct().OrderBy(a => a.StartsWith("192.168.") ? 0 : a.StartsWith("10.") ? 1 : 2).ToList();
+    }
+
+    public static bool IsPrivate(IPAddress? ip)
+    {
+        if (ip == null) return false;
+        if (ip.IsIPv4MappedToIPv6) ip = ip.MapToIPv4();
+        if (IPAddress.IsLoopback(ip)) return true;
+        if (ip.AddressFamily == AddressFamily.InterNetworkV6)
+            return ip.IsIPv6LinkLocal || ip.IsIPv6UniqueLocal || ip.IsIPv6SiteLocal;
+        var b = ip.GetAddressBytes();
+        return b[0] == 10 || (b[0] == 172 && b[1] >= 16 && b[1] <= 31) || (b[0] == 192 && b[1] == 168)
+            || (b[0] == 169 && b[1] == 254) || (b[0] == 100 && b[1] >= 64 && b[1] <= 127); // CGNAT range used by Tailscale
+    }
+}
