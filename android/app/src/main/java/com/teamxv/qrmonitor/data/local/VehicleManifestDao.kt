@@ -19,6 +19,12 @@ interface VehicleManifestDao {
     @Query("SELECT * FROM vehicle_manifests WHERE eventId=:eventId LIMIT 1")
     suspend fun findManifestByEvent(eventId: String): VehicleManifestEntity?
 
+    @Query("SELECT * FROM vehicle_manifests WHERE exitEventId=:eventId LIMIT 1")
+    suspend fun findManifestByExitEvent(eventId: String): VehicleManifestEntity?
+
+    @Query("SELECT * FROM vehicle_manifests WHERE state='ACTIVE'")
+    fun observeActive(): kotlinx.coroutines.flow.Flow<List<VehicleManifestEntity>>
+
     @Query("SELECT * FROM vehicle_manifest_members WHERE manifestId=:id ORDER BY sequence")
     suspend fun members(id: String): List<VehicleManifestMemberEntity>
 

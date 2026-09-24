@@ -79,7 +79,7 @@ import java.util.Locale
 
 sealed interface ScanSession {
     data object Closed : ScanSession
-    data class PersonResult(val person: PersonEntity, val inside: Boolean) : ScanSession
+    data class PersonResult(val person: PersonEntity, val inside: Boolean, val insideSince: Long = 0L, val scannedLocation: String = "", val locationMismatch: Boolean = false) : ScanSession
     data class VehicleScan(val vehicleId: String, val inside: Boolean) : ScanSession
     data class VehicleDriver(val vehicleId: String, val driver: PersonEntity) : ScanSession
     data class VehicleCoDriver(val vehicleId: String, val driver: PersonEntity, val coDriver: PersonEntity?) : ScanSession
@@ -92,7 +92,7 @@ sealed interface ScanSession {
     data class Unknown(val message: String) : ScanSession
 }
 
-enum class ScannerTarget { PERSON, VEHICLE, DRIVER, CO_DRIVER, OCCUPANT }
+enum class ScannerTarget { PERSON, VEHICLE, DRIVER, CO_DRIVER, OCCUPANT, PAIRING }
 
 data class SyncUiState(
     val lastSuccessfulSyncAt: Long = 0L,
@@ -111,7 +111,7 @@ data class CompletedVehicleDisplay(
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val config = AppConfig(app)
     private val network = NetworkMonitor(app)
-    private val api = ApiClient()
+    private val api = ApiClient(config)
     private val syncState = SyncStateStore(app)
     private val repo = EventRepository(
         AppDatabase.get(app),
@@ -146,6 +146,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var soundEnabled by mutableStateOf(config.soundEnabled)
         private set
 
+    var paired by mutableStateOf(config.paired)
+        private set
+    var pairingMessage by mutableStateOf("")
+        private set
+    var busy by mutableStateOf(false)
+        private set
+    var locations by mutableStateOf(config.cachedLocations)
+        private set
+    var gates by mutableStateOf(config.cachedGates)
+        private set
+    var vehicles by mutableStateOf(listOf<VehicleEntity>())
+        private set
+    var vehiclesInside by mutableStateOf(setOf<String>())
+        private set
+    var vehicleMismatch by mutableStateOf("")
+        private set
+
     var scannedVehicle by mutableStateOf<VehicleEntity?>(null)
         private set
 
@@ -159,9 +176,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     init {
-        api.deviceKey = config.deviceKey
         api.operatorToken = config.operatorToken
-        api.deviceId = config.deviceId
         loggedIn = config.operatorLoggedIn && config.canContinueOffline()
         if (config.operatorLoggedIn && !loggedIn) config.clearSession()
 
@@ -169,6 +184,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         SyncScheduler.ensurePeriodic(app)
 
         viewModelScope.launch { repo.observePersonnel().collectLatest { personnel = it } }
+        viewModelScope.launch { repo.observeVehicles().collectLatest { vehicles = it } }
+        viewModelScope.launch { repo.observeVehiclesInside().collectLatest { vehiclesInside = it } }
+        if (config.paired) refreshStations()
         viewModelScope.launch { repo.observeEvents().collectLatest { events = it } }
         viewModelScope.launch { repo.observePendingCount().collectLatest { pending = it } }
         viewModelScope.launch { repo.observeAttentionCount().collectLatest { attention = it } }
@@ -181,7 +199,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         viewModelScope.launch(Dispatchers.IO) {
+            if (!config.paired) { authMessage = "Pair this terminal with the PC Command Center first (PC Server Connection below)."; return@launch }
+            if (config.locationId.isBlank() || config.gateId.isBlank()) { authMessage = "Select your station location and gate."; return@launch }
+            busy = true
             val result = api.login(config.baseUrl, user, password)
+            busy = false
             if (result.isSuccess) {
                 val value = result.getOrThrow()
                 val now = System.currentTimeMillis()
@@ -191,26 +213,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 config.saveLogin(
                     value.username,
+                    value.name,
                     value.role,
                     value.accessToken,
                     value.expiresAt,
                     value.offlineGraceSeconds
                 )
                 api.operatorToken = config.operatorToken
-                api.deviceKey = config.deviceKey
-                api.deviceId = config.deviceId
                 loggedIn = true
                 authMessage = "Signed in as ${value.username}"
                 syncStateRefresh()
                 SyncScheduler.enqueueNow(getApplication())
             } else {
                 authMessage = when (val failure = result.exceptionOrNull()) {
-                    is HttpFailure -> when (failure.code) {
-                        401 -> "Invalid username or password."
-                        403 -> "This account is not permitted for mobile operations."
-                        else -> "Login failed (HTTP ${failure.code})."
-                    }
-                    else -> "Login failed. Check the server connection."
+                    is HttpFailure -> failure.message ?: "Sign-in failed (HTTP ${failure.code})."
+                    else -> "Cannot reach the Command Center. Check that this phone and the PC are on the same network, or configure Cloud Link."
                 }
             }
         }
@@ -220,8 +237,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val now = System.currentTimeMillis()
         if (config.canContinueOffline(now)) {
             api.operatorToken = config.operatorToken
-            api.deviceKey = config.deviceKey
-            api.deviceId = config.deviceId
             loggedIn = true
             authMessage = "Offline session restored"
         } else {
@@ -297,13 +312,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 ScannerTarget.CO_DRIVER,
                 ScannerTarget.OCCUPANT -> EntityType.PERSON
                 ScannerTarget.VEHICLE -> EntityType.VEHICLE
+                ScannerTarget.PAIRING -> { pairWithQr(raw); return@launch }
             }
             when (target) {
-                ScannerTarget.PERSON -> handlePerson(repo.lookupIdentity(raw, expected))
-                ScannerTarget.VEHICLE -> handleVehicle(repo.lookupIdentity(raw, expected))
+                ScannerTarget.PERSON -> handlePerson(repo.lookupIdentity(raw, expected, config.locationId))
+                ScannerTarget.VEHICLE -> handleVehicle(repo.lookupIdentity(raw, expected, config.locationId))
                 ScannerTarget.DRIVER -> handleDriver(repo.lookupIdentity(raw, expected))
                 ScannerTarget.CO_DRIVER -> handleCoDriver(repo.lookupIdentity(raw, expected))
                 ScannerTarget.OCCUPANT -> handleOccupant(repo.lookupIdentity(raw, expected))
+                ScannerTarget.PAIRING -> Unit
             }
         }
     }
@@ -312,14 +329,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val p = result.person
         session = when {
             p == null -> ScanSession.Unknown(result.error ?: "Unknown person")
-            !p.active -> ScanSession.Unknown("This credential is inactive.")
-            else -> ScanSession.PersonResult(p, repo.isPersonInside(p.id))
+            else -> ScanSession.PersonResult(p, repo.isPersonInside(p.id), repo.insideSince(p.id), result.scannedLocation, result.locationMismatch)
         }
     }
 
     private suspend fun handleVehicle(result: IdentityResult) {
         val v = result.vehicle
         if (v != null) scannedVehicle = v
+        vehicleMismatch = if (result.locationMismatch) result.scannedLocation else ""
         session = when {
             v == null -> ScanSession.Unknown(result.error ?: "Unknown vehicle")
             !v.active -> ScanSession.Unknown("This vehicle credential is inactive.")
@@ -382,7 +399,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     config.locationId,
                     config.gateId,
                     config.deviceId,
-                    config.operatorId
+                    config.operatorId,
+                    s.locationMismatch,
+                    s.scannedLocation
                 )
             ) {
                 is OperationResult.Success -> {
@@ -538,10 +557,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val result = api.health(config.baseUrl)
             val latency = System.currentTimeMillis() - start
             networkStatus = if (result.isSuccess) {
-                api.heartbeat(config.baseUrl, config.deviceId, config.locationId, config.gateId)
+                if (config.hasValidOnlineToken()) api.heartbeat(config.baseUrl, config.deviceId, config.locationId, config.gateId, config.operatorId, pending)
                 NetworkStatus(
                     transport, true, true, true,
-                    "${config.serverHost}:${config.serverPort}", localIp, latency, "API healthy"
+                    api.lastRoute, localIp, latency, "Encrypted link verified with ${result.getOrNull()?.serverName ?: "Command Center"}"
                 )
             } else {
                 NetworkStatus(
@@ -553,22 +572,78 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun updateDeviceKey(value: String) {
-        config.deviceKey = value
-        api.deviceKey = config.deviceKey
-        message = if (value.isBlank()) "Device key cleared" else "Device key saved"
+    // ------------------------------------------------------------------ pairing, stations, cloud link
+
+    fun openPairingScanner() { pairingMessage = ""; scannerTarget = ScannerTarget.PAIRING }
+
+    fun pairWithQr(raw: String) {
+        val info = com.teamxv.qrmonitor.network.PairingInfo.parse(raw)
+        if (info == null) { pairingMessage = "That is not a Command Center pairing QR. On the PC click 'Local Wi-Fi & Pair Device'."; return }
+        busy = true
+        pairingMessage = "Pairing with ${info.n.ifBlank { info.id }}…"
+        viewModelScope.launch(Dispatchers.IO) {
+            val name = android.os.Build.MANUFACTURER.replaceFirstChar { it.uppercase() } + " " + android.os.Build.MODEL
+            val res = api.enroll(info, name, "Android ${android.os.Build.VERSION.RELEASE}")
+            busy = false
+            res.onSuccess { (enr, ep) ->
+                val hosts = if (ep.internet) info.h else listOf(ep.baseUrl.substringAfter("https://").substringBeforeLast(":")) + info.h
+                config.savePairing(enr.serverId.ifBlank { info.id }, enr.serverName.ifBlank { info.n }, info.fp, hosts, info.p, info.u, info.pc, enr.deviceId, enr.deviceKey)
+                api.operatorToken = ""
+                paired = true
+                loggedIn = false
+                pairingMessage = "Paired securely with ${config.serverName} (${enr.deviceId}). Sign in to start your shift."
+                refreshStations()
+            }.onFailure { e ->
+                pairingMessage = if (e is HttpFailure) (e.message ?: "Pairing refused") else (e.message ?: "Pairing failed")
+            }
+        }
     }
 
-    fun updateConfig(host: String, port: Int, location: String, gate: String, device: String, operator: String) {
-        config.serverHost = host
-        config.serverPort = port
-        config.locationId = location
-        config.gateId = gate
-        config.deviceId = device
-        config.operatorId = operator
-        api.deviceId = config.deviceId
-        networkStatus = networkStatus.copy(server = "${config.serverHost}:${config.serverPort}")
-        message = "Configuration saved"
+    fun unpair() {
+        config.unpair(); paired = false; loggedIn = false; api.operatorToken = ""
+        pairingMessage = "Terminal unpaired. Scan a new pairing QR to connect."
+    }
+
+    /** Locations and gates configured on the PC (public list, no sign-in needed). */
+    fun refreshStations() {
+        viewModelScope.launch(Dispatchers.IO) {
+            api.stations().onSuccess { (locs, gts) ->
+                config.cachedLocations = locs; config.cachedGates = gts
+                locations = locs; gates = gts
+            }
+        }
+    }
+
+    fun selectPost(locId: String, locName: String, gateId: String, gateName: String) {
+        config.locationId = locId; config.locationName = locName; config.gateId = gateId; config.gateName = gateName
+        message = "Post set to $locName • $gateName"
+    }
+
+    fun register(name: String, id: String, password: String, confirm: String, onRegistered: (String) -> Unit) {
+        when {
+            !config.paired -> { authMessage = "Pair this terminal with the PC Command Center first."; return }
+            name.trim().length < 2 -> { authMessage = "Enter your rank and full name."; return }
+            password.length < 6 -> { authMessage = "Password must be at least 6 characters."; return }
+            password != confirm -> { authMessage = "Passwords do not match."; return }
+        }
+        busy = true
+        viewModelScope.launch(Dispatchers.IO) {
+            val r = api.register(name.trim(), id.trim(), password)
+            busy = false
+            r.onSuccess {
+                authMessage = if (it.status == "pending") "Account ${it.username} created. Sign in after it is approved on the PC Command Center."
+                else "Account ${it.username} created. You can sign in now."
+                onRegistered(it.username)
+            }.onFailure { e -> authMessage = (e as? HttpFailure)?.message ?: "Cannot reach the Command Center." }
+        }
+    }
+
+    fun saveCloudLink(mode: String, url: String, publicCa: Boolean) {
+        val clean = url.trim().trimEnd('/')
+        if (clean.isNotEmpty() && !clean.startsWith("https://")) { message = "The internet address must start with https://"; return }
+        config.connectionMode = mode; config.publicUrl = clean; config.publicUsesCaCertificate = publicCa
+        message = "Connection settings saved"
+        testConnection()
     }
 
     fun syncStateRefresh() {

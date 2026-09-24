@@ -14,10 +14,14 @@ class SyncStateStore(context: Context) {
     val lastUploadedCount: Int
         get() = prefs.getInt("lastUploadedCount", 0)
 
-    fun markSuccess(uploadedCount: Int) {
+    val lastRoute: String
+        get() = prefs.getString("lastRoute", "") ?: ""
+
+    fun markSuccess(uploadedCount: Int, route: String = "") {
         prefs.edit()
             .putLong("lastSuccessfulSyncAt", System.currentTimeMillis())
             .putInt("lastUploadedCount", uploadedCount)
+            .putString("lastRoute", route)
             .remove("lastError")
             .apply()
     }

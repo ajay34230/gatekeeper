@@ -17,6 +17,18 @@ interface PersonDao {
     @Query("SELECT * FROM persons ORDER BY name")
     fun observeAll(): Flow<List<PersonEntity>>
 
+    @Query("SELECT * FROM persons WHERE UPPER(secretCode)=UPPER(:code) LIMIT 1")
+    suspend fun findBySecret(code: String): PersonEntity?
+
+    @Query("SELECT * FROM persons WHERE UPPER(serviceNo)=UPPER(:no) AND serviceNo<>'' LIMIT 1")
+    suspend fun findByServiceNo(no: String): PersonEntity?
+
+    @Query("DELETE FROM persons WHERE id NOT IN (:keep)")
+    suspend fun deleteAllExcept(keep: List<String>)
+
+    @Query("DELETE FROM persons")
+    suspend fun deleteAll()
+
     @Query("SELECT COUNT(*) FROM persons")
     suspend fun count(): Int
 }

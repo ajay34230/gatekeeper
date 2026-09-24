@@ -7,7 +7,8 @@ using var store = new Store(settings);
 var cert = CertManager.LoadOrCreate(settings);
 await using var server = new ApiServer(store, cert);
 server.Log += Console.WriteLine;
-if (args.Length >= 4 && args[0] == "--create-operator") Console.WriteLine("Created " + store.CreateAccount(args[1], args[2], args[3], "ADMIN").id);
+var ci = Array.IndexOf(args, "--create-operator");
+if (ci >= 0 && ci + 3 < args.Length) Console.WriteLine("Created " + store.CreateAccount(args[ci + 1], args[ci + 2], args[ci + 3], "ADMIN").id);
 for (var i = 0; i + 1 < args.Length; i++)
 {
     if (args[i] == "--import-persons") Console.WriteLine("Imported persons: " + RegistryImport.Persons(store, File.ReadAllText(args[i + 1])).ok);
@@ -15,6 +16,7 @@ for (var i = 0; i + 1 < args.Length; i++)
     if (args[i] == "--add-location" && i + 2 < args.Length) store.UpsertLocation(args[i + 1], args[i + 2]);
     if (args[i] == "--add-gate" && i + 2 < args.Length) store.UpsertGate(args[i + 1], args[i + 2]);
 }
+if (args.Contains("--setup-only")) return;
 await server.StartAsync();
 using var discovery = new DiscoveryResponder(settings, server.Fingerprint);
 Console.WriteLine($"Server {settings.ServerId} fingerprint {server.Fingerprint}");

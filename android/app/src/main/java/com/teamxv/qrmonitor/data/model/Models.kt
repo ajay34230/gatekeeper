@@ -32,7 +32,9 @@ data class MovementEvent(
     val createdAt: Long,
     val syncStatus: SyncStatus = SyncStatus.PENDING,
     val sourceType: PresenceSource = PresenceSource.DIRECT,
-    val sourceId: String? = null
+    val sourceId: String? = null,
+    val locationMismatch: Boolean = false,
+    val scannedLocation: String = ""
 )
 
 data class NetworkStatus(

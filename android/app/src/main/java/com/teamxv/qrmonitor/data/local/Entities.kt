@@ -28,7 +28,9 @@ data class MovementEventEntity(
     val lastError: String? = null,
     val syncUpdatedAt: Long = createdAt,
     val sourceType: String = "DIRECT",
-    val sourceId: String? = null
+    val sourceId: String? = null,
+    val locationMismatch: Boolean = false,
+    val scannedLocation: String = ""
 )
 
 @Entity(tableName = "presence_sessions", indices = [

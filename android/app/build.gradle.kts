@@ -11,21 +11,19 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.teamxv.qrmonitor"
+        applicationId = "com.xv.accesscontrol"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10
-        versionName = "0.4.0-phase10"
+        versionCode = 100
+        versionName = "1.0.0"
 
-        buildConfigField("String", "DEFAULT_SERVER_HOST", "\"192.168.1.10\"")
-        buildConfigField("int", "DEFAULT_SERVER_PORT", "8000")
     }
 
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
-            manifestPlaceholders["allowCleartextTraffic"] = true
+            manifestPlaceholders["allowCleartextTraffic"] = false
         }
         release {
             manifestPlaceholders["allowCleartextTraffic"] = false
@@ -79,6 +77,9 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Encrypted local database (SQLCipher for Android)
+    implementation("net.zetetic:sqlcipher-android:4.6.1@aar")
+    implementation("androidx.sqlite:sqlite:2.4.0")
 
     implementation("androidx.work:work-runtime-ktx:2.11.2")
 

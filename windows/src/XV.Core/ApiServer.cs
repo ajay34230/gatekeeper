@@ -163,6 +163,12 @@ public sealed class ApiServer : IAsyncDisposable
                 Log?.Invoke($"New operator account {id} ({status}) from {deviceId}");
                 return (200, new JsonObject { ["status"] = status == "PENDING" ? "pending" : "ok", ["username"] = id });
             }
+            case "stations.list":
+                return (200, new JsonObject
+                {
+                    ["locations"] = new JsonArray(_store.Locations().Select(r => (JsonNode)new JsonObject { ["id"] = r["id"]?.ToString(), ["name"] = r["name"]?.ToString() }).ToArray()),
+                    ["gates"] = new JsonArray(_store.Gates().Select(r => (JsonNode)new JsonObject { ["id"] = r["id"]?.ToString(), ["name"] = r["name"]?.ToString() }).ToArray()),
+                });
             case "auth.logout":
                 if (!string.IsNullOrEmpty(token)) _store.Logout(token);
                 return (200, new JsonObject { ["status"] = "ok" });

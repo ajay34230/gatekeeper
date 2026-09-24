@@ -21,7 +21,10 @@ sealed class OperationResult<out T> {
 data class IdentityResult(
     val person: PersonEntity? = null,
     val vehicle: VehicleEntity? = null,
-    val error: String? = null
+    val error: String? = null,
+    /** Location embedded in the QR (e.g. "P-001|LOC04"), when present. */
+    val scannedLocation: String = "",
+    val locationMismatch: Boolean = false
 )
 
 data class VehicleManifestDraft(
@@ -51,17 +54,48 @@ class EventRepository(
     private val vehicles = db.vehicleDao()
     private val manifests = db.vehicleManifestDao()
 
+    /**
+     * Applies the Command Center's registry (the only source of personnel/vehicle data) and, when nothing is
+     * waiting to upload, aligns local presence with the server so movements recorded at other gates are respected.
+     */
     suspend fun applyMasterBootstrap(master: com.teamxv.qrmonitor.network.MasterBootstrapResponse) {
         db.withTransaction {
-            persons.upsertAll(master.persons.map { PersonEntity(it.personId, it.name, it.category, it.active) })
-            vehicles.upsertAll(master.vehicles.map { VehicleEntity(it.vehicleId, it.registration, it.type, it.active) })
+            persons.upsertAll(master.persons.map {
+                PersonEntity(it.personId, it.name, it.category, it.active, it.secretCode, it.rank, it.serviceNo, it.unit, it.company, it.role, it.status, it.accessLocations)
+            })
+            vehicles.upsertAll(master.vehicles.map {
+                VehicleEntity(it.vehicleId, it.registration, it.type, it.active, it.secretCode, it.milReg, it.model, it.company, it.status)
+            })
+            if (master.persons.isEmpty()) persons.deleteAll() else persons.deleteAllExcept(master.persons.map { it.personId })
+            if (master.vehicles.isEmpty()) vehicles.deleteAll() else vehicles.deleteAllExcept(master.vehicles.map { it.vehicleId })
+
+            if (events.pendingCount() == 0) {
+                val now = System.currentTimeMillis()
+                val serverInside = master.presence.associateBy { it.personId }
+                val localActive = sessions.activeAll()
+                localActive.filter { it.sourceType == "DIRECT" && it.personId !in serverInside }
+                    .forEach { sessions.closeDirectForPerson(it.personId, now) }
+                val localIds = localActive.map { it.personId }.toSet()
+                serverInside.values.filter { it.personId !in localIds }.forEach {
+                    sessions.insert(PresenceSessionEntity(
+                        sessionId = "SRV-${it.personId}-${it.entryAt}", personId = it.personId, vehicleId = null,
+                        sourceType = "DIRECT", sourceId = null, entryEventId = "SERVER", entryAt = it.entryAt,
+                        locationId = "", gateId = ""
+                    ))
+                }
+            }
         }
     }
+
+    fun observeVehicles(): Flow<List<VehicleEntity>> = vehicles.observeAll()
+    fun observeVehiclesInside(): Flow<Set<String>> = manifests.observeActive().map { list -> list.map { it.vehicleId }.toSet() }
 
     fun observeEvents(): Flow<List<MovementEvent>> =
         events.observeAll().map { list -> list.map(::toModel) }
 
     fun observePendingCount(): Flow<Int> = events.observePendingCount()
+
+    suspend fun pendingCount(): Int = events.pendingCount()
 
     fun observeAttentionCount(): Flow<Int> = events.observeAttentionCount()
 
@@ -73,28 +107,40 @@ class EventRepository(
             }
         }
 
-    suspend fun lookupIdentity(rawQr: String, expected: EntityType? = null): IdentityResult {
-        val qr = rawQr.trim().uppercase()
-        val personId = QrPayloadParser.personId(qr)
-        val vehicleId = QrPayloadParser.vehicleId(qr)
+    /**
+     * Resolves a scanned QR or typed code. Accepts the secret credential code printed by the Command Center,
+     * an ID (P-001 / V014), a service number or a plate, optionally followed by "|location".
+     */
+    suspend fun lookupIdentity(rawQr: String, expected: EntityType? = null, currentLocation: String = ""): IdentityResult {
+        val parsed = QrPayloadParser.parse(rawQr)
+        val mismatch = parsed.location.isNotBlank() && currentLocation.isNotBlank() &&
+            QrPayloadParser.normalizeLocation(parsed.location) != QrPayloadParser.normalizeLocation(currentLocation)
+        fun ok(p: PersonEntity? = null, v: VehicleEntity? = null) = IdentityResult(p, v, null, parsed.location, mismatch)
+        val code = parsed.code
+        if (code.isBlank()) return IdentityResult(error = "Empty code")
+        if (code.startsWith("XVGK1:")) return IdentityResult(error = "This is a PC pairing QR. Use Sync Hub → Pair with PC.")
+        if (expected != EntityType.VEHICLE) {
+            val p = persons.findBySecret(code) ?: QrPayloadParser.personId(code)?.let { persons.find(it) } ?: persons.findByServiceNo(code)
+            if (p != null) return ok(p = p)
+        }
+        if (expected != EntityType.PERSON) {
+            val v = vehicles.findBySecret(code) ?: QrPayloadParser.vehicleId(code)?.let { vehicles.find(it) }
+                ?: vehicles.findByPlate(code.uppercase().replace("-", "").replace(" ", ""))
+            if (v != null) return ok(v = v)
+        }
         return when {
-            personId != null -> {
-                if (expected == EntityType.VEHICLE) IdentityResult(error = "Vehicle QR required")
-                else persons.find(personId)?.let { IdentityResult(person = it) }
-                    ?: IdentityResult(error = "Person credential not found")
-            }
-            vehicleId != null -> {
-                if (expected == EntityType.PERSON) IdentityResult(error = "Person QR required")
-                else vehicles.find(vehicleId)?.let { IdentityResult(vehicle = it) }
-                    ?: IdentityResult(error = "Vehicle credential not found")
-            }
-            else -> IdentityResult(error = "QR code format not recognized")
+            expected == EntityType.VEHICLE && QrPayloadParser.personId(code) != null -> IdentityResult(error = "This is a personnel credential. Scan the vehicle QR.")
+            expected == EntityType.PERSON && QrPayloadParser.vehicleId(code) != null -> IdentityResult(error = "This is a vehicle credential. Scan a personnel badge.")
+            persons.count() == 0 && vehicles.count() == 0 -> IdentityResult(error = "The registry on this terminal is empty. Sync with the Command Center first.")
+            else -> IdentityResult(error = "Code $code is not registered in the Command Center")
         }
     }
 
 
 
     suspend fun isPersonInside(personId: String): Boolean = sessions.activeForPerson(personId) != null
+
+    suspend fun insideSince(personId: String): Long = sessions.activeForPerson(personId)?.entryAt ?: 0L
 
     suspend fun isVehicleInside(vehicleId: String): Boolean = manifests.activeForVehicle(vehicleId) != null
 
@@ -103,7 +149,9 @@ class EventRepository(
         location: String,
         gate: String,
         device: String,
-        operator: String
+        operator: String,
+        locationMismatch: Boolean = false,
+        scannedLocation: String = ""
     ): OperationResult<MovementEvent> = db.withTransaction {
         val p = persons.find(personId) ?: return@withTransaction OperationResult.Rejected("PERSON_NOT_FOUND")
         if (!p.active) return@withTransaction OperationResult.Rejected("INACTIVE_PERSON")
@@ -116,7 +164,9 @@ class EventRepository(
             eventId, EntityType.PERSON, personId, type, location, gate, device, operator,
             now, now, SyncStatus.PENDING,
             sourceType = if (active?.sourceType == "VEHICLE") PresenceSource.VEHICLE else PresenceSource.DIRECT,
-            sourceId = active?.sourceId
+            sourceId = active?.sourceId,
+            locationMismatch = locationMismatch,
+            scannedLocation = scannedLocation
         )
         events.insert(toEntity(event))
         if (type == EventType.ENTRY) {
@@ -214,7 +264,7 @@ class EventRepository(
         for (eventEntity in events.pending()) {
             val event = toModel(eventEntity)
             if (event.entityType == EntityType.VEHICLE) {
-                val manifest = manifests.findManifestByEvent(event.eventId)
+                val manifest = manifests.findManifestByEvent(event.eventId) ?: manifests.findManifestByExitEvent(event.eventId)
                 if (manifest == null) {
                     events.updateSync(event.eventId, SyncStatus.CONFLICT.name, eventEntity.syncAttempts + 1, "VEHICLE_MANIFEST_NOT_FOUND", now)
                     continue
@@ -227,7 +277,8 @@ class EventRepository(
                         eventId = event.eventId, entityType = event.entityType.name, entityId = event.entityId,
                         eventType = event.eventType.name, locationId = event.locationId, gateId = event.gateId,
                         deviceId = event.deviceId, operatorId = event.operatorId, eventTimestamp = event.eventTimestamp,
-                        createdAt = event.createdAt, sourceType = event.sourceType.name, sourceId = event.sourceId
+                        createdAt = event.createdAt, sourceType = event.sourceType.name, sourceId = event.sourceId,
+                        locationMismatch = event.locationMismatch, scannedLocation = event.scannedLocation
                     ),
                     manifest = com.teamxv.qrmonitor.network.VehicleManifestPayload(
                         manifestId = manifest.manifestId, vehicleId = manifest.vehicleId, entryEventId = manifest.eventId,
@@ -274,14 +325,15 @@ class EventRepository(
         e.eventId, e.entityType.name, e.entityId, e.eventType.name,
         e.locationId, e.gateId, e.deviceId, e.operatorId, e.eventTimestamp,
         e.createdAt, e.syncStatus.name, 0, null, e.createdAt,
-        e.sourceType.name, e.sourceId
+        e.sourceType.name, e.sourceId, e.locationMismatch, e.scannedLocation
     )
 
     private fun toModel(e: MovementEventEntity) = MovementEvent(
         e.eventId, EntityType.valueOf(e.entityType), e.entityId,
         EventType.valueOf(e.eventType), e.locationId, e.gateId,
         e.deviceId, e.operatorId, e.eventTimestamp, e.createdAt,
-        SyncStatus.valueOf(e.syncStatus), PresenceSource.valueOf(e.sourceType), e.sourceId
+        SyncStatus.valueOf(e.syncStatus), PresenceSource.valueOf(e.sourceType), e.sourceId,
+        e.locationMismatch, e.scannedLocation
     )
 
     private fun newEventId() = "EVT-" + UUID.randomUUID().toString().replace("-", "").take(12).uppercase()

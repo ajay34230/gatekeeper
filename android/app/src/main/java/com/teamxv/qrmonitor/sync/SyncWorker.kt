@@ -3,6 +3,7 @@ package com.teamxv.qrmonitor.sync
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.teamxv.qrmonitor.BuildConfig
 import com.teamxv.qrmonitor.config.AppConfig
 import com.teamxv.qrmonitor.data.EventRepository
 import com.teamxv.qrmonitor.data.local.AppDatabase
@@ -11,41 +12,34 @@ import com.teamxv.qrmonitor.network.HttpFailure
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/** Background synchronization: pull registry, push queued gate records, report terminal status. */
 class SyncWorker(appContext: Context, workerParams: WorkerParameters) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val config = AppConfig(applicationContext)
-        val base = config.baseUrl
-        val api = ApiClient().apply {
-            deviceKey = config.deviceKey
-            operatorToken = config.operatorToken
-            deviceId = config.deviceId
-        }
-        val repo = EventRepository(AppDatabase.get(applicationContext), api) { base }
         val state = SyncStateStore(applicationContext)
+        if (!config.paired) return@withContext Result.success()
+        if (!config.hasValidOnlineToken()) {
+            state.markError("Operator sign-in required to synchronize")
+            return@withContext Result.success()
+        }
+        val api = ApiClient(config).apply { operatorToken = config.operatorToken }
+        val repo = EventRepository(AppDatabase.get(applicationContext), api) { config.baseUrl }
 
-        val health = api.health(base)
-        if (health.isFailure) return@withContext classifyFailure(health.exceptionOrNull(), state)
-
-        val master = api.fetchMaster(base)
+        val master = api.fetchMaster(config.baseUrl)
         if (master.isFailure) return@withContext classifyFailure(master.exceptionOrNull(), state)
-        repo.applyMasterBootstrap(master.getOrThrow())
+        val m = master.getOrThrow()
+        config.cachedLocations = m.locations.map { it.id to it.name }
+        config.cachedGates = m.gates.map { it.id to it.name }
 
         return@withContext try {
             val count = repo.syncPending()
-            val heartbeat = api.heartbeat(base, config.deviceId, config.locationId, config.gateId)
-            if (heartbeat.isFailure) {
-                val failure = heartbeat.exceptionOrNull()
-                if (failure != null) state.markError(failure.message ?: "Heartbeat failed")
-                if (failure is HttpFailure && failure.code in 400..499 && failure.code != 429) {
-                    return@withContext Result.failure()
-                }
-                return@withContext Result.retry()
-            }
-            state.markSuccess(count)
+            repo.applyMasterBootstrap(m)
+            api.heartbeat(config.baseUrl, config.deviceId, config.locationId, config.gateId, config.operatorId, repo.pendingCount(), BuildConfig.VERSION_NAME)
+            state.markSuccess(count, api.lastRoute)
             Result.success()
-        } catch (e: EventRepository.SyncTransientException) {
+        } catch (e: HttpFailure) {
             state.markError(e.message ?: "Synchronization failed")
-            Result.retry()
+            if (e.code in 400..499 && e.code != 429) Result.failure() else Result.retry()
         } catch (e: Exception) {
             state.markError(e.message ?: "Synchronization failed")
             Result.retry()
@@ -54,10 +48,6 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
 
     private fun classifyFailure(failure: Throwable?, state: SyncStateStore): Result {
         state.markError(failure?.message ?: "Synchronization failed")
-        return if (failure is HttpFailure && failure.code in 400..499 && failure.code != 429) {
-            Result.failure()
-        } else {
-            Result.retry()
-        }
+        return if (failure is HttpFailure && failure.code in 400..499 && failure.code != 429) Result.failure() else Result.retry()
     }
 }

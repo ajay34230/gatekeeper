@@ -37,8 +37,7 @@ jobs:
         run: |
           $env:XV_DATA_DIR = "$env:RUNNER_TEMP\xvshot"
           dotnet build windows/src/XV.Server -c Release
-          $p = Start-Process dotnet -ArgumentList @("windows/src/XV.Server/bin/Release/net8.0/XV.Server.dll","--create-operator","CI Operator","GK-01","Operator#1","--import-persons","windows/tests/sample/persons.csv","--import-vehicles","windows/tests/sample/vehicles.csv","--add-location","LOC07","Location 07","--add-gate","G02","Gate 02") -PassThru
-          Start-Sleep 10; Stop-Process -Id $p.Id -Force
+          dotnet windows/src/XV.Server/bin/Release/net8.0/XV.Server.dll --setup-only --create-operator "CI Operator" GK-01 "Operator#1" --import-persons windows/tests/sample/persons.csv --import-vehicles windows/tests/sample/vehicles.csv --add-location LOC07 "Location 07" --add-gate G02 "Gate 02"
           $a = Start-Process windows/dist/app/XVCommandCenter.exe -ArgumentList "--screenshot","$env:GITHUB_WORKSPACE\screenshots" -PassThru
           if (-not $a.WaitForExit(120000)) { Stop-Process -Id $a.Id -Force; throw "app did not finish" }
           Get-ChildItem screenshots
@@ -60,7 +59,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '17' }
-      - uses: android-actions/setup-android@v3
       - name: Build APK
         working-directory: android
         run: chmod +x gradlew && ./gradlew --no-daemon :app:assembleDebug

@@ -146,8 +146,9 @@ fun TeamXVApp(vm: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel
 
     Surface(Modifier.fillMaxSize(), color = UiBackground) {
         when {
+            vm.scannerTarget == ScannerTarget.PAIRING -> ScannerHost(vm)
             !vm.loggedIn -> LoginScreen(vm)
-            settingsOpen && cfg.operatorRole == "ADMIN" -> SettingsScreen(vm, onBack = { settingsOpen = false })
+            settingsOpen -> SettingsScreen(vm, onBack = { settingsOpen = false })
             vm.showSuccess && vm.completedEvent != null -> SuccessScreen(
                 vm = vm,
                 event = vm.completedEvent!!,
@@ -164,7 +165,7 @@ fun TeamXVApp(vm: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel
                         2 -> SyncStatusScreen(vm)
                         else -> OperatorScreen(
                             vm = vm,
-                            onOpenSettings = { if (cfg.operatorRole == "ADMIN") settingsOpen = true }
+                            onOpenSettings = { settingsOpen = true }
                         )
                     }
                 }
@@ -183,6 +184,7 @@ private fun ScannerHost(vm: MainViewModel) {
         ScannerTarget.DRIVER -> "Scan Driver QR"
         ScannerTarget.CO_DRIVER -> "Scan Co-Driver QR"
         ScannerTarget.OCCUPANT -> "Scan Occupant QR"
+        ScannerTarget.PAIRING -> "Scan PC Pairing QR"
     }
     val subtitle = when (target) {
         ScannerTarget.PERSON -> "Align identity badge QR inside the reticle"
@@ -190,6 +192,7 @@ private fun ScannerHost(vm: MainViewModel) {
         ScannerTarget.DRIVER -> "Scan authorized driver identity badge"
         ScannerTarget.CO_DRIVER -> "Align co-driver identity badge inside frame"
         ScannerTarget.OCCUPANT -> "Align passenger identity badge inside frame"
+        ScannerTarget.PAIRING -> "On the PC: Local Wi-Fi & Pair Device"
     }
     QrScannerView(
         title = title,
@@ -203,9 +206,15 @@ private fun ScannerHost(vm: MainViewModel) {
 @Composable
 private fun LoginScreen(vm: MainViewModel) {
     val cfg = vm.currentConfig()
+    var signUp by rememberSaveable { mutableStateOf(false) }
     var user by rememberSaveable { mutableStateOf(cfg.operatorId) }
+    var name by rememberSaveable { mutableStateOf("") }
     var pass by rememberSaveable { mutableStateOf("") }
+    var confirm by rememberSaveable { mutableStateOf("") }
     var visible by rememberSaveable { mutableStateOf(false) }
+    var showServer by rememberSaveable { mutableStateOf(!vm.paired) }
+    var loc by rememberSaveable { mutableStateOf(cfg.locationId) }
+    var gate by rememberSaveable { mutableStateOf(cfg.gateId) }
 
     Column(
         Modifier
@@ -216,7 +225,7 @@ private fun LoginScreen(vm: MainViewModel) {
             .padding(horizontal = 24.dp, vertical = 26.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(8.dp))
         Box(
             Modifier.size(64.dp).clip(RoundedCornerShape(16.dp))
                 .background(UiInk).border(1.dp, Color(0xFF27272A), RoundedCornerShape(16.dp)),
@@ -224,42 +233,51 @@ private fun LoginScreen(vm: MainViewModel) {
         ) {
             Icon(Icons.Default.Shield, null, tint = Color.White, modifier = Modifier.size(32.dp))
         }
-        Spacer(Modifier.height(17.dp))
+        Spacer(Modifier.height(16.dp))
         Text("XV DIGITAL ACCESS CONTROL", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = UiInk)
         Spacer(Modifier.height(4.dp))
-        Text(
-            "FIELD ACCESS CONTROL SYSTEM",
-            fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 10.sp, letterSpacing = 1.3.sp, color = UiMuted
-        )
-        Spacer(Modifier.height(22.dp))
-        Box(Modifier.width(48.dp).height(1.dp).background(UiBorder))
-        Spacer(Modifier.height(22.dp))
-        Text("Operator Terminal Login", fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = Color(0xFF3F3F46))
+        Text("FIELD ACCESS CONTROL SYSTEM", fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 10.sp, letterSpacing = 1.3.sp, color = UiMuted)
+        Spacer(Modifier.height(20.dp))
+
+        // Sign In / Create Account segmented control (reference: grid-cols-2 bg-zinc-200 rounded-lg)
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0xFFE4E4E7)).padding(4.dp)) {
+            listOf(false to "SIGN IN", true to "CREATE ACCOUNT").forEach { (mode, label) ->
+                Box(
+                    Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
+                        .background(if (signUp == mode) UiSurface else Color.Transparent)
+                        .clickable { signUp = mode }.padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(label, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = 0.8.sp, color = if (signUp == mode) UiInk else UiMuted)
+                }
+            }
+        }
         Spacer(Modifier.height(18.dp))
 
         if (vm.authMessage.isNotBlank()) {
-            StatusBanner(
-                vm.authMessage,
-                if (vm.authMessage.contains("failed", true) || vm.authMessage.contains("invalid", true) || vm.authMessage.contains("expired", true))
-                    BannerTone.Error else BannerTone.Neutral
-            )
+            val bad = listOf("fail", "invalid", "expired", "cannot", "not ", "must", "match", "select", "pair this", "enter").any { vm.authMessage.contains(it, true) }
+            StatusBanner(vm.authMessage, if (bad) BannerTone.Error else BannerTone.Success)
             Spacer(Modifier.height(12.dp))
         }
 
+        if (signUp) {
+            CompactField("FULL NAME", name, { name = it }, Icons.Default.PersonAdd, "Rank and name")
+            Spacer(Modifier.height(12.dp))
+        }
         CompactField(
-            label = "GATEKEEPER ID",
+            label = if (signUp) "GATEKEEPER ID (OPTIONAL)" else "GATEKEEPER ID",
             value = user,
             onValueChange = { user = it.uppercase(Locale.getDefault()) },
             icon = Icons.Default.PersonOutline,
-            placeholder = "GK-04"
+            placeholder = if (signUp) "Leave blank to be assigned one" else "Enter your Gatekeeper ID"
         )
         Spacer(Modifier.height(12.dp))
         CompactField(
-            label = "SECURITY PASSWORD",
+            label = "PASSWORD",
             value = pass,
             onValueChange = { pass = it },
             icon = Icons.Default.Lock,
-            placeholder = "••••••",
+            placeholder = if (signUp) "At least 6 characters" else "Your password",
             password = !visible,
             trailing = {
                 TextButton(onClick = { visible = !visible }) {
@@ -267,22 +285,90 @@ private fun LoginScreen(vm: MainViewModel) {
                 }
             }
         )
+        if (signUp) {
+            Spacer(Modifier.height(12.dp))
+            CompactField("CONFIRM PASSWORD", confirm, { confirm = it }, Icons.Default.Lock, "Repeat password", password = !visible)
+        }
+
+        Spacer(Modifier.height(14.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            StationDropdown("Station Location", vm.locations, loc, Modifier.weight(1f)) { id, n -> loc = id; vm.selectPost(id, n, gate, vm.gates.firstOrNull { it.first == gate }?.second ?: gate) }
+            StationDropdown("Active Gate", vm.gates, gate, Modifier.weight(1f)) { id, n -> gate = id; vm.selectPost(loc, vm.locations.firstOrNull { it.first == loc }?.second ?: loc, id, n) }
+        }
 
         Spacer(Modifier.height(16.dp))
-        PrimaryButton("SIGN IN TO TERMINAL", Icons.Default.ArrowForward, user.isNotBlank() && pass.isNotBlank()) { vm.login(user, pass) }
-        Spacer(Modifier.height(8.dp))
-        SecondaryButton("CONTINUE OFFLINE", Icons.Default.WifiOff) { vm.continueOffline() }
+        if (signUp) {
+            PrimaryButton(if (vm.busy) "CREATING…" else "CREATE ACCOUNT", Icons.Default.PersonAdd, !vm.busy && name.isNotBlank() && pass.isNotBlank()) {
+                vm.register(name, user, pass, confirm) { id -> user = id; pass = ""; confirm = ""; signUp = false }
+            }
+        } else {
+            PrimaryButton(if (vm.busy) "SIGNING IN…" else "SIGN IN TO TERMINAL", Icons.Default.ArrowForward, !vm.busy && user.isNotBlank() && pass.isNotBlank()) { vm.login(user, pass) }
+            if (cfg.canContinueOffline()) {
+                Spacer(Modifier.height(8.dp))
+                SecondaryButton("CONTINUE OFFLINE SESSION", Icons.Default.WifiOff) { vm.continueOffline() }
+            }
+        }
 
-        Spacer(Modifier.height(26.dp))
-        StatusPill(
-            if (vm.networkStatus.serverReachable) "System Status: Online" else "System Status: Field Ready",
-            if (vm.networkStatus.serverReachable) StatusTone.Success else StatusTone.Warning
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            "Android field terminal • Secure local cache enabled",
-            fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 10.sp, color = UiFaint, textAlign = TextAlign.Center
-        )
+        // PC Server Connection (reference: collapsible card with status dot)
+        Spacer(Modifier.height(18.dp))
+        Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
+            Column {
+                Row(
+                    Modifier.fillMaxWidth().clickable { showServer = !showServer }.padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.DevicesOther, null, tint = UiMuted, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("PC Server Connection", fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = Color(0xFF3F3F46), modifier = Modifier.weight(1f))
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(if (vm.paired) UiSuccess else UiWarning))
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (vm.paired) "Paired" else "Not paired", fontFamily = Sans, fontSize = 11.sp, color = UiMuted)
+                }
+                if (showServer) {
+                    Column(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp)) {
+                        Text(
+                            if (vm.paired) "Linked to ${cfg.serverLabel}. All traffic is encrypted (pinned TLS + AES-256-GCM)."
+                            else "On the PC open XV Command Center → 'Local Wi-Fi & Pair Device', then scan the QR shown there. Both devices must be on the same network (or Cloud Link must be set up on the PC).",
+                            fontFamily = Sans, fontSize = 11.sp, color = UiMuted, lineHeight = 16.sp
+                        )
+                        if (vm.pairingMessage.isNotBlank()) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(vm.pairingMessage, fontFamily = Sans, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFF3F3F46))
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        PrimaryButton(if (vm.busy) "PAIRING…" else if (vm.paired) "RE-PAIR WITH PC (SCAN QR)" else "SCAN PC PAIRING QR", Icons.Default.QrCodeScanner, !vm.busy) { vm.openPairingScanner() }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(18.dp))
+        StatusPill(if (vm.paired) "System Status: Paired • Encrypted Cache Ready" else "System Status: Awaiting Pairing", if (vm.paired) StatusTone.Success else StatusTone.Warning)
+    }
+}
+
+@Composable
+private fun StationDropdown(label: String, options: List<Pair<String, String>>, selected: String, modifier: Modifier, onSelect: (String, String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Column(modifier) {
+        Text(label, fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 10.sp, color = UiMuted)
+        Spacer(Modifier.height(4.dp))
+        Box {
+            Surface(
+                Modifier.fillMaxWidth().clickable(enabled = options.isNotEmpty()) { open = true },
+                color = UiSurfaceSubtle, shape = RoundedCornerShape(10.dp), border = BorderStroke(1.dp, UiBorder)
+            ) {
+                Row(Modifier.padding(horizontal = 10.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        options.firstOrNull { it.first == selected }?.second ?: if (options.isEmpty()) "Pair first" else "Select",
+                        fontFamily = Sans, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = UiInk, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+                    )
+                    Icon(Icons.Default.ArrowDownward, null, tint = UiFaint, modifier = Modifier.size(14.dp))
+                }
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                options.forEach { (id, n) -> DropdownMenuItem(text = { Text(n, fontSize = 13.sp) }, onClick = { open = false; onSelect(id, n) }) }
+            }
+        }
     }
 }
 
@@ -917,7 +1003,7 @@ private fun SyncStatusScreen(vm: MainViewModel) {
         Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 15.dp)
     ) {
-        ScreenHeader("Sync & Network Status", "Terminal synchronization with central security hub")
+        ScreenHeader("Sync & Network Hub", "Terminal offline buffering & encrypted synchronization")
         Spacer(Modifier.height(14.dp))
 
         Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = CardShape, border = BorderStroke(1.dp, UiBorder)) {
@@ -935,19 +1021,22 @@ private fun SyncStatusScreen(vm: MainViewModel) {
                         Spacer(Modifier.width(10.dp))
                         Column {
                             Text("SERVER LINK", fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 8.sp, letterSpacing = 1.sp, color = UiFaint)
-                            Text(if (connected) "Connected" else "Field Offline Mode", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = UiInk)
+                            Text(if (connected) "Connected to Central Hub" else "Field Offline Mode", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = UiInk)
                         }
                     }
                     StatusPill(if (connected) "● Online" else "○ Offline", if (connected) StatusTone.Success else StatusTone.Warning, compact = true)
                 }
                 Spacer(Modifier.height(12.dp))
                 StatusBanner(
-                    if (connected) "Server reachability verified. Pending records can be queued for synchronization."
+                    if (connected) "${vm.networkStatus.message}. Route: ${vm.networkStatus.server}"
                     else "Records remain in the secure local buffer and synchronization resumes when network becomes available.",
                     if (connected) BannerTone.Success else BannerTone.Warning
                 )
             }
         }
+
+        Spacer(Modifier.height(10.dp))
+        CloudLinkCard(vm)
 
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -1043,6 +1132,57 @@ private fun SyncStatusScreen(vm: MainViewModel) {
     }
 }
 
+/** "Sync Target Architecture" card from the reference: Cloud Server vs Local PC Wi-Fi, with the internet link details. */
+@Composable
+private fun CloudLinkCard(vm: MainViewModel) {
+    val cfg = vm.currentConfig()
+    var mode by rememberSaveable { mutableStateOf(cfg.connectionMode) }
+    var url by rememberSaveable { mutableStateOf(cfg.publicUrl) }
+    var publicCa by rememberSaveable { mutableStateOf(cfg.publicUsesCaCertificate) }
+    Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = CardShape, border = BorderStroke(1.dp, UiBorder)) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(UiWarningBg), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.FilterList, null, tint = UiWarning, modifier = Modifier.size(17.dp))
+                }
+                Spacer(Modifier.width(9.dp))
+                Column {
+                    Text("SYNC TARGET ARCHITECTURE", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = .6.sp, color = UiInk)
+                    Text("Select where this handheld pushes gate records", fontFamily = Sans, fontSize = 9.sp, color = UiFaint)
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFFF4F4F5)).padding(4.dp)) {
+                listOf("AUTO" to "Auto", "LAN" to "Local PC Wi-Fi", "CLOUD" to "Cloud Server").forEach { (m, label) ->
+                    Box(
+                        Modifier.weight(1f).clip(RoundedCornerShape(9.dp)).background(if (mode == m) UiSurface else Color.Transparent)
+                            .clickable { mode = m }.padding(vertical = 9.dp),
+                        contentAlignment = Alignment.Center
+                    ) { Text(label, fontFamily = Sans, fontSize = 11.sp, fontWeight = if (mode == m) FontWeight.Bold else FontWeight.Medium, color = if (mode == m) UiInk else UiMuted) }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            StatusBanner(
+                when (mode) {
+                    "LAN" -> "Local PC Wi-Fi: records go straight to the Command Center on this network (${cfg.lanHosts.joinToString().ifBlank { "not paired" }})."
+                    "CLOUD" -> "Cloud Server: records travel over the internet to the Command Center's public address. Still end-to-end encrypted."
+                    else -> "Auto: local Wi-Fi first, internet address when away from base. Recommended."
+                },
+                BannerTone.Neutral
+            )
+            Spacer(Modifier.height(10.dp))
+            ConfigField("Internet address of the Command Center (https://…)", url) { url = it.trim() }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+                Checkbox(checked = publicCa, onCheckedChange = { publicCa = it })
+                Text("Address is a tunnel with a public certificate", fontFamily = Sans, fontSize = 10.sp, color = UiMuted)
+            }
+            Text("Filled automatically when you pair after 'Cloud Link' is set up on the PC.", fontFamily = Sans, fontSize = 9.sp, color = UiFaint)
+            Spacer(Modifier.height(10.dp))
+            PrimaryButton("SAVE & TEST LINK", Icons.Default.Check) { vm.saveCloudLink(mode, url, publicCa) }
+        }
+    }
+}
+
 @Composable
 private fun StatCard(modifier: Modifier, title: String, value: String, warning: Boolean = false) {
     Surface(modifier, color = UiSurface, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
@@ -1074,14 +1214,18 @@ private fun OperatorScreen(vm: MainViewModel, onOpenSettings: () -> Unit) {
                     Spacer(Modifier.width(11.dp))
                     Column(Modifier.weight(1f)) {
                         Text("FIELD GATEKEEPER", fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 8.sp, letterSpacing = 1.sp, color = UiFaint)
-                        Text(cfg.operatorId.ifBlank { "Unassigned Operator" }, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = UiInk)
+                        Text(cfg.operatorName.ifBlank { cfg.operatorId.ifBlank { "Unassigned Operator" } }, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = UiInk)
                         Text(cfg.operatorRole, fontFamily = Sans, fontSize = 10.sp, color = UiMuted)
                     }
                 }
                 Divider(color = UiBorderSoft, modifier = Modifier.padding(vertical = 12.dp))
-                KeyValueRow("Assigned Post", "${cfg.locationId} • ${cfg.gateId}", Icons.Default.Map)
+                KeyValueRow("Assigned Post", "${cfg.locationName.ifBlank { cfg.locationId }} • ${cfg.gateName.ifBlank { cfg.gateId }}", Icons.Default.Map)
                 Spacer(Modifier.height(9.dp))
-                KeyValueRow("Device ID", cfg.deviceId, Icons.Default.DevicesOther)
+                KeyValueRow("Shift Commenced", if (cfg.shiftStartedAt > 0) formatShort(cfg.shiftStartedAt) else "—", Icons.Default.AccessTime)
+                Spacer(Modifier.height(9.dp))
+                KeyValueRow("Terminal ID", cfg.deviceId.ifBlank { "Not paired" }, Icons.Default.DevicesOther)
+                Spacer(Modifier.height(9.dp))
+                KeyValueRow("Command Center", cfg.serverLabel, Icons.Default.Security)
             }
         }
 
@@ -1097,13 +1241,7 @@ private fun OperatorScreen(vm: MainViewModel, onOpenSettings: () -> Unit) {
         }
 
         Spacer(Modifier.height(10.dp))
-        if (cfg.operatorRole == "ADMIN") {
-            SecondaryButton("ADMINISTRATOR CONFIGURATION", Icons.Default.Settings, onOpenSettings)
-        } else {
-            Surface(Modifier.fillMaxWidth(), color = UiSurfaceSubtle, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
-                Text("Device configuration is restricted to administrators.", fontFamily = Sans, fontSize = 10.sp, color = UiMuted, modifier = Modifier.padding(12.dp))
-            }
-        }
+        SecondaryButton("CHANGE POST & CONNECTION", Icons.Default.Settings, onOpenSettings)
 
         Spacer(Modifier.height(12.dp))
         DangerButton("HANDOVER SHIFT / LOG OUT", Icons.Default.Logout, vm::logout)
@@ -1114,40 +1252,41 @@ private fun OperatorScreen(vm: MainViewModel, onOpenSettings: () -> Unit) {
 @Composable
 private fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
     val cfg = vm.currentConfig()
-    var host by rememberSaveable { mutableStateOf(cfg.serverHost) }
-    var port by rememberSaveable { mutableStateOf(cfg.serverPort.toString()) }
-    var location by rememberSaveable { mutableStateOf(cfg.locationId) }
+    var loc by rememberSaveable { mutableStateOf(cfg.locationId) }
     var gate by rememberSaveable { mutableStateOf(cfg.gateId) }
-    var device by rememberSaveable { mutableStateOf(cfg.deviceId) }
-    var operator by rememberSaveable { mutableStateOf(cfg.operatorId) }
-    var key by rememberSaveable { mutableStateOf(cfg.deviceKey) }
-
+    LaunchedEffect(Unit) { vm.refreshStations() }
     Column(
         Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding().verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 15.dp)
     ) {
-        ScreenHeader("Administrator Configuration", "Device endpoint and gate assignment", onBack)
+        ScreenHeader("Post & Connection", "Reassign terminal post and manage the Command Center link", onBack)
         Spacer(Modifier.height(12.dp))
-        ConfigField("Server IP / Host", host) { host = it }
-        Spacer(Modifier.height(8.dp))
-        ConfigField("Server Port", port) { port = it.filter(Char::isDigit) }
-        Spacer(Modifier.height(8.dp))
-        ConfigField("Location ID", location) { location = it }
-        Spacer(Modifier.height(8.dp))
-        ConfigField("Gate ID", gate) { gate = it }
-        Spacer(Modifier.height(8.dp))
-        ConfigField("Device ID", device) { device = it }
-        Spacer(Modifier.height(8.dp))
-        ConfigField("Operator ID", operator) { operator = it }
-        Spacer(Modifier.height(8.dp))
-        ConfigField("Device Key", key, true) { key = it }
-        Spacer(Modifier.height(12.dp))
-        PrimaryButton("SAVE CONFIGURATION", Icons.Default.Check) {
-            vm.updateConfig(host, port.toIntOrNull() ?: cfg.serverPort, location, gate, device, operator)
-            vm.updateDeviceKey(key)
+        Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = CardShape, border = BorderStroke(1.dp, UiBorder)) {
+            Column(Modifier.padding(14.dp)) {
+                Text("REASSIGN TERMINAL POST", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = UiInk)
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    StationDropdown("Location", vm.locations, loc, Modifier.weight(1f)) { id, n -> loc = id; vm.selectPost(id, n, gate, vm.gates.firstOrNull { it.first == gate }?.second ?: gate) }
+                    StationDropdown("Gate", vm.gates, gate, Modifier.weight(1f)) { id, n -> gate = id; vm.selectPost(loc, vm.locations.firstOrNull { it.first == loc }?.second ?: loc, id, n) }
+                }
+            }
         }
-        Spacer(Modifier.height(7.dp))
-        SecondaryButton("TEST CONNECTION", Icons.Default.Wifi) { vm.testConnection() }
+        Spacer(Modifier.height(10.dp))
+        Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = CardShape, border = BorderStroke(1.dp, UiBorder)) {
+            Column(Modifier.padding(14.dp)) {
+                Text("PAIRED COMMAND CENTER", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = UiInk)
+                Spacer(Modifier.height(8.dp))
+                KeyValueRow("Server", cfg.serverLabel)
+                Spacer(Modifier.height(6.dp))
+                KeyValueRow("Terminal ID", cfg.deviceId.ifBlank { "—" })
+                Spacer(Modifier.height(6.dp))
+                KeyValueRow("Certificate pin", cfg.serverFingerprint.take(16).ifBlank { "—" } + "…")
+                Spacer(Modifier.height(12.dp))
+                SecondaryButton("RE-PAIR (SCAN NEW PC QR)", Icons.Default.QrCodeScanner) { vm.openPairingScanner() }
+                Spacer(Modifier.height(7.dp))
+                DangerButton("UNPAIR THIS TERMINAL", Icons.Default.Logout) { vm.unpair() }
+            }
+        }
         Spacer(Modifier.height(9.dp))
         Text(vm.message, fontFamily = Mono, fontSize = 9.sp, color = UiMuted)
         Spacer(Modifier.height(20.dp))
@@ -1178,8 +1317,11 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
             it.entityType == EntityType.PERSON &&
                 it.entityId == session.person.id &&
                 it.eventType == EventType.ENTRY
-        }.maxByOrNull { it.eventTimestamp }?.eventTimestamp
+        }.maxByOrNull { it.eventTimestamp }?.eventTimestamp ?: session.insideSince.takeIf { it > 0 }
     }
+    val person = session.person
+    val allowed = person.active && person.status == "ACTIVE"
+    val postName = cfg.locationName.ifBlank { cfg.locationId }
     val stayMs = if (session.inside && entryAt != null) System.currentTimeMillis() - entryAt else 0L
     val action = if (session.inside) "RECORD EXIT" else "RECORD ENTRY"
 
@@ -1220,12 +1362,12 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
                         Spacer(Modifier.height(2.dp))
                         Text(session.person.name, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 25.sp, color = UiInk, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 20.dp))
                         Spacer(Modifier.height(3.dp))
-                        Text(session.person.id, fontFamily = Mono, fontSize = 17.sp, color = Color(0xFF52525B), fontWeight = FontWeight.Medium)
+                        Text(displayId(session.person.id) + (person.serviceNo.takeIf { it.isNotBlank() }?.let { "  •  $it" } ?: ""), fontFamily = Mono, fontSize = 15.sp, color = Color(0xFF52525B), fontWeight = FontWeight.Medium)
                         Spacer(Modifier.height(4.dp))
-                        Text(session.person.category, fontFamily = Sans, fontSize = 15.sp, color = Color(0xFF52525B), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 20.dp))
+                        Text(listOf(person.rank, person.company.takeIf { it.isNotBlank() }?.let { "$it Co" } ?: "", person.unit).filter { it.isNotBlank() }.joinToString(" • ").ifBlank { person.category }, fontFamily = Sans, fontSize = 15.sp, color = Color(0xFF52525B), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 20.dp))
                         Divider(Modifier.padding(top = 20.dp), color = Color(0xFFD4D4D8))
                         Row(Modifier.fillMaxWidth().height(76.dp)) {
-                            PersonDetailCell("Assigned Post", cfg.locationId, Modifier.weight(1f))
+                            PersonDetailCell("Assigned Post", postName, Modifier.weight(1f))
                             Box(Modifier.fillMaxHeight().width(1.dp).background(Color(0xFFD4D4D8)))
                             PersonDetailCell("Current Status", if (session.inside) "On-Site (Inside)" else "Off-Site", Modifier.weight(1f))
                         }
@@ -1246,13 +1388,19 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
                     Text(initials(session.person.name), fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 25.sp, color = Color.White)
                 }
                 Box(Modifier.align(Alignment.TopEnd).padding(top = 50.dp, end = 18.dp)) {
-                    StatusPill("ACTIVE", StatusTone.Success)
+                    if (allowed) StatusPill("ACTIVE", StatusTone.Success) else StatusPill(person.status.ifBlank { "INACTIVE" }, StatusTone.Error)
                 }
             }
         }
 
         Column(Modifier.padding(top = 22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Surface(
+            if (session.locationMismatch) {
+                StatusBanner("LOCATION MISMATCH • The credential specifies ${session.scannedLocation}, this terminal is posted at $postName. Verify authorization before logging cross-station movement.", BannerTone.Warning)
+            }
+            if (!allowed) {
+                StatusBanner("ACCESS DENIED • Credential is ${person.status.lowercase()}. Direct the individual to the central security desk.", BannerTone.Error)
+            }
+            if (allowed) Surface(
                 Modifier.fillMaxWidth().height(58.dp).clickable { confirm = true },
                 color = UiInk,
                 shape = RoundedCornerShape(100.dp),
@@ -1261,7 +1409,7 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
                 Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Shield, null, tint = Color.White, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("$action (${cfg.locationId})", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
+                    Text("$action (${cfg.gateName.ifBlank { cfg.gateId }})", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
                 }
             }
             Surface(
@@ -1284,8 +1432,9 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
             onDismiss = { confirm = false },
             onConfirm = { confirm = false; vm.confirmPerson() }
         ) {
-            ReviewRow("Personnel", "${session.person.name} (${session.person.id})")
-            ReviewRow("Location / Gate", "${cfg.locationId} • ${cfg.gateId}")
+            ReviewRow("Personnel", "${session.person.name} (${displayId(session.person.id)})")
+            ReviewRow("Location / Gate", "$postName • ${cfg.gateName.ifBlank { cfg.gateId }}")
+            if (session.locationMismatch) ReviewRow("Location Flag", "QR: ${session.scannedLocation}", valueColor = UiWarning)
             ReviewRow("Timestamp", formatLongTime(System.currentTimeMillis()))
             if (stayMs > 0) ReviewRow("Calculated Stay", formatDuration(stayMs), valueColor = UiWarning)
         }
@@ -2026,6 +2175,9 @@ private fun TerminalBottomNav(currentTab: Int, pending: Int, onSelect: (Int) -> 
         }
     }
 }
+
+private fun displayId(id: String): String =
+    if (id.length > 1 && id[0].isLetter() && id[1].isDigit()) "${id[0]}-${id.substring(1)}" else id
 
 private fun initials(name: String): String =
     name.trim().split(Regex("\\s+")).take(2).joinToString("") { it.firstOrNull()?.uppercase() ?: "" }.ifBlank { "?" }

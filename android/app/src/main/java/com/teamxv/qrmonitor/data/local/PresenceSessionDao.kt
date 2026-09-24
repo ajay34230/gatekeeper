@@ -16,6 +16,9 @@ interface PresenceSessionDao {
     @Query("SELECT * FROM presence_sessions WHERE status='ACTIVE'")
     fun observeActive(): Flow<List<PresenceSessionEntity>>
 
+    @Query("UPDATE presence_sessions SET status='CLOSED', exitAt=:at WHERE personId=:personId AND status='ACTIVE' AND sourceType='DIRECT'")
+    suspend fun closeDirectForPerson(personId: String, at: Long): Int
+
     @Query("SELECT * FROM presence_sessions WHERE status='ACTIVE' ORDER BY entryAt DESC")
     suspend fun activeAll(): List<PresenceSessionEntity>
 

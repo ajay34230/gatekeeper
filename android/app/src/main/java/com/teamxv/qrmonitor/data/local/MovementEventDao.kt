@@ -34,6 +34,9 @@ interface MovementEventDao {
     suspend fun recoverStaleSyncing(cutoff: Long)
 
     @Query("SELECT COUNT(*) FROM movement_events WHERE syncStatus IN ('PENDING','FAILED','SYNCING')")
+    suspend fun pendingCount(): Int
+
+    @Query("SELECT COUNT(*) FROM movement_events WHERE syncStatus IN ('PENDING','FAILED','SYNCING')")
     fun observePendingCount(): Flow<Int>
 
     @Query("SELECT COUNT(*) FROM movement_events WHERE syncStatus='CONFLICT' OR syncStatus='REJECTED'")

@@ -41,7 +41,7 @@ class SecureStore(context: Context) {
         val ciphertext = cipher.doFinal(value.toByteArray(StandardCharsets.UTF_8))
         val packed = Base64.encodeToString(iv, Base64.NO_WRAP) + "." +
             Base64.encodeToString(ciphertext, Base64.NO_WRAP)
-        prefs.edit().putString(name, packed).apply()
+        prefs.edit().putString(name, packed).commit()
     }
 
     fun get(name: String): String? {
@@ -58,4 +58,13 @@ class SecureStore(context: Context) {
     }
 
     fun remove(name: String) { prefs.edit().remove(name).apply() }
+
+    /** Random 256-bit SQLCipher passphrase, generated once and stored wrapped by the Android Keystore key. */
+    fun databasePassphrase(): ByteArray {
+        val existing = get("dbPassphrase")
+        if (!existing.isNullOrBlank()) return Base64.decode(existing, Base64.NO_WRAP)
+        val bytes = ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }
+        put("dbPassphrase", Base64.encodeToString(bytes, Base64.NO_WRAP))
+        return bytes
+    }
 }

@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         VehicleManifestEntity::class,
         VehicleManifestMemberEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -68,13 +68,16 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun get(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {
-                INSTANCE ?: Room.databaseBuilder(
-                    context.applicationContext,
-                    AppDatabase::class.java,
-                    "teamxv_qr_monitor.db"
-                )
-                    .addMigrations(*ALL_MIGRATIONS)
-                    .build()
+                INSTANCE ?: run {
+                    // Remove the old unencrypted prototype database if it exists.
+                    context.applicationContext.deleteDatabase("teamxv_qr_monitor.db")
+                    System.loadLibrary("sqlcipher")
+                    val passphrase = com.teamxv.qrmonitor.security.SecureStore(context.applicationContext).databasePassphrase()
+                    Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "xv_access_control_secure.db")
+                        .openHelperFactory(net.zetetic.database.sqlcipher.SupportOpenHelperFactory(passphrase))
+                        .fallbackToDestructiveMigration()
+                        .build()
+                }
                     .also { INSTANCE = it }
             }
     }

@@ -13,6 +13,21 @@ interface VehicleDao {
     @Query("SELECT * FROM vehicles WHERE id=:id LIMIT 1")
     suspend fun find(id: String): VehicleEntity?
 
+    @Query("SELECT * FROM vehicles WHERE UPPER(secretCode)=UPPER(:code) LIMIT 1")
+    suspend fun findBySecret(code: String): VehicleEntity?
+
+    @Query("SELECT * FROM vehicles WHERE REPLACE(REPLACE(UPPER(registration),'-',''),' ','')=:plate LIMIT 1")
+    suspend fun findByPlate(plate: String): VehicleEntity?
+
+    @Query("SELECT * FROM vehicles ORDER BY id")
+    fun observeAll(): kotlinx.coroutines.flow.Flow<List<VehicleEntity>>
+
+    @Query("DELETE FROM vehicles WHERE id NOT IN (:keep)")
+    suspend fun deleteAllExcept(keep: List<String>)
+
+    @Query("DELETE FROM vehicles")
+    suspend fun deleteAll()
+
     @Query("SELECT COUNT(*) FROM vehicles")
     suspend fun count(): Int
 }
