@@ -42,6 +42,9 @@ Section "Install"
   SetOutPath "$INSTDIR"
   File /r "${SRC}\*.*"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
+  ; Shared encrypted data folder: every Windows user of this PC may run the Command Center
+  CreateDirectory "$APPDATA\XVAccessControl"
+  nsExec::Exec 'icacls "$APPDATA\XVAccessControl" /grant *S-1-5-32-545:(OI)(CI)M /T'
   CreateDirectory "$SMPROGRAMS\XV Access Control"
   CreateShortcut "$SMPROGRAMS\XV Access Control\XV Command Center.lnk" "$INSTDIR\XVCommandCenter.exe"
   CreateShortcut "$SMPROGRAMS\XV Access Control\Uninstall.lnk" "$INSTDIR\Uninstall.exe"

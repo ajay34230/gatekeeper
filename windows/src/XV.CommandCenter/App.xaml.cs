@@ -45,6 +45,7 @@ public partial class App : Application
             return;
         }
 
+        if (screenshotDir == null && Settings.StartWithWindows) StationsWindow.ApplyAutostart(true);
         var main = new MainWindow();
         MainWindow = main;
         main.Show();

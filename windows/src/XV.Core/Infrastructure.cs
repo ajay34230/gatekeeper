@@ -110,7 +110,7 @@ public static class CertManager
             return cert.Export(X509ContentType.Pfx);
         });
 #pragma warning disable SYSLIB0057
-        return new X509Certificate2(pfx, (string?)null, X509KeyStorageFlags.Exportable | X509KeyStorageFlags.MachineKeySet);
+        return new X509Certificate2(pfx, (string?)null, X509KeyStorageFlags.Exportable | X509KeyStorageFlags.UserKeySet | X509KeyStorageFlags.PersistKeySet);
 #pragma warning restore SYSLIB0057
     }
 
