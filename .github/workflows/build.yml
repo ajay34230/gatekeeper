@@ -1,0 +1,68 @@
+name: Build APK and Windows installer
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  server-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: '8.0.x' }
+      - name: Build headless server
+        run: dotnet build windows/src/XV.Server -c Release
+      - name: End-to-end encrypted protocol test
+        run: |
+          pip install pycryptodome requests
+          mkdir -p /tmp/xv && cd /tmp/xv
+          XV_DATA_DIR=/tmp/xv dotnet $GITHUB_WORKSPACE/windows/src/XV.Server/bin/Release/net8.0/XV.Server.dll \
+            --create-operator "Test Operator" GK-01 "Operator#1" \
+            --import-persons $GITHUB_WORKSPACE/windows/tests/sample/persons.csv --import-vehicles $GITHUB_WORKSPACE/windows/tests/sample/vehicles.csv \
+            --add-location LOC07 "Location 07" --add-gate G02 "Gate 02" --pair > srv.log 2>&1 &
+          sleep 8; cat srv.log
+          python3 $GITHUB_WORKSPACE/windows/tests/e2e_protocol_test.py "$(grep PAIRQR srv.log | cut -d' ' -f2)"
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: '8.0.x' }
+      - name: Publish Command Center (self-contained x64)
+        run: dotnet publish windows/src/XV.CommandCenter -c Release -r win-x64 --self-contained true -o windows/dist/app
+      - name: Screenshots of the real app (CI test data only)
+        shell: pwsh
+        run: |
+          $env:XV_DATA_DIR = "$env:RUNNER_TEMP\xvshot"
+          dotnet build windows/src/XV.Server -c Release
+          $p = Start-Process dotnet -ArgumentList @("windows/src/XV.Server/bin/Release/net8.0/XV.Server.dll","--create-operator","CI Operator","GK-01","Operator#1","--import-persons","windows/tests/sample/persons.csv","--import-vehicles","windows/tests/sample/vehicles.csv","--add-location","LOC07","Location 07","--add-gate","G02","Gate 02") -PassThru
+          Start-Sleep 10; Stop-Process -Id $p.Id -Force
+          $a = Start-Process windows/dist/app/XVCommandCenter.exe -ArgumentList "--screenshot","$env:GITHUB_WORKSPACE\screenshots" -PassThru
+          if (-not $a.WaitForExit(120000)) { Stop-Process -Id $a.Id -Force; throw "app did not finish" }
+          Get-ChildItem screenshots
+          if (Test-Path "$env:XV_DATA_DIR\error.log") { Get-Content "$env:XV_DATA_DIR\error.log"; throw "app logged errors" }
+      - name: Build installer
+        shell: pwsh
+        run: |
+          choco install nsis -y --no-progress
+          & "C:\Program Files (x86)\NSIS\makensis.exe" /DSRC=..\dist\app /DVERSION=1.0.0 windows\installer\XVCommandCenter.nsi
+      - uses: actions/upload-artifact@v4
+        with: { name: XV-CommandCenter-Setup, path: windows/installer/XV-CommandCenter-Setup-*.exe }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: windows-screenshots, path: screenshots }
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: android-actions/setup-android@v3
+      - name: Build APK
+        working-directory: android
+        run: chmod +x gradlew && ./gradlew --no-daemon :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        with: { name: XV-Gatekeeper-APK, path: android/app/build/outputs/apk/debug/*.apk }
