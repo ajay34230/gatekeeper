@@ -38,6 +38,7 @@
                     <Button Style="{StaticResource BtnAmber}" Margin="0,3,6,3" Click="AddSoldier_Click" Content="+ Add Soldier"/>
                     <Button Style="{StaticResource BtnAmber}" Margin="0,3,6,3" Click="AddVehicle_Click" Content="+ Add Vehicle"/>
                     <Button Style="{StaticResource BtnEmerald}" Margin="0,3,6,3" Click="ImportExport_Click" Content="Import / Export"/>
+                    <Button Style="{StaticResource BtnGold}" Margin="0,3,6,3" Click="CardStudio_Click" Content="ID Card Studio"/>
                     <Button Style="{StaticResource BtnGold}" Margin="0,3,6,3" Click="Pair_Click">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="Local Wi-Fi &amp; Pair Device" Foreground="#FCD34D" FontWeight="SemiBold"/>

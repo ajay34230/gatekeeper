@@ -34,6 +34,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: '8.0.x' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Build ID Card Studio (offline web UI hosted by the Command Center)
+        working-directory: windows/idstudio
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
       - name: Publish Command Center (self-contained x64)
         run: dotnet publish windows/src/XV.CommandCenter -c Release -r win-x64 --self-contained true -o windows/dist/app
       - name: Screenshots of the real app (CI test data only)

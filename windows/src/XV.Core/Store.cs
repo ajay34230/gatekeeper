@@ -93,6 +93,8 @@ public sealed class Store : IDisposable
         Ensure("events", "reason", "TEXT NOT NULL DEFAULT ''");
         foreach (var (_, col) in ExtraPersonFields) Ensure("persons", col, "TEXT NOT NULL DEFAULT ''");
         Exec("CREATE TABLE IF NOT EXISTS person_media(person_id TEXT PRIMARY KEY, photo BLOB, signature BLOB, updated_at INTEGER NOT NULL)");
+        Ensure("person_media", "photo_at", "INTEGER NOT NULL DEFAULT 0");
+        Ensure("person_media", "signed_at", "INTEGER NOT NULL DEFAULT 0");
     }
 
     /// <summary>Soldier details used by the ID card and the import/export files (JSON key → column).</summary>
@@ -233,17 +235,23 @@ public sealed class Store : IDisposable
 
     public void SetPersonPhoto(string id, byte[]? jpeg, string actor = "PC-ADMIN")
     {
-        Exec("INSERT INTO person_media(person_id,photo,updated_at) VALUES($1,$2,$3) ON CONFLICT(person_id) DO UPDATE SET photo=$2, updated_at=$3", id, jpeg, NowMs);
+        Exec("INSERT INTO person_media(person_id,photo,updated_at,photo_at) VALUES($1,$2,$3,$4) ON CONFLICT(person_id) DO UPDATE SET photo=$2, updated_at=$3, photo_at=$4",
+            id, jpeg, NowMs, jpeg == null ? 0 : NowMs);
         Audit(actor, jpeg == null ? "REMOVE_PHOTO" : "SET_PHOTO", "PERSON", id);
         Notify();
     }
 
     public void SetPersonSignature(string id, byte[]? png, string actor = "PC-ADMIN")
     {
-        Exec("INSERT INTO person_media(person_id,signature,updated_at) VALUES($1,$2,$3) ON CONFLICT(person_id) DO UPDATE SET signature=$2, updated_at=$3", id, png, NowMs);
+        Exec("INSERT INTO person_media(person_id,signature,updated_at,signed_at) VALUES($1,$2,$3,$4) ON CONFLICT(person_id) DO UPDATE SET signature=$2, updated_at=$3, signed_at=$4",
+            id, png, NowMs, png == null ? 0 : NowMs);
         Audit(actor, png == null ? "REMOVE_SIGNATURE" : "SET_SIGNATURE", "PERSON", id);
         Notify();
     }
+
+    /// <summary>Per person: when the photo and the signature were last set (0 = none).</summary>
+    public Dictionary<string, (long photoAt, long signedAt)> MediaVersions() =>
+        Query("SELECT person_id, photo_at, signed_at FROM person_media").ToDictionary(r => S(r["person_id"]), r => (Convert.ToInt64(r["photo_at"]), Convert.ToInt64(r["signed_at"])));
 
     public HashSet<string> PersonsWithPhoto() => Query("SELECT person_id FROM person_media WHERE photo IS NOT NULL").Select(r => S(r["person_id"])).ToHashSet();
 

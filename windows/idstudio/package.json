@@ -1,0 +1,27 @@
+{
+  "name": "xv-id-card-studio",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "XV ID Card Studio — hosted offline inside the XV Command Center (WebView2).",
+  "scripts": {
+    "build": "tsc --noEmit && vite build",
+    "dev": "vite --port=5190"
+  },
+  "dependencies": {
+    "lucide-react": "0.546.0",
+    "qrcode": "1.5.4",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "tailwindcss": "4.3.3",
+    "typescript": "~5.8.3",
+    "vite": "8.3.1"
+  }
+}

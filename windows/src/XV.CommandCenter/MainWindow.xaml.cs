@@ -211,6 +211,7 @@ public partial class MainWindow : Window
         exportSel.IsEnabled = _selected.Count > 0;
         SectionActions.Children.Add(exportSel);
         SectionActions.Children.Add(Btn("Reports", (_, _) => Dialogs.Report(this, _company, []), "BtnEmerald"));
+        SectionActions.Children.Add(Btn(_selected.Count > 0 ? $"ID Cards ({_selected.Count})" : "ID Cards", (_, _) => CardStudioWindow.Show(this, _selected.ToList()), "BtnGold"));
         SectionActions.Children.Add(Btn("Import / Export", ImportExport_Click));
 
         // Select Company dropdown + chips
@@ -407,6 +408,7 @@ public partial class MainWindow : Window
     void ImportExport_Click(object s, RoutedEventArgs e) => Dialogs.ImportExport(this);
     void Pair_Click(object s, RoutedEventArgs e) => new PairWindow { Owner = this }.ShowDialog();
     void Comms_Click(object s, RoutedEventArgs e) => CommsWindow.Show(this);
+    void CardStudio_Click(object s, RoutedEventArgs e) => CardStudioWindow.Show(this);
 
     void UpdateCommsBadge()
     {
