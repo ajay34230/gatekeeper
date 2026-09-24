@@ -59,7 +59,7 @@ export const CardFront: React.FC<{ soldier: Soldier; design: CardDesign; check: 
         </div>
 
         {/* Body */}
-        <div className="grid grid-cols-12 gap-3 my-auto py-1 items-stretch">
+        <div className="grid grid-cols-12 gap-3 flex-1 py-2 items-center min-h-0">
           {/* Photo, blood group, expiry */}
           <div className="col-span-3 flex flex-col justify-between items-center">
             <div className="relative w-full aspect-[3/3.8] max-w-[125px] rounded-lg overflow-hidden border-2 border-amber-500/60 shadow-lg bg-black/50">
