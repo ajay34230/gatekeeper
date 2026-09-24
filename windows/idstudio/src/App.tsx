@@ -243,7 +243,7 @@ export default function App() {
                     <input type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) readFile(f, url => host.send({ t: 'savePhoto', id: draft.id, dataUrl: url })); e.target.value = ''; }} />
                   </label>
                   {draft.photoVer > 0 && <button onClick={() => host.send({ t: 'savePhoto', id: draft.id, dataUrl: '' })} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-rose-800 text-rose-300 text-sm"><Trash2 className="w-4 h-4" />Remove photo</button>}
-                  <button onClick={() => setPad('bearer')} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-cyan-700 text-cyan-300 text-sm font-semibold"><PenTool className="w-4 h-4" />{draft.signatureVer ? 'Re-sign' : 'Capture signature'}</button>
+                  <button onClick={() => setPad('bearer')} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-cyan-700 text-cyan-300 text-sm font-semibold"><PenTool className="w-4 h-4" />{draft.signatureVer ? 'Replace signature (draw / upload)' : 'Add signature (draw / upload)'}</button>
                   {draft.signatureVer > 0 && <button onClick={() => host.send({ t: 'saveSignature', id: draft.id, dataUrl: '' })} className="px-3 py-2 rounded-lg border border-slate-700 text-slate-300 text-sm">Clear signature</button>}
                   <button onClick={() => host.send({ t: 'saveSoldier', soldier: draft })} className="ml-auto flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white font-bold text-sm"><Save className="w-4 h-4" />Save details to register</button>
                 </div>
@@ -282,7 +282,7 @@ export default function App() {
                   <Field label="Authority title" value={design.coTitle} onChange={v => setD({ coTitle: v })} />
                   <Field label="Seal caption" value={design.sealLabel} onChange={v => setD({ sealLabel: v })} />
                   <div className="flex items-center gap-3">
-                    <button onClick={() => setPad('co')} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-cyan-700 text-cyan-300 text-sm font-semibold"><PenTool className="w-4 h-4" />{design.coSignature ? 'Re-sign as issuing authority' : 'Capture authority signature'}</button>
+                    <button onClick={() => setPad('co')} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-cyan-700 text-cyan-300 text-sm font-semibold"><PenTool className="w-4 h-4" />{design.coSignature ? 'Replace authority signature (draw / upload)' : 'Add authority signature (draw / upload)'}</button>
                     {design.coSignature && <button onClick={() => setD({ coSignature: '' })} className="px-3 py-2 rounded-lg border border-slate-700 text-slate-300 text-sm">Remove</button>}
                   </div>
                 </div>
