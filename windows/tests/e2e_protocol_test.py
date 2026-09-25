@@ -128,6 +128,12 @@ code, boot3, _ = rpc("master.bootstrap", token=tok)
 vp = {p["personId"]: p for p in boot3["persons"]}
 assert vp[vis[0]]["validTo"] > time.time() * 1000 > vp[vis[0]]["validFrom"], vp[vis[0]]
 code, body, _ = rpc("events.create", ev("EVT-V3", "PERSON", vis[0], "EXIT"), tok); assert code == 201, (code, body)
+# a visitor whose pass expired cannot enter on board a vehicle either
+vx2 = ev("EVT-V4", "VEHICLE", "V014", "EXIT"); m4 = dict(m3, state="EXITED", exitEventId="EVT-V4", exitAt=vx2["eventTimestamp"])
+code, body, _ = rpc("vehicle.transaction", {"event": vx2, "manifest": m4}, tok); assert code == 201, (code, body)
+vi2 = ev("EVT-V5", "VEHICLE", "V014", "ENTRY")
+m5 = dict(man, manifestId="MNF-V5", entryEventId="EVT-V5", occupants=[vis[1]], driverId=vis[1], createdAt=vi2["createdAt"])
+code, body, _ = rpc("vehicle.transaction", {"event": vi2, "manifest": m5}, tok); assert code == 403 and body["reason"] == "PASS_EXPIRED", (code, body)
 print("visitor passes ok")
 # ---- leave tracking: exit with reason + expected return date (already passed → overdue on the PC)
 code, st2, _ = rpc("stations.list"); assert "TD" in st2["returnReasons"], st2

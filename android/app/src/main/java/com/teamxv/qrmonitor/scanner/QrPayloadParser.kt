@@ -34,8 +34,9 @@ object QrPayloadParser {
     /** "Location 07", "LOC-07", "loc7", "07" → "LOC_7" so different spellings compare equal. */
     fun normalizeLocation(loc: String): String {
         val t = loc.trim().lowercase()
-        Regex("(?:location|loc|post|site|station)[\\s\\-_#:]*0*(\\d+)").find(t)?.let { return "LOC_" + it.groupValues[1].toInt() }
-        Regex("^0*(\\d+)$").find(t)?.let { return "LOC_" + it.groupValues[1].toInt() }
+        // Digits are compared as text (no number parsing): an over-long number in a foreign QR cannot overflow.
+        Regex("(?:location|loc|post|site|station)[\\s\\-_#:]*(\\d+)").find(t)?.let { return "LOC_" + it.groupValues[1].trimStart('0').ifEmpty { "0" } }
+        Regex("^(\\d+)$").find(t)?.let { return "LOC_" + it.groupValues[1].trimStart('0').ifEmpty { "0" } }
         return t.replace(Regex("[^a-z0-9]"), "")
     }
 }

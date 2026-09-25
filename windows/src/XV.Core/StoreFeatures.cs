@@ -22,6 +22,7 @@ public sealed partial class Store
             CREATE TABLE IF NOT EXISTS card_events(id INTEGER PRIMARY KEY AUTOINCREMENT, person_id TEXT NOT NULL, event TEXT NOT NULL,
               detail TEXT NOT NULL DEFAULT '', actor TEXT NOT NULL, created_at INTEGER NOT NULL);
             CREATE INDEX IF NOT EXISTS ix_card_events_person ON card_events(person_id, created_at);
+            CREATE TABLE IF NOT EXISTS removed_devices(device_id TEXT PRIMARY KEY, removed_at INTEGER NOT NULL, wipe_ordered_at INTEGER NOT NULL DEFAULT 0);
             """);
         BackfillAuditChain();
         // No anchor yet (new install or just restored): anchor at the current end so later truncation is detected.
@@ -202,7 +203,7 @@ public sealed partial class Store
                    p.name, p.rank, p.service_no, p.company, p.platoon, p.section, p.mobile
             FROM events e JOIN persons p ON p.id=e.entity_id
             WHERE e.entity_type='PERSON' AND e.event_type='EXIT' AND e.expected_return>0
-              AND e.event_ts=(SELECT MAX(x.event_ts) FROM events x WHERE x.entity_type='PERSON' AND x.entity_id=e.entity_id)
+              AND e.event_ts=(SELECT MAX(x.event_ts) FROM events x WHERE x.entity_type='PERSON' AND x.entity_id=e.entity_id AND x.event_type IN ('ENTRY','EXIT'))
             ORDER BY e.expected_return
             """);
         foreach (var r in list) { r["kind"] = "RETURN"; r["overdue"] = now > Convert.ToInt64(r["expected_return"]); }
@@ -222,7 +223,20 @@ public sealed partial class Store
     public bool IsRevokedDevice(string deviceId)
     {
         var r = One("SELECT active, wipe_ordered_at FROM devices WHERE device_id=$1", deviceId);
-        if (r == null || Convert.ToInt64(r["active"]) == 1) return false;
+        if (r == null)
+        {
+            // Deleted from the list before it connected again: it still gets the wipe order.
+            var gone = One("SELECT wipe_ordered_at FROM removed_devices WHERE device_id=$1", deviceId);
+            if (gone == null) return false;
+            if (Convert.ToInt64(gone["wipe_ordered_at"]) == 0)
+            {
+                Exec("UPDATE removed_devices SET wipe_ordered_at=$1 WHERE device_id=$2", NowMs, deviceId);
+                Audit("SYSTEM", "REMOTE_WIPE_ORDERED", "DEVICE", deviceId, "removed terminal");
+                Notify();
+            }
+            return true;
+        }
+        if (Convert.ToInt64(r["active"]) == 1) return false;
         if (Convert.ToInt64(r["wipe_ordered_at"]) == 0)
         {
             Exec("UPDATE devices SET wipe_ordered_at=$1 WHERE device_id=$2", NowMs, deviceId);

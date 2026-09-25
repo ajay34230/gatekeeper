@@ -439,7 +439,13 @@ public sealed partial class Store : IDisposable
     public List<Dictionary<string, object?>> Devices() => Query("SELECT device_id,name,model,active,paired_at,last_seen,last_ip,location_id,gate_id,operator_id,pending,app_version,via FROM devices ORDER BY active DESC, last_seen DESC");
 
     public void RevokeDevice(string id) { Exec("UPDATE devices SET active=0 WHERE device_id=$1", id); Exec("DELETE FROM tokens WHERE device_id=$1", id); Audit("PC-ADMIN", "REVOKE_DEVICE", "DEVICE", id); Notify(); }
-    public void DeleteDevice(string id) { Exec("DELETE FROM devices WHERE device_id=$1", id); Exec("DELETE FROM tokens WHERE device_id=$1", id); Notify(); }
+    public void DeleteDevice(string id)
+    {
+        // A removed terminal is remembered so it is still told to erase itself if it ever connects again.
+        Exec("INSERT OR IGNORE INTO removed_devices(device_id,removed_at) VALUES($1,$2)", id, NowMs);
+        Exec("DELETE FROM devices WHERE device_id=$1", id); Exec("DELETE FROM tokens WHERE device_id=$1", id);
+        Audit("PC-ADMIN", "DELETE_DEVICE", "DEVICE", id); Notify();
+    }
 
     public void Heartbeat(string deviceId, JsonObject p, string ip, bool viaInternet)
     {
@@ -659,6 +665,7 @@ public sealed partial class Store : IDisposable
                 {
                     var p = One("SELECT status FROM persons WHERE id=$1", pid) ?? throw new StoreException("PERSON_NOT_FOUND", $"{pid} is not in the registry");
                     if (S(p["status"]) != "ACTIVE") throw new StoreException("INACTIVE_PERSON", $"{pid} credential is {S(p["status"])}");
+                    CheckPassValidity(pid, "ENTRY", ts); // visitors on board are checked like a walk-in entry
                     if (Count("SELECT COUNT(*) FROM presence WHERE person_id=$1 AND status='ACTIVE'", pid) > 0)
                         throw new StoreException("PERSON_ALREADY_INSIDE", $"{pid} is already recorded inside");
                 }

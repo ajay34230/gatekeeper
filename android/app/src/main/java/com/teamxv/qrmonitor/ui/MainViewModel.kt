@@ -477,11 +477,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     trySync()
                 }
                 is OperationResult.Rejected -> {
-                    session = ScanSession.Unknown(result.reason)
+                    session = ScanSession.Unknown(explainRejection(result.reason))
                     message = result.reason
                 }
             }
         }
+    }
+
+    /** Plain words for the guard instead of internal codes. */
+    private fun explainRejection(code: String): String = when (code) {
+        "PASS_EXPIRED" -> "Entry refused: this visitor / temporary pass has expired. Direct the visitor to the issuing office."
+        "PASS_NOT_YET_VALID" -> "Entry refused: this visitor / temporary pass is not valid yet."
+        "PERSON_NOT_FOUND" -> "This person is no longer in the registry on this terminal. Sync with the Command Center and scan again."
+        "INACTIVE_PERSON" -> "Access denied: this credential is not active."
+        "PRESENCE_STATE_CHANGED", "MANIFEST_STATE_CHANGED" -> "The record changed while you were confirming (another scan or a sync). Scan again."
+        "VEHICLE_NOT_FOUND" -> "This vehicle is no longer in the registry on this terminal. Sync and scan again."
+        "INACTIVE_VEHICLE" -> "Access denied: this vehicle credential is not active."
+        "VEHICLE_ALREADY_INSIDE" -> "This vehicle is already recorded inside."
+        "VEHICLE_NOT_INSIDE" -> "This vehicle is not recorded inside."
+        "INACTIVE_MANIFEST_MEMBER" -> "One of the people on board has an inactive credential."
+        "PERSON_ALREADY_INSIDE" -> "One of the people on board is already recorded inside. Record their exit first."
+        else -> code
     }
 
     fun startVehicleDriverScan() {
@@ -553,7 +569,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     trySync()
                 }
                 is OperationResult.Rejected -> {
-                    session = ScanSession.Unknown(result.reason)
+                    session = ScanSession.Unknown(explainRejection(result.reason))
                     message = result.reason
                 }
             }
@@ -591,7 +607,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     trySync()
                 }
                 is OperationResult.Rejected -> {
-                    session = ScanSession.Unknown(result.reason)
+                    session = ScanSession.Unknown(explainRejection(result.reason))
                     message = result.reason
                 }
             }

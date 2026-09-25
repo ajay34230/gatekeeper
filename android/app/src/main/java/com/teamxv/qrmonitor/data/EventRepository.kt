@@ -223,6 +223,9 @@ class EventRepository(
             remarks = remarks.trim().take(300),
             expectedReturn = if (type == EventType.EXIT) expectedReturn else 0L
         )
+        // Presence first: if it changed meanwhile, nothing is written (the record is only stored when it applies).
+        if (type == EventType.EXIT && sessions.close(active!!.sessionId, eventId, now) != 1)
+            return@withTransaction OperationResult.Rejected("PRESENCE_STATE_CHANGED")
         events.insert(toEntity(event))
         if (type == EventType.ENTRY) {
             sessions.insert(PresenceSessionEntity(
@@ -230,10 +233,6 @@ class EventRepository(
                 sourceType = "DIRECT", sourceId = null, entryEventId = eventId,
                 entryAt = now, locationId = location, gateId = gate
             ))
-        } else {
-            if (sessions.close(active!!.sessionId, eventId, now) != 1) {
-                return@withTransaction OperationResult.Rejected("PRESENCE_STATE_CHANGED")
-            }
         }
         OperationResult.Success(event)
     }
@@ -256,6 +255,10 @@ class EventRepository(
         if (people.any { sessions.activeForPerson(it.id) != null }) return@withTransaction OperationResult.Rejected("PERSON_ALREADY_INSIDE")
 
         val now = System.currentTimeMillis()
+        // Visitor passes on board are checked like a walk-in entry (validity is read from the registry, not the scan).
+        val stored = people.mapNotNull { persons.find(it.id) }
+        if (stored.any { it.validTo > 0 && now > it.validTo }) return@withTransaction OperationResult.Rejected("PASS_EXPIRED")
+        if (stored.any { it.validFrom > 0 && now < it.validFrom }) return@withTransaction OperationResult.Rejected("PASS_NOT_YET_VALID")
         val eventId = newEventId()
         val event = MovementEvent(
             eventId, EntityType.VEHICLE, vehicle.id, EventType.ENTRY,
