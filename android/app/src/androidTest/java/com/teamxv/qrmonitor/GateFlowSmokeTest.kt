@@ -148,4 +148,60 @@ class GateFlowSmokeTest {
         scenario = ActivityScenario.launch(MainActivity::class.java)
         compose.waitUntil(15_000) { compose.onAllNodesWithText("SIGN IN", substring = true).fetchSemanticsNodes().isNotEmpty() }
     }
+
+    private fun until(ms: Long, what: String, ok: () -> Boolean) {
+        val end = System.currentTimeMillis() + ms
+        while (!ok()) { check(System.currentTimeMillis() < end) { "Timed out: $what (${vm.session} / ${vm.message})" }; Thread.sleep(200) }
+    }
+
+    @Test
+    fun vehicleEntryWithDriverAndPassengerThenExit() {
+        runBlocking {
+            AppDatabase.get(ctx).vehicleDao().upsert(com.teamxv.qrmonitor.data.local.VehicleEntity(id = "V001", registration = "DL01AB1234", type = "Truck", secretCode = "XVVTESTVEH01"))
+            AppDatabase.get(ctx).personDao().upsert(PersonEntity("P005", "Test Passenger", "PERSONNEL", secretCode = "XVPTESTCODE05"))
+        }
+        scenario.onActivity { vm.openVehicleScanner() }; Thread.sleep(1_500)
+        scenario.onActivity { vm.onQr("XVVTESTVEH01") }
+        until(15_000, "vehicle identified") { vm.session is com.teamxv.qrmonitor.ui.ScanSession.VehicleScan }
+        scenario.onActivity { vm.startVehicleDriverScan() }; Thread.sleep(800)
+        scenario.onActivity { vm.onQr("XVPTESTCODE01") }
+        until(15_000, "driver verified") { vm.session is com.teamxv.qrmonitor.ui.ScanSession.VehicleDriver }
+        scenario.onActivity { vm.skipCoDriver(); vm.beginOccupants(); vm.addOccupantScan() }; Thread.sleep(800)
+        scenario.onActivity { vm.onQr("XVPTESTCODE05") }
+        until(15_000, "passenger added") { (vm.session as? com.teamxv.qrmonitor.ui.ScanSession.VehicleOccupants)?.occupants?.size == 1 }
+        waitText("Total Persons Onboard")
+        scenario.onActivity { vm.confirmVehicleEntry() }
+        until(15_000, "vehicle entry recorded") { vm.showSuccess }
+        runBlocking { assertTrue(AppDatabase.get(ctx).vehicleManifestDao().activeForVehicle("V001") != null) }
+        assertTrue("driver and passenger inside", runBlocking { AppDatabase.get(ctx).presenceSessionDao().activeForPerson("P005") != null })
+        scenario.onActivity { vm.returnHomeAfterSuccess() }
+        // Exit: scanning the vehicle again records its exit and closes everyone on board.
+        scenario.onActivity { vm.openVehicleScanner() }; Thread.sleep(800)
+        scenario.onActivity { vm.onQr("XVVTESTVEH01") }
+        until(15_000, "vehicle shown as inside") { (vm.session as? com.teamxv.qrmonitor.ui.ScanSession.VehicleScan)?.inside == true }
+        scenario.onActivity { vm.startVehicleDriverScan() }
+        until(15_000, "vehicle exit recorded") { vm.showSuccess }
+        runBlocking {
+            assertTrue(AppDatabase.get(ctx).vehicleManifestDao().activeForVehicle("V001") == null)
+            assertTrue(AppDatabase.get(ctx).presenceSessionDao().activeForPerson("P005") == null)
+        }
+    }
+
+    @Test
+    fun everyTabAndMainButtonOpensWithoutError() {
+        for ((tab, expected) in listOf("Activity" to "Recent Activity", "Sync" to "Sync & Network Hub", "Comms" to "Message to Command Center", "Operator" to "Gatekeeper Profile", "Home" to "SCAN PERSON")) {
+            compose.onAllNodesWithText(tab)[compose.onAllNodesWithText(tab).fetchSemanticsNodes().size - 1].performClick()
+            waitText(expected)
+        }
+        compose.onNodeWithText("Sync").performClick(); waitText("FORCE SYNC / DIAGNOSTIC PING")
+        compose.onNodeWithText("FORCE SYNC / DIAGNOSTIC PING").performScrollTo().performClick(); Thread.sleep(1_000)
+        compose.onNodeWithText("Comms").performClick(); waitText("Message to Command Center")
+        scenario.onActivity { vm.sendComms("MESSAGE", "queued while offline") {} }
+        waitText("queued while offline")
+        compose.onNodeWithText("Operator").performClick(); waitText("CHANGE POST & CONNECTION")
+        compose.onNodeWithText("CHANGE POST & CONNECTION").performScrollTo().performClick()
+        waitText("REASSIGN TERMINAL POST")
+        assertTrue(compose.onAllNodesWithText("SAVE & TEST LINK", substring = true).fetchSemanticsNodes().isNotEmpty() ||
+            compose.onAllNodesWithText("TEST CONNECTION", substring = true).fetchSemanticsNodes().isNotEmpty())
+    }
 }

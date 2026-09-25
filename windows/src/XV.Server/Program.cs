@@ -10,6 +10,16 @@ if (ri0 >= 0 && ri0 + 2 < args.Length)
     Console.WriteLine("Restored from " + args[ri0 + 1]);
 }
 var settings = Settings.Load();
+// Cloud Link through a tunnel with a public certificate (e.g. a Cloudflare tunnel): --cloud-url URL [--comms-cloud-url URL]
+var cu = Array.IndexOf(args, "--cloud-url");
+if (cu >= 0 && cu + 1 < args.Length)
+{
+    settings.InternetEnabled = true; settings.CloudMode = "TUNNEL"; settings.CloudUrl = args[cu + 1]; settings.CloudUsesPublicCertificate = true;
+    var ccu = Array.IndexOf(args, "--comms-cloud-url");
+    if (ccu >= 0 && ccu + 1 < args.Length) settings.CommsCloudUrl = args[ccu + 1];
+    settings.Save();
+    Console.WriteLine($"CLOUD {settings.PublicUrl} comms {settings.CommsPublicUrl}");
+}
 using var store = new Store(settings);
 var cert = CertManager.LoadOrCreate(settings);
 await using var server = new ApiServer(store, cert);
