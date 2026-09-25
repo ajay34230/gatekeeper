@@ -54,7 +54,10 @@ if (args.Contains("--card-register"))
     foreach (var c in store.CardRegister())
         Console.WriteLine($"CARD {c["id"]} issues={c["issues"]} lost={c["lost"]}");
 for (var i = 0; i + 1 < args.Length; i++)
+{
+    if (args[i] == "--set-photo" && i + 2 < args.Length) { store.SetPersonPhoto(Store.CanonId(args[i + 1]), File.ReadAllBytes(args[i + 2]), "CI"); Console.WriteLine("PHOTO " + args[i + 1]); }
     if (args[i] == "--report-lost") { store.ReportCardLost(args[i + 1], "CI test"); Console.WriteLine("LOST " + args[i + 1]); }
+}
 var bi = Array.IndexOf(args, "--backup");
 if (bi >= 0 && bi + 2 < args.Length)
 {

@@ -37,6 +37,21 @@ public sealed class CardStudioWindow : Window
         _open.Show();
     }
 
+    /// <summary>CI screenshots: the Studio is web content, so it is captured by WebView2 itself once the cards are drawn.</summary>
+    internal static async Task CaptureForCiAsync(Window owner, string file)
+    {
+        var w = new CardStudioWindow([]) { Owner = owner, Width = 1400, Height = 900 };
+        w.Show();
+        for (var i = 0; i < 60 && w._web.CoreWebView2 == null; i++) await Task.Delay(250);
+        await Task.Delay(4000); // soldiers, photos and signatures arrive over the message channel
+        if (w._web.CoreWebView2 != null)
+        {
+            await using var fs = File.Create(file);
+            await w._web.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, fs);
+        }
+        w.Close();
+    }
+
     CardStudioWindow(List<string> preselect)
     {
         _preselect = preselect;

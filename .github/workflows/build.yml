@@ -54,7 +54,7 @@ jobs:
         run: |
           $env:XV_DATA_DIR = "$env:RUNNER_TEMP\xvshot"
           dotnet build windows/src/XV.Server -c Release
-          dotnet windows/src/XV.Server/bin/Release/net8.0/XV.Server.dll --setup-only --create-operator "CI Operator" GK-01 "Operator#1" --import-persons windows/tests/sample/persons.csv --import-vehicles windows/tests/sample/vehicles.csv --add-location LOC07 "Location 07" --add-gate G02 "Gate 02" --add-record P001 ENTRY "CI test record" --add-record P002 Leave "CI test record" --add-visitor "CI Test Visitor" -5 480 --add-visitor "CI Ended Visitor" -300 -60 --report-lost P002
+          dotnet windows/src/XV.Server/bin/Release/net8.0/XV.Server.dll --setup-only --create-operator "CI Operator" GK-01 "Operator#1" --import-persons windows/tests/sample/persons.csv --import-vehicles windows/tests/sample/vehicles.csv --add-location LOC07 "Location 07" --add-gate G02 "Gate 02" --add-record P001 ENTRY "CI test record" --add-record P002 Leave "CI test record" --add-visitor "CI Test Visitor" -5 480 --add-visitor "CI Ended Visitor" -300 -60 --report-lost P002 --set-photo P001 windows/tests/sample/ci-photo.png
           $a = Start-Process windows/dist/app/XVCommandCenter.exe -ArgumentList "--screenshot","$env:GITHUB_WORKSPACE\screenshots" -PassThru
           if (-not $a.WaitForExit(120000)) { Stop-Process -Id $a.Id -Force; throw "app did not finish" }
           Get-ChildItem screenshots

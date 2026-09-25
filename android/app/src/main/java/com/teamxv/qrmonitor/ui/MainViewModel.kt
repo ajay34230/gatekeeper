@@ -119,6 +119,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         api
     ) { config.baseUrl }
 
+    /** Background work (sign-in, pairing, sync, Comms): an unexpected error is shown and logged, never a crash. */
+    private val appErrors = kotlinx.coroutines.CoroutineExceptionHandler { _, e ->
+        android.util.Log.e("XV-APP", "Background action failed", e)
+        busy = false
+        message = "Action failed: ${e.message ?: e.javaClass.simpleName}"
+    }
+
     /**
      * Gate actions (scan, identify, record) never close the app on an unexpected error: the guard sees what failed and
      * can scan again; the full error goes to the device log.
@@ -194,13 +201,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         syncStateRefresh()
         SyncScheduler.ensurePeriodic(app)
 
-        viewModelScope.launch { repo.observePersonnel().collectLatest { personnel = it } }
-        viewModelScope.launch { repo.observeVehicles().collectLatest { vehicles = it } }
-        viewModelScope.launch { repo.observeVehiclesInside().collectLatest { vehiclesInside = it } }
+        viewModelScope.launch(appErrors) { repo.observePersonnel().collectLatest { personnel = it } }
+        viewModelScope.launch(appErrors) { repo.observeVehicles().collectLatest { vehicles = it } }
+        viewModelScope.launch(appErrors) { repo.observeVehiclesInside().collectLatest { vehiclesInside = it } }
         if (config.paired) refreshStations()
-        viewModelScope.launch { repo.observeEvents().collectLatest { events = it } }
-        viewModelScope.launch { repo.observePendingCount().collectLatest { pending = it } }
-        viewModelScope.launch { repo.observeAttentionCount().collectLatest { attention = it } }
+        viewModelScope.launch(appErrors) { repo.observeEvents().collectLatest { events = it } }
+        viewModelScope.launch(appErrors) { repo.observePendingCount().collectLatest { pending = it } }
+        viewModelScope.launch(appErrors) { repo.observeAttentionCount().collectLatest { attention = it } }
     }
 
     fun login(username: String, password: String) {
@@ -209,7 +216,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             authMessage = "Enter username and password."
             return
         }
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(Dispatchers.IO + appErrors) {
             if (!config.paired) { authMessage = "Pair this terminal with the PC Command Center first (PC Server Connection below)."; return@launch }
             if (config.locationId.isBlank() || config.gateId.isBlank()) { authMessage = "Select your station location and gate."; return@launch }
             busy = true
@@ -278,7 +285,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun logout() {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(Dispatchers.IO + appErrors) {
             if (config.operatorToken.isNotBlank()) {
                 runCatching { api.logout(config.baseUrl) }
             }
@@ -320,7 +327,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Sends the handover summary to the Command Center (queued if the link is down), then signs out. */
     fun sendHandoverAndLogout(report: HandoverReport) {
         val who = config.operatorName.ifBlank { config.operatorId }.ifBlank { config.deviceId }
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(Dispatchers.IO + appErrors) {
             runCatching { com.teamxv.qrmonitor.comms.CommsEngine.queue(getApplication(), "MESSAGE", report.toMessage(), if (report.post.isBlank()) who else "$who • ${report.post}") }
                 .onSuccess { handoverError = ""; logout() }
                 .onFailure { handoverError = "Handover summary could not be queued." + (it.message?.let { m -> " $m" } ?: "") }
@@ -659,7 +666,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun testConnection() {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(Dispatchers.IO + appErrors) {
             val (transport, localIp) = network.current()
             if (transport == "Disconnected") {
                 networkStatus = NetworkStatus(
@@ -702,7 +709,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (info == null) { pairingMessage = "That is not a Command Center pairing QR. On the PC click 'Local Wi-Fi & Pair Device'."; return }
         busy = true
         pairingMessage = "Pairing with ${info.n.ifBlank { info.id }}…"
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(Dispatchers.IO + appErrors) {
             val name = android.os.Build.MANUFACTURER.replaceFirstChar { it.uppercase() } + " " + android.os.Build.MODEL
             val res = api.enroll(info, name, "Android ${android.os.Build.VERSION.RELEASE}")
             busy = false
@@ -723,7 +730,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun unpair() {
         com.teamxv.qrmonitor.comms.CommsService.stop(getApplication())
-        viewModelScope.launch(Dispatchers.IO) { com.teamxv.qrmonitor.comms.CommsDatabase.get(getApplication()).dao().clear() }
+        viewModelScope.launch(Dispatchers.IO + appErrors) { com.teamxv.qrmonitor.comms.CommsDatabase.get(getApplication()).dao().clear() }
         config.unpair(); paired = false; loggedIn = false; api.operatorToken = ""
         pairingMessage = "Terminal unpaired. Scan a new pairing QR to connect."
     }
@@ -738,7 +745,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Learns where the PC's Comms engine listens and (re)starts the engine service. */
     fun refreshCommsInfo() {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(Dispatchers.IO + appErrors) {
             api.commsInfo().onSuccess { ci ->
                 val changed = ci.port != config.commsPort || ci.publicUrl.trimEnd('/') != config.commsPublicUrl || ci.publicUsesCaCertificate != config.commsPublicUsesCa
                 config.commsPort = ci.port; config.commsPublicUrl = ci.publicUrl; config.commsPublicUsesCa = ci.publicUsesCaCertificate
@@ -751,7 +758,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun sendComms(kind: String, body: String, onSent: () -> Unit) {
         val who = config.operatorName.ifBlank { config.operatorId }.ifBlank { config.deviceId }
         val post = listOf(config.locationName.ifBlank { config.locationId }, config.gateName.ifBlank { config.gateId }).filter { it.isNotBlank() }.joinToString(" / ")
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(Dispatchers.IO + appErrors) {
             runCatching { com.teamxv.qrmonitor.comms.CommsEngine.queue(getApplication(), kind, body, if (post.isBlank()) who else "$who • $post") }
                 .onSuccess { commsError = ""; kotlinx.coroutines.withContext(Dispatchers.Main) { onSent() } }
                 .onFailure { commsError = it.message ?: "Could not queue the message" }
@@ -767,7 +774,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** SOS: one alert to the Command Center with post, operator and GPS position (queued if the link is down). */
     fun sendSos() {
         sosState = "Getting location…"
-        viewModelScope.launch {
+        viewModelScope.launch(appErrors) {
             val loc = com.teamxv.qrmonitor.comms.SosLocation.current(getApplication())
             val who = config.operatorName.ifBlank { config.operatorId }.ifBlank { "Unknown operator" }
             val post = listOf(config.locationName.ifBlank { config.locationId }, config.gateName.ifBlank { config.gateId }).filter { it.isNotBlank() }.joinToString(" / ").ifBlank { "post not set" }
@@ -780,12 +787,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun commsSeen() {
-        viewModelScope.launch(Dispatchers.IO) { com.teamxv.qrmonitor.comms.CommsEngine.markSeen(getApplication()) }
+        viewModelScope.launch(Dispatchers.IO + appErrors) { com.teamxv.qrmonitor.comms.CommsEngine.markSeen(getApplication()) }
     }
 
     /** Locations and gates configured on the PC (public list, no sign-in needed). */
     fun refreshStations() {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(Dispatchers.IO + appErrors) {
             api.stations().onSuccess { (locs, gts) ->
                 api.reasonsFromServer?.let { config.movementReasons = it; reasons = it }
                 api.returnReasonsFromServer?.let { config.returnReasons = it; returnReasons = it }
@@ -808,7 +815,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             password != confirm -> { authMessage = "Passwords do not match."; return }
         }
         busy = true
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(Dispatchers.IO + appErrors) {
             val r = api.register(name.trim(), id.trim(), password)
             busy = false
             r.onSuccess {

@@ -141,6 +141,7 @@ public partial class App : Application
         {
             var win = make(); win.Show(); await Snap(win, name); win.Close();
         }
+        await CardStudioWindow.CaptureForCiAsync(w, Path.Combine(dir, "17-id-card-studio.png"));
         Current.Shutdown();
     }
 }

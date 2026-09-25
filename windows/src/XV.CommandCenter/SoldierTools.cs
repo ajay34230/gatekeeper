@@ -234,5 +234,5 @@ public static class Photo
         return outMs.ToArray();
     }
 
-    public static BitmapImage? Image(byte[]? bytes) => bytes == null ? null : Dialogs.Png(bytes);
+    public static BitmapImage? Image(byte[]? bytes) { if (bytes == null) return null; try { return Dialogs.Png(bytes); } catch { return null; } } // a damaged stored photo shows as "no photo"
 }
