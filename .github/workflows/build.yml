@@ -24,9 +24,15 @@ jobs:
           XV_DATA_DIR=/tmp/xv dotnet $GITHUB_WORKSPACE/windows/src/XV.Server/bin/Release/net8.0/XV.Server.dll \
             --create-operator "Test Operator" GK-01 "Operator#1" \
             --import-persons $GITHUB_WORKSPACE/windows/tests/sample/persons.csv --import-vehicles $GITHUB_WORKSPACE/windows/tests/sample/vehicles.csv \
-            --add-location LOC07 "Location 07" --add-gate G02 "Gate 02" --pair --comms-test-echo > srv.log 2>&1 &
+            --add-location LOC07 "Location 07" --add-gate G02 "Gate 02" \
+            --add-visitor "CI Visitor" -5 120 --add-visitor "CI Expired Visitor" -120 -60 \
+            --pair --comms-test-echo --ci-control > srv.log 2>&1 &
           for i in $(seq 1 60); do grep -q PAIRQR srv.log && break; sleep 1; done; cat srv.log
-          python3 $GITHUB_WORKSPACE/windows/tests/e2e_protocol_test.py "$(grep PAIRQR srv.log | cut -d' ' -f2)"
+          XV_SRV_LOG=/tmp/xv/srv.log XV_CI_DATA=/tmp/xv python3 $GITHUB_WORKSPACE/windows/tests/e2e_protocol_test.py "$(grep PAIRQR srv.log | cut -d' ' -f2)"
+          # Leave tracking: the TD exit with a past return date must be listed as overdue
+          XV_DATA_DIR=/tmp/xv dotnet $GITHUB_WORKSPACE/windows/src/XV.Server/bin/Release/net8.0/XV.Server.dll --setup-only --absences --verify-audit | tee abs.txt
+          grep -q "ABSENCE P001 RETURN reason=TD overdue=True" abs.txt
+          grep -q "AUDIT .* 0 problem" abs.txt
 
   windows:
     runs-on: windows-latest
@@ -48,7 +54,7 @@ jobs:
         run: |
           $env:XV_DATA_DIR = "$env:RUNNER_TEMP\xvshot"
           dotnet build windows/src/XV.Server -c Release
-          dotnet windows/src/XV.Server/bin/Release/net8.0/XV.Server.dll --setup-only --create-operator "CI Operator" GK-01 "Operator#1" --import-persons windows/tests/sample/persons.csv --import-vehicles windows/tests/sample/vehicles.csv --add-location LOC07 "Location 07" --add-gate G02 "Gate 02" --add-record P001 ENTRY "CI test record" --add-record P002 Leave "CI test record"
+          dotnet windows/src/XV.Server/bin/Release/net8.0/XV.Server.dll --setup-only --create-operator "CI Operator" GK-01 "Operator#1" --import-persons windows/tests/sample/persons.csv --import-vehicles windows/tests/sample/vehicles.csv --add-location LOC07 "Location 07" --add-gate G02 "Gate 02" --add-record P001 ENTRY "CI test record" --add-record P002 Leave "CI test record" --add-visitor "CI Test Visitor" -5 480 --add-visitor "CI Ended Visitor" -300 -60 --report-lost P002
           $a = Start-Process windows/dist/app/XVCommandCenter.exe -ArgumentList "--screenshot","$env:GITHUB_WORKSPACE\screenshots" -PassThru
           if (-not $a.WaitForExit(120000)) { Stop-Process -Id $a.Id -Force; throw "app did not finish" }
           Get-ChildItem screenshots

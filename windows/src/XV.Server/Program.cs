@@ -3,6 +3,12 @@ using XV.Core;
 
 // Headless host of the same server (no UI). Used for automated tests and for running on a machine without a desktop.
 // Usage: XV.Server [--create-operator NAME ID PASSWORD] [--import-persons file.csv] [--import-vehicles file.csv] [--add-location ID NAME] [--add-gate ID NAME] [--pair]
+var ri0 = Array.IndexOf(args, "--restore");
+if (ri0 >= 0 && ri0 + 2 < args.Length)
+{
+    Backup.Restore(args[ri0 + 1], args[ri0 + 2]);
+    Console.WriteLine("Restored from " + args[ri0 + 1]);
+}
 var settings = Settings.Load();
 using var store = new Store(settings);
 var cert = CertManager.LoadOrCreate(settings);
@@ -30,6 +36,37 @@ for (var i = 0; i + 1 < args.Length; i++)
 for (var i = 0; i + 3 < args.Length; i++)
     if (args[i] == "--add-record")
         store.AddManualRecord(args[i + 1], args[i + 2], Store.NowMs - (i * 3_600_000L), "LOC07", "G02", args[i + 3]);
+// --add-visitor NAME FROM_MINUTES TO_MINUTES : visitor pass valid from now+FROM to now+TO (CI test data)
+for (var i = 0; i + 3 < args.Length; i++)
+    if (args[i] == "--add-visitor")
+    {
+        var vid = store.CreateVisitorPass(new System.Text.Json.Nodes.JsonObject
+        {
+            ["name"] = args[i + 1], ["purpose"] = "CI test visit", ["host"] = "P001", ["idProof"] = "CI test ID",
+            ["validFrom"] = Store.NowMs + long.Parse(args[i + 2]) * 60_000, ["validTo"] = Store.NowMs + long.Parse(args[i + 3]) * 60_000,
+        });
+        Console.WriteLine($"VISITOR {vid}");
+    }
+if (args.Contains("--absences"))
+    foreach (var a in store.Absences())
+        Console.WriteLine($"ABSENCE {a["person_id"]} {a["kind"]} reason={a["reason"]} overdue={a["overdue"]}");
+if (args.Contains("--card-register"))
+    foreach (var c in store.CardRegister())
+        Console.WriteLine($"CARD {c["id"]} issues={c["issues"]} lost={c["lost"]}");
+for (var i = 0; i + 1 < args.Length; i++)
+    if (args[i] == "--report-lost") { store.ReportCardLost(args[i + 1], "CI test"); Console.WriteLine("LOST " + args[i + 1]); }
+var bi = Array.IndexOf(args, "--backup");
+if (bi >= 0 && bi + 2 < args.Length)
+{
+    using var commsStore = new CommsStore();
+    Backup.Create(args[bi + 1], args[bi + 2], settings, store.ExportEncrypted, commsStore.ExportEncrypted);
+    Console.WriteLine("Backup written to " + args[bi + 1]);
+}
+if (args.Contains("--verify-audit"))
+{
+    var (n, problems) = store.VerifyAudit();
+    Console.WriteLine($"AUDIT {n} entries, {problems.Count} problem(s)" + (problems.Count > 0 ? ": " + string.Join(" | ", problems) : ""));
+}
 var ci2 = Array.IndexOf(args, "--connection-sheet");
 if (ci2 >= 0 && ci2 + 1 < args.Length)
 {
@@ -88,6 +125,17 @@ if (args.Contains("--pair"))
     Console.WriteLine("PAIRCODE " + code);
     Console.WriteLine("PAIRQR " + Pairing.Payload(settings, server.Fingerprint, code));
 }
+// CI only: revoke the device named in <data>/ci-revoke so the protocol test can check the remote-wipe order.
+if (args.Contains("--ci-control"))
+    _ = Task.Run(async () =>
+    {
+        var f = Paths.File("ci-revoke");
+        while (true)
+        {
+            await Task.Delay(300);
+            if (File.Exists(f)) { var id = File.ReadAllText(f).Trim(); File.Delete(f); store.RevokeDevice(id); Console.WriteLine("REVOKED " + id); }
+        }
+    });
 var done = new TaskCompletionSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; done.TrySetResult(); };
 AppDomain.CurrentDomain.ProcessExit += (_, _) => done.TrySetResult();

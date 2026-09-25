@@ -19,6 +19,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         App.Store.Changed += () => Dispatcher.BeginInvoke(QueueRefresh);
         App.Comms.Changed += () => Dispatcher.BeginInvoke(UpdateCommsBadge);
+        OverdueMonitor.Changed += () => Dispatcher.BeginInvoke(UpdateOverdueBadge);
         Loaded += (_, _) => UpdateCommsBadge();
         App.Server.Log += msg => Dispatcher.BeginInvoke(() => StatusRight.Text = $"{DateTime.Now:HH:mm:ss}  {msg}");
         _timer.Tick += (_, _) => Refresh(full: false);
@@ -202,7 +203,7 @@ public partial class MainWindow : Window
 
     void RenderPersons()
     {
-        var all = App.Store.Persons(Query);
+        var all = App.Store.Soldiers(Query);
         var rows = _company == "ALL" ? all : all.Where(p => string.Equals(S(p["company"]), _company, StringComparison.OrdinalIgnoreCase)).ToList();
         _selected.IntersectWith(all.Select(p => S(p["id"])));
         Header("MILITARY & CIVILIAN PERSONNEL DOSSIER", $"{rows.Count} / {all.Count} Personnel", "Company-wise registry with printable QR ID cards, custom fields and full movement history. Tick cards to export selected personnel.");
@@ -212,6 +213,7 @@ public partial class MainWindow : Window
         SectionActions.Children.Add(exportSel);
         SectionActions.Children.Add(Btn("Reports", (_, _) => Dialogs.Report(this, _company, []), "BtnEmerald"));
         SectionActions.Children.Add(Btn(_selected.Count > 0 ? $"ID Cards ({_selected.Count})" : "ID Cards", (_, _) => CardStudioWindow.Show(this, _selected.ToList()), "BtnGold"));
+        SectionActions.Children.Add(Btn("Card Register", (_, _) => CardRegisterWindow.ShowWindow(this)));
         SectionActions.Children.Add(Btn("Import / Export", ImportExport_Click));
 
         // Select Company dropdown + chips
@@ -361,6 +363,15 @@ public partial class MainWindow : Window
     {
         var rows = App.Store.AuditLog(500).Where(r => Query.Length == 0 || string.Join(" ", r.Values).Contains(Query, StringComparison.OrdinalIgnoreCase)).ToList();
         Header("SECURITY AUDIT TRAIL", $"{rows.Count} entries", "Every administrative change, sign-in and gate record is written to the encrypted audit log.");
+        SectionActions.Children.Add(Btn("Verify integrity", (_, _) =>
+        {
+            var (n, problems) = App.Store.VerifyAudit();
+            App.Store.AdminAudit("AUDIT_VERIFIED", problems.Count == 0 ? $"{n} entries intact" : $"{problems.Count} problem(s)");
+            MessageBox.Show(this, problems.Count == 0
+                ? $"All {n} audit entries are intact: every entry is chained to the previous one and nothing was edited, removed or truncated."
+                : $"TAMPERING DETECTED in the audit trail ({problems.Count}):\n\n" + string.Join("\n", problems.Take(20)), "Audit trail integrity",
+                MessageBoxButton.OK, problems.Count == 0 ? MessageBoxImage.Information : MessageBoxImage.Error);
+        }, "BtnGold"));
         SectionActions.Children.Add(Btn("Export CSV", (_, _) => Dialogs.ExportAudit(this), "BtnEmerald"));
         if (rows.Count == 0) { ContentHost.Content = Empty("The audit trail is empty."); return; }
         var sp = new StackPanel();
@@ -409,6 +420,16 @@ public partial class MainWindow : Window
     void Pair_Click(object s, RoutedEventArgs e) => new PairWindow { Owner = this }.ShowDialog();
     void Comms_Click(object s, RoutedEventArgs e) => CommsWindow.Show(this);
     void CardStudio_Click(object s, RoutedEventArgs e) => CardStudioWindow.Show(this);
+    void Visitors_Click(object s, RoutedEventArgs e) => VisitorsWindow.ShowWindow(this);
+    void Leave_Click(object s, RoutedEventArgs e) => LeaveWindow.ShowWindow(this);
+    void Lock_Click(object s, RoutedEventArgs e) => AutoLock.LockNow();
+
+    void UpdateOverdueBadge()
+    {
+        var n = OverdueMonitor.OverdueCount;
+        OverdueBadge.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
+        OverdueBadgeText.Text = n > 99 ? "99+" : n.ToString();
+    }
 
     void UpdateCommsBadge()
     {

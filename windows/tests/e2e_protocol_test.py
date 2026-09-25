@@ -118,6 +118,23 @@ csend({"t": "call", "op": "invite", "callId": "c" * 32, "video": True, "from": "
 assert crecv() == {"t": "call", "op": "busy", "callId": "c" * 32}, "call signalling must round-trip through the Comms engine"
 ws.close()
 print("comms ok")
+# ---- visitor passes: entry only inside the validity window
+log = open(os.environ.get("XV_SRV_LOG", "srv.log")).read()
+vis = [l.split()[1] for l in log.splitlines() if l.startswith("VISITOR ")]
+assert len(vis) == 2, vis
+code, body, _ = rpc("events.create", ev("EVT-V1", "PERSON", vis[0], "ENTRY"), tok); assert code == 201, (code, body)
+code, body, _ = rpc("events.create", ev("EVT-V2", "PERSON", vis[1], "ENTRY"), tok); assert code == 403 and body["reason"] == "PASS_EXPIRED", (code, body)
+code, boot3, _ = rpc("master.bootstrap", token=tok)
+vp = {p["personId"]: p for p in boot3["persons"]}
+assert vp[vis[0]]["validTo"] > time.time() * 1000 > vp[vis[0]]["validFrom"], vp[vis[0]]
+code, body, _ = rpc("events.create", ev("EVT-V3", "PERSON", vis[0], "EXIT"), tok); assert code == 201, (code, body)
+print("visitor passes ok")
+# ---- leave tracking: exit with reason + expected return date (already passed → overdue on the PC)
+code, st2, _ = rpc("stations.list"); assert "TD" in st2["returnReasons"], st2
+code, body, _ = rpc("events.create", ev("EVT-L1", "PERSON", "P001", "EXIT", {"reason": "TD", "remarks": "CI", "expectedReturn": int(time.time() * 1000) - 3_600_000}), tok)
+assert code == 201, (code, body)
+print("leave ok")
+
 # ---- security hardening
 # forged requests (wrong key) are refused and do not consume nonces of the real terminal
 ts, n = int(time.time() * 1000), base64.urlsafe_b64encode(os.urandom(16)).decode().rstrip("=")
@@ -130,4 +147,14 @@ assert rpc("health", replay=(ts, n))[0] == 200, "a nonce used by a forged reques
 codes = [S.post(host + "/api/v1/pair/enroll", json={"code": "WRONG" + str(i)}).status_code for i in range(12)]
 assert 429 in codes, codes
 print("security ok")
+# ---- remote wipe: a revoked terminal is told to erase its data
+ci = os.environ.get("XV_CI_DATA")
+if ci:
+    open(os.path.join(ci, "ci-revoke"), "w").write(dev)
+    for _ in range(40):
+        time.sleep(0.25)
+        code, body, _ = rpc("health")
+        if code == 401: break
+    assert code == 401 and body.get("reason") == "DEVICE_REVOKED", (code, body)
+    print("remote wipe order ok")
 print("ALL CHECKS PASSED")

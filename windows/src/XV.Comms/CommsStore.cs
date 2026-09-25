@@ -37,6 +37,9 @@ public sealed class CommsStore : IDisposable
 
     public void Dispose() => _db.Dispose();
 
+    /// <summary>Encrypted copy of the Comms database for a backup.</summary>
+    public void ExportEncrypted(string path, string passphrase) { lock (_lock) Backup.ExportDatabase(_db, path, passphrase); }
+
     int Exec(string sql, params object?[] args)
     {
         lock (_lock)

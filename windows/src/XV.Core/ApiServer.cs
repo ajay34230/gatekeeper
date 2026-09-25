@@ -123,7 +123,14 @@ public sealed class ApiServer : IAsyncDisposable
         var nonce = ctx.Request.Headers["X-GK-Nonce"].ToString();
         _ = long.TryParse(ctx.Request.Headers["X-GK-Ts"].ToString(), out var ts);
         var key = _store.DeviceKey(deviceId);
-        if (key == null) { ctx.Response.StatusCode = 401; await ctx.Response.WriteAsJsonAsync(new { reason = "UNKNOWN_DEVICE" }); return; }
+        if (key == null)
+        {
+            // A revoked terminal is ordered to erase its data (the reply is authentic: TLS is pinned to this PC's certificate).
+            var revoked = _store.IsRevokedDevice(deviceId);
+            ctx.Response.StatusCode = 401;
+            await ctx.Response.WriteAsJsonAsync(new { reason = revoked ? "DEVICE_REVOKED" : "UNKNOWN_DEVICE" });
+            return;
+        }
         if (!Envelope.InWindow(ts, nonce)) { ctx.Response.StatusCode = 401; await ctx.Response.WriteAsJsonAsync(new { reason = "STALE_OR_REPLAYED" }); return; }
 
         JsonObject request;
@@ -182,6 +189,7 @@ public sealed class ApiServer : IAsyncDisposable
                     ["locations"] = new JsonArray(_store.Locations().Select(r => (JsonNode)new JsonObject { ["id"] = r["id"]?.ToString(), ["name"] = r["name"]?.ToString() }).ToArray()),
                     ["gates"] = new JsonArray(_store.Gates().Select(r => (JsonNode)new JsonObject { ["id"] = r["id"]?.ToString(), ["name"] = r["name"]?.ToString() }).ToArray()),
                     ["reasons"] = new JsonArray(s.MovementReasons.Select(r => (JsonNode)JsonValue.Create(r)!).ToArray()),
+                    ["returnReasons"] = new JsonArray(s.ReturnDateReasons.Select(r => (JsonNode)JsonValue.Create(r)!).ToArray()),
                 });
             case "comms.info":
                 // Where this terminal reaches the separate Comms engine (messages, alerts, calls).

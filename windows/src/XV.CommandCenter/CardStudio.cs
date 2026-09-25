@@ -108,7 +108,7 @@ public sealed class CardStudioWindow : Window
     static JsonArray Soldiers()
     {
         var media = App.Store.MediaVersions();
-        return new JsonArray(App.Store.Persons().Select(p =>
+        return new JsonArray(App.Store.Soldiers().Select(p =>
         {
             var id = S(p["id"]);
             var (photoAt, signedAt) = media.GetValueOrDefault(id);
@@ -192,6 +192,7 @@ public sealed class CardStudioWindow : Window
                         var path = Path.Combine(folder, name + ".pdf");
                         if (!await _web.CoreWebView2.PrintToPdfAsync(path, ps)) throw new IOException("PDF could not be written");
                         written.Add(Path.GetFileName(path));
+                        App.Store.CardEvent(id, "EXPORTED", Path.GetFileName(path), "PC-CARD-STUDIO");
                     }
                     if (wantPng)
                     {
@@ -284,6 +285,7 @@ public sealed class CardStudioWindow : Window
                         if (dlg.ShowDialog(this) != true) break;
                         _pdfPath = dlg.FileName;
                     }
+                    foreach (var cid in ids) App.Store.CardEvent(cid, pdf ? "EXPORTED" : "PRINTED", pdf ? "ID card sheet PDF" : "ID card sheet", "PC-CARD-STUDIO");
                     App.Store.AdminAudit(pdf ? "ID_CARDS_PDF" : "ID_CARDS_PRINT", string.Join(",", ids.Take(50)) + (ids.Count > 50 ? $" (+{ids.Count - 50})" : ""));
                     Post(new JsonObject { ["t"] = "preparePrint", ["purpose"] = pdf ? "pdf" : "print", ["ids"] = new JsonArray(ids.Select(i => (JsonNode)i).ToArray()) });
                     break;

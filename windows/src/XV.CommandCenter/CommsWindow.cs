@@ -243,12 +243,15 @@ public sealed class CommsWindow : Window
     /// <summary>Pop-up shown for every incoming alert, on top of all windows, with a sound.</summary>
     public static void ShowIncomingAlert(Window owner, CommsMessage m)
     {
+        var sos = m.Body.StartsWith("SOS", StringComparison.OrdinalIgnoreCase);
+        if (sos) App.Store.AdminAudit("SOS_RECEIVED", $"{m.DeviceId}: {m.Body}");
         SystemSounds.Exclamation.Play();
+        if (sos) _ = Task.Run(async () => { for (var i = 0; i < 4; i++) { await Task.Delay(900); SystemSounds.Hand.Play(); } });
         var dev = App.Store.Devices().FirstOrDefault(d => S(d["device_id"]) == m.DeviceId);
         var where = dev == null ? m.DeviceId : $"{(S(dev["name"]).Length > 0 ? S(dev["name"]) : m.DeviceId)}  •  {S(dev["location_id"])} / {S(dev["gate_id"])}";
         var w = new Window
         {
-            Title = "ALERT from " + m.Sender, Width = 460, SizeToContent = SizeToContent.Height, Topmost = true, Background = B("#2A0F14"),
+            Title = (sos ? "SOS from " : "ALERT from ") + m.Sender, Width = 460, SizeToContent = SizeToContent.Height, Topmost = true, Background = B("#2A0F14"),
             WindowStartupLocation = WindowStartupLocation.CenterScreen, ResizeMode = ResizeMode.NoResize, ShowActivated = true,
             Icon = new BitmapImage(new Uri("pack://application:,,,/Assets/app.ico")),
         };
@@ -257,7 +260,7 @@ public sealed class CommsWindow : Window
         w.Content = new Border
         {
             Padding = new Thickness(20), BorderBrush = B("#9F1239"), BorderThickness = new Thickness(0, 4, 0, 0),
-            Child = Col(T("⚠  ALERT", 18, "#FB7185", bold: true), T($"{m.Sender}  •  {where}", 11, "#FDA4AF", mono: true).M(0, 6),
+            Child = Col(T(sos ? "🆘  SOS — EMERGENCY" : "⚠  ALERT", sos ? 22 : 18, "#FB7185", bold: true), T($"{m.Sender}  •  {where}", 11, "#FDA4AF", mono: true).M(0, 6),
                 new TextBlock { Text = m.Body, TextWrapping = TextWrapping.Wrap, Foreground = B("#FFF1F2"), FontSize = 15, Margin = new Thickness(0, 12, 0, 12) },
                 T(Time(m.CreatedAt, "dd MMM yyyy HH:mm:ss"), 10.5, "#FDA4AF", mono: true),
                 Row(open, dismiss.M(8)).M(0, 14)),

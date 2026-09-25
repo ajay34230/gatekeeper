@@ -108,6 +108,12 @@ public sealed class Settings
     /// <summary>Reasons offered on the terminal when recording an entry / exit (the operator can also type a custom reason).</summary>
     public List<string> MovementReasons { get; set; } = ["TD", "Proceeding on Leave", "Rejoining from Leave", "Posting Out", "Posting In", "Local Work"];
 
+    /// <summary>Exit reasons for which the terminal asks the expected return date (tracked for overdue alerts).</summary>
+    public List<string> ReturnDateReasons { get; set; } = ["TD", "Proceeding on Leave", "Local Work"];
+
+    /// <summary>Lock the Command Center after this many idle minutes (0 = never); unlocked with the administrator password.</summary>
+    public int AutoLockMinutes { get; set; } = 10;
+
     /// <summary>Card Studio design (theme, header texts, instructions, CO details), stored as JSON by the Card Studio.</summary>
     public string CardDesignJson { get; set; } = "";
 

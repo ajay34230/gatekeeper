@@ -40,7 +40,7 @@ Body: `{"iv": base64(12 bytes), "ct": base64(ciphertext ‖ 16-byte tag)}` — A
 | `auth.logout` | yes | – |
 | `master.bootstrap` | yes | – → `sharingMode`, `reasons`, persons, vehicles, locations, gates, presence, active `manifests` (see below) |
 | `credential.verify` | yes | `code` (badge secret, ID or service number / plate), `expected` (`PERSON`/`VEHICLE`/empty) → details for this one scan; 404 `NOT_REGISTERED` |
-| `events.create` | yes | person movement event; optional `reason` (≤ 60 chars, from `reasons` or typed) and `remarks` (≤ 300 chars) |
+| `events.create` | yes | person movement event; optional `reason` (≤ 60 chars, from `reasons` or typed), `remarks` (≤ 300 chars) and, on EXIT, `expectedReturn` (epoch ms) for the reasons in `returnReasons`. Visitor passes (IDs `G…`) are refused on ENTRY outside `validFrom`–`validTo` (`PASS_EXPIRED` / `PASS_NOT_YET_VALID`) |
 | `vehicle.transaction` | yes | `{event, manifest}` vehicle entry/exit with occupants |
 | `heartbeat` | yes | `locationId`, `gateId`, `operatorId`, `pending`, `appVersion` |
 
@@ -95,5 +95,14 @@ candidates are used: calls work on the same network or over a VPN (e.g. Tailscal
 | `hangup` | – | either side |
 
 The PC keeps a call log (direction, video, start / answer / end, outcome) in the Comms database and writes each call to the Audit Trail.
+
+### Remote wipe
+
+A revoked terminal's next request is answered `401 {"reason":"DEVICE_REVOKED"}` (over the pinned TLS connection, so the order is authentic);
+the terminal then erases its databases, keys and settings. A device that was never paired, or was removed, gets `UNKNOWN_DEVICE` and erases nothing.
+
+### Comms `sync` frame
+
+`{"t":"sync","reason":…}` from the PC asks the terminal to synchronise now (sent after a card is reported lost / re-issued or a visitor pass changes).
 
 `windows/tests/e2e_protocol_test.py` exercises all of the above.

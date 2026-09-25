@@ -174,6 +174,8 @@ public sealed class StationsWindow : DarkWindow
         fields.AcceptsReturn = true; fields.MinHeight = 80; fields.TextWrapping = TextWrapping.Wrap;
         var types = Field("History record types besides ENTRY / EXIT (one per line)", string.Join(Environment.NewLine, s.EventTypes));
         types.AcceptsReturn = true; types.MinHeight = 110; types.TextWrapping = TextWrapping.Wrap;
+        var returnReasons = Field("Exit reasons that ask for an expected return date (one per line) — used for the Leave & Overdue list and alerts", string.Join(Environment.NewLine, s.ReturnDateReasons));
+        returnReasons.AcceptsReturn = true; returnReasons.MinHeight = 70; returnReasons.TextWrapping = TextWrapping.Wrap;
         var reasons = Field("Entry / exit reasons offered on terminals (one per line; operators can also type a custom reason and remarks)", string.Join(Environment.NewLine, s.MovementReasons));
         reasons.AcceptsReturn = true; reasons.MinHeight = 110; reasons.TextWrapping = TextWrapping.Wrap;
         var tokenH = Field("Operator session length (hours)", s.TokenHours.ToString(), mono: true);
@@ -184,6 +186,7 @@ public sealed class StationsWindow : DarkWindow
         string[] modes = ["FULL", "MINIMAL", "RECEIVE_ONLY"];
         var sharing = Choice("Data sharing with terminals", ["Full — names, ranks and units are copied to terminals (works fully offline)", "Minimal — terminals get IDs, secret-code hashes and status only; details shown after an online check (recommended)", "Receive-only — terminals hold nothing; every scan is verified online against this PC"], "");
         sharing.SelectedIndex = Math.Max(0, Array.IndexOf(modes, s.DataSharing));
+        var lockMin = Field("Lock the Command Center after this many idle minutes (0 = never; needs the administrator password)", s.AutoLockMinutes.ToString(), mono: true);
         var block = new CheckBox { Content = "Block this program from opening connections to the internet (Windows Firewall, needs administrator approval)", IsChecked = s.BlockOutbound, Margin = new Thickness(0, 10, 0, 0) };
         Body.Children.Add(block);
         Body.Children.Add(Para("Incoming connections from paired terminals, the local network and VPN addresses keep working. The Command Center itself never uploads data anywhere.", "#71717A"));
@@ -201,6 +204,10 @@ public sealed class StationsWindow : DarkWindow
         {
             if (!int.TryParse(port.Text, out var p) || p is < 1 or > 65535 || !int.TryParse(tokenH.Text, out var th) || th < 1 || !int.TryParse(graceH.Text, out var gh) || gh < 0)
             { MessageBox.Show("Check the numeric fields."); return; }
+            if (!int.TryParse(lockMin.Text, out var lm) || lm < 0 || lm > 720) { MessageBox.Show("Auto-lock minutes must be 0-720."); return; }
+            // Weakening the lock (longer idle time or off) needs the administrator password.
+            if (lm != s.AutoLockMinutes && (lm == 0 || (s.AutoLockMinutes != 0 && lm > s.AutoLockMinutes)) && !AdminGate.Require(this, lm == 0 ? "Turn auto-lock off" : "Lengthen auto-lock time")) return;
+            s.AutoLockMinutes = lm;
             var newMode = modes[Math.Max(0, sharing.SelectedIndex)];
             var protectionChanged = newMode != s.DataSharing || (block.IsChecked == true) != s.BlockOutbound;
             if (protectionChanged && !AdminGate.Require(this, $"Change data protection (sharing {s.DataSharing} → {newMode}, outbound block {(block.IsChecked == true ? "ON" : "OFF")})")) return;
@@ -216,6 +223,7 @@ public sealed class StationsWindow : DarkWindow
             s.StartWithWindows = autostart.IsChecked == true; s.TokenHours = th; s.OfflineGraceHours = gh;
             static List<string> Lines(string t) => t.Split('\n', '\r', ',').Select(x => x.Trim()).Where(x => x.Length > 0 && x.Length <= 40).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             s.CustomFields = Lines(fields.Text);
+            s.ReturnDateReasons = Lines(returnReasons.Text);
             s.MovementReasons = Lines(reasons.Text).Where(r => !r.Equals("Custom", StringComparison.OrdinalIgnoreCase)).ToList();
             s.EventTypes = Lines(types.Text).Where(t => !t.Equals("ENTRY", StringComparison.OrdinalIgnoreCase) && !t.Equals("EXIT", StringComparison.OrdinalIgnoreCase)).ToList();
             s.Save();

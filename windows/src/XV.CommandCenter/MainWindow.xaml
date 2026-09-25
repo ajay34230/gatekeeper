@@ -39,6 +39,15 @@
                     <Button Style="{StaticResource BtnAmber}" Margin="0,3,6,3" Click="AddVehicle_Click" Content="+ Add Vehicle"/>
                     <Button Style="{StaticResource BtnEmerald}" Margin="0,3,6,3" Click="ImportExport_Click" Content="Import / Export"/>
                     <Button Style="{StaticResource BtnGold}" Margin="0,3,6,3" Click="CardStudio_Click" Content="ID Card Studio"/>
+                    <Button Style="{StaticResource BtnBlue}" Margin="0,3,6,3" Click="Visitors_Click" Content="Visitors"/>
+                    <Button Margin="0,3,6,3" Click="Leave_Click" ToolTip="People out on leave / TD and overdue returns">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Leave &amp; Overdue" FontWeight="SemiBold"/>
+                            <Border x:Name="OverdueBadge" Visibility="Collapsed" Background="#E11D48" CornerRadius="8" Padding="6,0" Margin="7,0,0,0">
+                                <TextBlock x:Name="OverdueBadgeText" Foreground="White" FontWeight="Bold" FontSize="11"/>
+                            </Border>
+                        </StackPanel>
+                    </Button>
                     <Button Style="{StaticResource BtnGold}" Margin="0,3,6,3" Click="Pair_Click">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="Local Wi-Fi &amp; Pair Device" Foreground="#FCD34D" FontWeight="SemiBold"/>
@@ -55,6 +64,9 @@
                     </Button>
                     <Button Style="{StaticResource BtnBlue}" Margin="0,3,6,3" Click="Cloud_Click" Content="Cloud Link"/>
                     <Button Margin="0,3,6,3" Click="Stations_Click" Content="Stations &amp; Settings"/>
+                    <Button Click="Lock_Click" ToolTip="Lock the Command Center now (administrator password to unlock)" Padding="10,7" Margin="0,3,6,3">
+                        <TextBlock Text="&#xE72E;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
+                    </Button>
                     <Button Click="Refresh_Click" ToolTip="Refresh now" Padding="10,7" Margin="0,3,0,3">
                         <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
                     </Button>

@@ -35,6 +35,12 @@ public partial class App : Application
         if (screenshotDir == null)
         {
             _single = new Mutex(true, "Global\\XVCommandCenterSingleInstance", out var first);
+            // After a restore the previous instance is still exiting: wait for it.
+            for (var i = 0; !first && e.Args.Contains("--after-restore") && i < 40; i++)
+            {
+                await Task.Delay(250);
+                try { first = _single.WaitOne(0); } catch (AbandonedMutexException) { first = true; }
+            }
             if (!first) { MessageBox.Show("XV Command Center is already running.", "XV Command Center"); Shutdown(); return; }
         }
 
@@ -66,7 +72,35 @@ public partial class App : Application
         var main = new MainWindow();
         MainWindow = main;
         main.Show();
-        if (screenshotDir != null) await CaptureScreenshotsAsync(main, screenshotDir);
+        if (screenshotDir != null) { await CaptureScreenshotsAsync(main, screenshotDir); return; }
+        if (e.Args.Contains("--after-restore"))
+        {
+            Store.AdminAudit("RESTORED_FROM_BACKUP");
+            MessageBox.Show(main, "The backup was restored. Paired terminals keep working (same server identity and certificate).", "Restore finished");
+        }
+        OverdueMonitor.Start();
+        AutoLock.Start();
+    }
+
+    /// <summary>Stops everything, replaces the data with the backup and starts a fresh instance.</summary>
+    public static async void RestoreAndRestart(string file, string password)
+    {
+        try
+        {
+            _discovery?.Dispose();
+            await Server.StopAsync();
+            await Comms.DisposeAsync();
+            Store.Dispose();
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            await Task.Run(() => Backup.Restore(file, password));
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("The restore failed: " + ex.Message + "\n\nThe Command Center will restart with the data it had.", "Restore");
+        }
+        _single?.ReleaseMutex();
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!, "--after-restore") { UseShellExecute = false });
+        Current.Shutdown();
     }
 
     public static async Task StartServerAsync()

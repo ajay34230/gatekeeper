@@ -191,7 +191,7 @@ public static class Dialogs
 
     public static void DeletePerson(Window o, string id, string name) { if (Confirm($"Delete {name} ({DisplayId(id)}) from the registry?\nTheir printed QR card will stop working. Movement history is kept.")) App.Store.DeletePerson(id); }
     public static void DeleteVehicle(Window o, string id, string plate) { if (Confirm($"Delete vehicle {plate} ({DisplayId(id)})?")) App.Store.DeleteVehicle(id); }
-    public static void RevokeDevice(Window o, string id) { if (Confirm($"Revoke terminal {id}?\nIt will be disconnected immediately and must be paired again.")) { App.Store.RevokeDevice(id); App.Comms.Disconnect(id); } }
+    public static void RevokeDevice(Window o, string id) { if (Confirm($"Revoke terminal {id}?\nIt is disconnected immediately and, the next time it contacts this PC, it erases all its data (registry, gate records not yet uploaded, messages) and must be paired again.")) { App.Store.RevokeDevice(id); App.Comms.Disconnect(id); } }
     public static void DeleteAccount(Window o, string id) { if (Confirm($"Delete operator account {id}?")) App.Store.DeleteAccount(id); }
 
     public static void ResetPassword(Window o, string id)
@@ -268,6 +268,7 @@ public static class Dialogs
             {
                 if (MessageBox.Show("Issue a new secret code? The old printed card stops working after terminals sync.", "Re-issue QR", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
                 App.Store.RotateSecret(person ? "persons" : "vehicles", id);
+                App.Comms.RequestSyncAll("QR re-issued");
                 Close(); Credential(Owner, type, id);
             }, "BtnDanger");
             AddButton("Save PNG", () =>
@@ -279,9 +280,10 @@ public static class Dialogs
                 var rtb = new RenderTargetBitmap((int)(card.ActualWidth * 2), (int)(card.ActualHeight * 2), 192, 192, PixelFormats.Pbgra32);
                 rtb.Render(card);
                 var enc = new PngBitmapEncoder(); enc.Frames.Add(BitmapFrame.Create(rtb));
-                using var fs = File.Create(dlg.FileName); enc.Save(fs);
+                using (var fs = File.Create(dlg.FileName)) enc.Save(fs);
+                if (person) App.Store.CardEvent(id, "EXPORTED", "Credential PNG", "PC-ADMIN");
             });
-            AddButton("Print", () => { if (!AdminGate.Require(this, $"Print credential {DisplayId(id)}")) return; var pd = new PrintDialog(); if (pd.ShowDialog() == true) pd.PrintVisual(card, "XV credential " + id); }, "BtnAmber");
+            AddButton("Print", () => { if (!AdminGate.Require(this, $"Print credential {DisplayId(id)}")) return; var pd = new PrintDialog(); if (pd.ShowDialog() == true) { pd.PrintVisual(card, "XV credential " + id); if (person) App.Store.CardEvent(id, "PRINTED", "Credential window", "PC-ADMIN"); } }, "BtnAmber");
         }
     }
 
@@ -443,8 +445,9 @@ public static class Dialogs
                 ("Blank template", () => SaveCsv("xv-vehicles-template.csv", Csv.Build([], VehicleCols), containsData: false), "BtnBase"));
             Section("REPORTS (EXCEL • PDF • CSV)", ("Company-wise report…", () => Report(this, "ALL", []), "BtnAmber"));
             Section("GATE RECORDS & AUDIT", ("Export gate records", () => ExportEvents(this), "BtnBase"), ("Export audit trail", () => ExportAudit(this), "BtnBase"));
-            Section("ENCRYPTED BACKUP", ("Open data folder", () => System.Diagnostics.Process.Start("explorer.exe", Paths.DataDir), "BtnBase"));
-            Body.Children.Add(Para("The database is encrypted with a key protected by Windows for this PC. To move to another PC, export CSV files and import them there."));
+            Section("ENCRYPTED BACKUP & RESTORE", ("Create encrypted backup…", () => BackupUi.Create(this), "BtnAmber"), ("Restore from backup…", () => BackupUi.Restore(this), "BtnDanger"),
+                ("Open data folder", () => System.Diagnostics.Process.Start("explorer.exe", Paths.DataDir), "BtnBase"));
+            Body.Children.Add(Para("The database key is protected by Windows for this PC only. A password-protected backup (.xvbackup) is the way to recover everything — registry, records, photos, accounts, paired terminals, Comms and settings — on a new PC."));
             AddButton("Close", Close, "BtnAmber");
         }
 
@@ -476,6 +479,10 @@ public static class Dialogs
         yield return (() => new PersonDialog(null), "09-add-soldier");
         yield return (() => new ReportDialog("ALL", []), "10-reports-export");
         yield return (() => new CommsWindow(), "12-comms-center");
+        yield return (() => new VisitorsWindow(), "13-visitors");
+        yield return (() => new VisitorPassDialog(), "14-new-visitor-pass");
+        yield return (() => new LeaveWindow(false), "15-leave-overdue");
+        yield return (() => new CardRegisterWindow(), "16-card-register");
         var first = App.Store.Persons().FirstOrDefault();
         if (first != null) yield return (() => new AddRecordDialog(S(first["id"])), "11-add-history-record");
     }

@@ -16,7 +16,7 @@ public sealed class StoreException(string code, string message, int status = 409
 /// Encrypted SQLite (SQLCipher) store holding the registry, movement records, accounts and paired devices.
 /// Starts completely empty: nothing is seeded. All access is serialized through one connection.
 /// </summary>
-public sealed class Store : IDisposable
+public sealed partial class Store : IDisposable
 {
     readonly SqliteConnection _db;
     readonly object _lock = new();
@@ -92,6 +92,7 @@ public sealed class Store : IDisposable
         Ensure("events", "source", "TEXT NOT NULL DEFAULT 'TERMINAL'");
         Ensure("events", "reason", "TEXT NOT NULL DEFAULT ''");
         foreach (var (_, col) in ExtraPersonFields) Ensure("persons", col, "TEXT NOT NULL DEFAULT ''");
+        MigrateFeatures(Ensure);
         Exec("CREATE TABLE IF NOT EXISTS person_media(person_id TEXT PRIMARY KEY, photo BLOB, signature BLOB, updated_at INTEGER NOT NULL)");
         Ensure("person_media", "photo_at", "INTEGER NOT NULL DEFAULT 0");
         Ensure("person_media", "signed_at", "INTEGER NOT NULL DEFAULT 0");
@@ -103,6 +104,8 @@ public sealed class Store : IDisposable
         ("platoon", "platoon"), ("section", "section"), ("address", "address"), ("dob", "dob"), ("enrolDate", "enrol_date"),
         ("expiryDate", "expiry_date"), ("idMark", "id_mark"), ("nokName", "nok_name"), ("nokRelation", "nok_relation"),
         ("nokPhone", "nok_phone"), ("cardSerial", "card_serial"),
+        // visitor passes
+        ("purpose", "pass_purpose"), ("host", "pass_host"), ("idProof", "id_proof"),
     ];
 
     // ------------------------------------------------------------------ low level helpers
@@ -154,8 +157,8 @@ public sealed class Store : IDisposable
         }
     }
 
-    void Audit(string actor, string action, string? type = null, string? id = null, string? detail = null) =>
-        Exec("INSERT INTO audit(actor,action,entity_type,entity_id,detail,created_at) VALUES($1,$2,$3,$4,$5,$6)", actor, action, type, id, detail, NowMs);
+    /// <summary>Appends a hash-chained audit entry (see StoreFeatures.cs → tamper-evident audit trail).</summary>
+    void Audit(string actor, string action, string? type = null, string? id = null, string? detail = null) => AppendAudit(actor, action, type, id, detail);
 
     /// <summary>Records an administrator action taken in the Command Center (exports, data-protection changes).</summary>
     public void AdminAudit(string action, string? detail = null) => Audit("ADMIN@" + Environment.MachineName, action, null, null, detail);
@@ -202,7 +205,7 @@ public sealed class Store : IDisposable
     public void UpsertPerson(JsonObject p, string actor = "PC-ADMIN")
     {
         var id = CanonId(p["id"]?.ToString());
-        if (!System.Text.RegularExpressions.Regex.IsMatch(id, "^P[0-9]{3,6}$")) throw new StoreException("INVALID_ID", "Personnel ID must look like P001", 400);
+        if (!System.Text.RegularExpressions.Regex.IsMatch(id, "^[PG][0-9]{3,6}$")) throw new StoreException("INVALID_ID", "Personnel ID must look like P001 (visitor passes G0001)", 400);
         var name = (p["name"]?.ToString() ?? "").Trim();
         if (name.Length < 2) throw new StoreException("INVALID_NAME", "Name is required", 400);
         var now = NowMs;
@@ -225,6 +228,9 @@ public sealed class Store : IDisposable
             foreach (var kv in custom) merged[kv.Key] = kv.Value?.ToString().Trim() ?? "";
             Exec("UPDATE persons SET custom_json=$1 WHERE id=$2", merged.ToJsonString(), id);
         }
+        if (p["validFrom"] != null) Exec("UPDATE persons SET valid_from=$1 WHERE id=$2", p["validFrom"]!.GetValue<long>(), id);
+        if (p["validTo"] != null) Exec("UPDATE persons SET valid_to=$1 WHERE id=$2", p["validTo"]!.GetValue<long>(), id);
+        if (existing == null) CardEvent(id, "ISSUED", "", actor);
         Audit(actor, existing == null ? "ADD_PERSON" : "EDIT_PERSON", "PERSON", id);
         Notify();
     }
@@ -280,11 +286,12 @@ public sealed class Store : IDisposable
     public void DeleteVehicle(string id) { Exec("DELETE FROM vehicles WHERE id=$1", id); Audit("PC-ADMIN", "DELETE_VEHICLE", "VEHICLE", id); Notify(); }
 
     /// <summary>Issues a new QR secret, instantly invalidating the old printed credential.</summary>
-    public void RotateSecret(string table, string id)
+    public void RotateSecret(string table, string id, string reason = "Re-issued")
     {
         if (table is not ("persons" or "vehicles")) throw new ArgumentException("Unknown table", nameof(table));
         Exec($"UPDATE {table} SET secret_code=$1, updated_at=$2 WHERE id=$3", (table == "persons" ? "XVP" : "XVV") + RandomCode(10), NowMs, id);
-        Audit("PC-ADMIN", "ROTATE_QR_SECRET", table, id); Notify();
+        if (table == "persons") CardEvent(id, "REISSUED", reason, "PC-ADMIN");
+        Audit("PC-ADMIN", "ROTATE_QR_SECRET", table, id, reason); Notify();
     }
 
     public List<Dictionary<string, object?>> Locations() => Query("SELECT id,name FROM locations ORDER BY id");
@@ -467,13 +474,14 @@ public sealed class Store : IDisposable
             ["sharingMode"] = mode,
             ["version"] = S(Scalar("SELECT MAX(updated_at) FROM (SELECT updated_at FROM persons UNION ALL SELECT updated_at FROM vehicles)")),
             ["serverTime"] = NowMs,
-            ["persons"] = new JsonArray(!shareRegistry ? [] : Query("SELECT id,secret_code,name,rank,service_no,unit,company,role,category,status,access_locations FROM persons ORDER BY id").Select(r => (JsonNode)new JsonObject
+            ["persons"] = new JsonArray(!shareRegistry ? [] : Query("SELECT id,secret_code,name,rank,service_no,unit,company,role,category,status,access_locations,valid_from,valid_to FROM persons ORDER BY id").Select(r => (JsonNode)new JsonObject
             {
                 ["personId"] = S(r["id"]), ["secretCode"] = full ? S(r["secret_code"]) : "", ["secretHash"] = SecretHash(S(r["secret_code"])),
                 ["name"] = full ? S(r["name"]) : "", ["rank"] = full ? S(r["rank"]) : "", ["serviceNo"] = full ? S(r["service_no"]) : "",
                 ["unit"] = full ? S(r["unit"]) : "", ["company"] = full ? S(r["company"]) : "", ["role"] = full ? S(r["role"]) : "",
                 ["category"] = S(r["category"]), ["status"] = S(r["status"]), ["active"] = S(r["status"]) == "ACTIVE",
                 ["accessLocations"] = S(r["access_locations"]),
+                ["validFrom"] = Convert.ToInt64(r["valid_from"]), ["validTo"] = Convert.ToInt64(r["valid_to"]),
             }).ToArray()),
             ["vehicles"] = new JsonArray(!shareRegistry ? [] : Query("SELECT id,secret_code,plate,mil_reg,type,model,company,status FROM vehicles ORDER BY id").Select(r => (JsonNode)new JsonObject
             {
@@ -488,6 +496,7 @@ public sealed class Store : IDisposable
             { ["personId"] = S(r["person_id"]), ["entryAt"] = Convert.ToInt64(r["entry_at"]) }).ToArray()),
             ["manifests"] = new JsonArray(!shareRegistry ? [] : ActiveManifests().ToArray()),
             ["reasons"] = new JsonArray(Settings.MovementReasons.Select(r => (JsonNode)JsonValue.Create(r)!).ToArray()),
+            ["returnReasons"] = new JsonArray(Settings.ReturnDateReasons.Select(r => (JsonNode)JsonValue.Create(r)!).ToArray()),
         };
     }
 
@@ -520,6 +529,7 @@ public sealed class Store : IDisposable
                     ["type"] = "PERSON", ["id"] = S(p["id"]), ["name"] = S(p["name"]), ["rank"] = S(p["rank"]), ["serviceNo"] = S(p["service_no"]),
                     ["unit"] = S(p["unit"]), ["company"] = S(p["company"]), ["category"] = S(p["category"]), ["status"] = S(p["status"]),
                     ["inside"] = since != null, ["insideSince"] = since == null ? 0 : Convert.ToInt64(since),
+                    ["validFrom"] = Convert.ToInt64(p["valid_from"]), ["validTo"] = Convert.ToInt64(p["valid_to"]),
                 };
             }
         }
@@ -564,10 +574,11 @@ public sealed class Store : IDisposable
     void InsertEvent(JsonObject e, string entity, string id, string type, long seq, string hash, long? stay) =>
         Exec("""
             INSERT INTO events(event_id,entity_type,entity_id,event_type,location_id,gate_id,device_id,operator_id,event_ts,created_at,received_at,seq,
-              source_type,source_id,loc_mismatch,scanned_loc,stay_ms,payload_hash,reason,remarks) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+              source_type,source_id,loc_mismatch,scanned_loc,stay_ms,payload_hash,reason,remarks,expected_return) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
             """, T(e, "eventId"), entity, id, type, Upper(T(e, "locationId")), Upper(T(e, "gateId")), T(e, "deviceId"), Upper(T(e, "operatorId")),
             (long)e["eventTimestamp"]!, (long)e["createdAt"]!, NowMs, seq, Upper(T(e, "sourceType")) is { Length: > 0 } s ? s : "DIRECT",
-            e["sourceId"]?.ToString(), e["locationMismatch"]?.GetValue<bool>() == true ? 1 : 0, T(e, "scannedLocation"), stay, hash, Clip(T(e, "reason"), 60), Clip(T(e, "remarks"), 300));
+            e["sourceId"]?.ToString(), e["locationMismatch"]?.GetValue<bool>() == true ? 1 : 0, T(e, "scannedLocation"), stay, hash, Clip(T(e, "reason"), 60), Clip(T(e, "remarks"), 300),
+            type == "EXIT" && e["expectedReturn"] is JsonValue er && er.TryGetValue<long>(out var ret) && ret > 0 ? ret : 0L);
 
     static string Clip(string v, int max) => v.Length <= max ? v : v[..max];
 
@@ -588,6 +599,7 @@ public sealed class Store : IDisposable
             var person = One("SELECT status FROM persons WHERE id=$1", pid) ?? throw new StoreException("PERSON_NOT_FOUND", "Person is not in the registry");
             if (S(person["status"]) != "ACTIVE") throw new StoreException("INACTIVE_PERSON", "Person credential is " + S(person["status"]));
             var type = Upper(T(e, "eventType"));
+            CheckPassValidity(pid, type, (long)e["eventTimestamp"]!);
             var current = One("SELECT * FROM presence WHERE person_id=$1 AND status='ACTIVE' ORDER BY entry_at DESC LIMIT 1", pid);
             long? stay = null;
             if (type == "ENTRY" && current != null) throw new StoreException("ALREADY_INSIDE", "Person is already recorded inside");

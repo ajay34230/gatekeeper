@@ -142,6 +142,14 @@ public sealed class CommsEngine : IAsyncDisposable
         if (ids.Count > 0) Changed?.Invoke();
     }
 
+    /// <summary>Asks every connected terminal to synchronise now (e.g. a card was reported lost). Returns how many were told.</summary>
+    public int RequestSyncAll(string reason)
+    {
+        var n = 0;
+        foreach (var link in _links.Values) { _ = link.SendAsync(new JsonObject { ["t"] = "sync", ["reason"] = reason }); n++; }
+        return n;
+    }
+
     /// <summary>Sends a call-signalling frame to a terminal. Returns false when it is not connected.</summary>
     public bool SendSignal(string deviceId, JsonObject frame)
     {

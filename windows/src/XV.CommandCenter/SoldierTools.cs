@@ -27,7 +27,7 @@ public sealed class ScopePicker : StackPanel
 
     public ScopePicker(IEnumerable<string>? preselected = null)
     {
-        _people = App.Store.Persons();
+        _people = App.Store.Soldiers();
         var group = "scope-" + Guid.NewGuid();
         foreach (var rb in new[] { _all, _company, _platoon, _section, _selected }) { rb.GroupName = group; rb.Checked += (_, _) => Update(); }
         var modes = new WrapPanel();
@@ -124,7 +124,7 @@ public sealed class ScopePicker : StackPanel
         _selected.IsChecked == true ? new SoldierScope("SELECTED", Ids: _ticked.ToList()) : SoldierScope.All;
 
     /// <summary>The chosen soldiers, in register order.</summary>
-    public List<Dictionary<string, object?>> Soldiers => Scope.Apply(App.Store.Persons());
+    public List<Dictionary<string, object?>> Soldiers => Scope.Apply(App.Store.Soldiers());
 }
 
 /// <summary>Soldier register: export (CSV / Excel, chosen soldiers), blank templates, import with new-column handling, photos from a folder.</summary>
@@ -199,7 +199,7 @@ public static class SoldierRegister
     {
         var dlg = new OpenFolderDialog { Title = "Folder with soldier photos (file name = Personnel ID or Army No)" };
         if (dlg.ShowDialog() != true) return;
-        var people = App.Store.Persons();
+        var people = App.Store.Soldiers();
         int ok = 0; var skipped = new List<string>();
         foreach (var f in Directory.EnumerateFiles(dlg.FolderName).Where(f => new[] { ".jpg", ".jpeg", ".png", ".bmp" }.Contains(Path.GetExtension(f).ToLowerInvariant())))
         {
