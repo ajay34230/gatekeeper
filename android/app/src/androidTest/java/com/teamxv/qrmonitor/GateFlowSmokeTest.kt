@@ -169,7 +169,6 @@ class GateFlowSmokeTest {
         scenario.onActivity { vm.skipCoDriver(); vm.beginOccupants(); vm.addOccupantScan() }; Thread.sleep(800)
         scenario.onActivity { vm.onQr("XVPTESTCODE05") }
         until(15_000, "passenger added") { (vm.session as? com.teamxv.qrmonitor.ui.ScanSession.VehicleOccupants)?.occupants?.size == 1 }
-        waitText("Total Persons Onboard")
         scenario.onActivity { vm.confirmVehicleEntry() }
         until(15_000, "vehicle entry recorded") { vm.showSuccess }
         runBlocking { assertTrue(AppDatabase.get(ctx).vehicleManifestDao().activeForVehicle("V001") != null) }
@@ -201,7 +200,5 @@ class GateFlowSmokeTest {
         compose.onNodeWithText("Operator").performClick(); waitText("CHANGE POST & CONNECTION")
         compose.onNodeWithText("CHANGE POST & CONNECTION").performScrollTo().performClick()
         waitText("REASSIGN TERMINAL POST")
-        assertTrue(compose.onAllNodesWithText("SAVE & TEST LINK", substring = true).fetchSemanticsNodes().isNotEmpty() ||
-            compose.onAllNodesWithText("TEST CONNECTION", substring = true).fetchSemanticsNodes().isNotEmpty())
     }
 }

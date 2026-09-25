@@ -40,7 +40,7 @@ jobs:
           grep -q "AUDIT .* 0 problem" abs.txt
       - name: Cloud Link test through a free Cloudflare tunnel (terminal reaches the PC only via the internet)
         run: |
-          pkill -f XV.Server.dll || true; sleep 2
+          pkill -f XV.Server.dll || true; fuser -k 8443/tcp 8444/tcp 47913/udp 2>/dev/null || true; sleep 3
           curl -sSL -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 && chmod +x /tmp/cloudflared
           /tmp/cloudflared tunnel --no-autoupdate --url https://localhost:8443 --no-tls-verify > /tmp/t1.log 2>&1 &
           /tmp/cloudflared tunnel --no-autoupdate --url https://localhost:8444 --no-tls-verify > /tmp/t2.log 2>&1 &
@@ -51,7 +51,7 @@ jobs:
             --create-operator "Test Operator" GK-01 "Operator#1" --import-persons $GITHUB_WORKSPACE/windows/tests/sample/persons.csv \
             --add-location LOC07 "Location 07" --add-gate G02 "Gate 02" --pair > srv.log 2>&1 &
           for i in $(seq 1 60); do grep -q PAIRQR srv.log && break; sleep 1; done
-          python3 $GITHUB_WORKSPACE/windows/tests/cloud_link_test.py "$(grep PAIRQR srv.log | cut -d' ' -f2)"
+          python3 $GITHUB_WORKSPACE/windows/tests/cloud_link_test.py "$(grep PAIRQR srv.log | cut -d' ' -f2)" || { cat srv.log | tail -30; exit 1; }
 
   windows:
     runs-on: windows-latest
@@ -148,7 +148,7 @@ jobs:
           emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back emulated -camera-front none
           working-directory: android
           script: |
-            adb logcat -c; ./gradlew --no-daemon -PxvEmulator "-Pandroid.testInstrumentationRunnerArguments.pairQr=$PAIRQR" :app:connectedDebugAndroidTest || { adb logcat -d > /tmp/logcat.txt; grep -n -E "FATAL EXCEPTION|XV-GATE|XV-APP|TestRunner|AssertionError|ComposeTimeout|at com\.teamxv" /tmp/logcat.txt | head -300; exit 1; }
+            adb logcat -c; ./gradlew --no-daemon -PxvEmulator "-Pandroid.testInstrumentationRunnerArguments.pairQr=$PAIRQR" :app:connectedDebugAndroidTest || { adb logcat -d > /tmp/logcat.txt; grep -E "TestRunner: (started|failed|run finished)|FATAL EXCEPTION|XV-GATE|XV-APP|Timed out|Error:|Exception:|at com\.teamxv" /tmp/logcat.txt | grep -v "at androidx\|at org.junit\|at java.lang.reflect" | head -120; exit 1; }
             adb install -r app/build/outputs/apk/release/app-release.apk && adb logcat -c && adb shell monkey -p com.xv.accesscontrol --pct-syskeys 0 --throttle 250 -s 42 -v 1500 > /tmp/monkey.txt 2>&1; tail -5 /tmp/monkey.txt; adb logcat -d > /tmp/rel.txt; if grep -q -E "FATAL EXCEPTION|// CRASH|ANR in com.xv" /tmp/monkey.txt /tmp/rel.txt; then grep -n -A30 -E "FATAL EXCEPTION|// CRASH|ANR in" /tmp/monkey.txt /tmp/rel.txt | head -200; exit 1; fi; echo "release build: no crash in 1500 random actions"
       - uses: actions/upload-artifact@v4
         if: always()
