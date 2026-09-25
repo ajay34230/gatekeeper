@@ -129,6 +129,11 @@
             <Style.Resources>
                 <!-- The app-wide white TextBlock style must not apply inside the light drop-down box and its list. -->
                 <Style TargetType="TextBlock"><Setter Property="Foreground" Value="#18181B"/></Style>
+                <!-- Editable drop-downs: their text box must not take the app's dark text-box style (white text on the light box). -->
+                <Style TargetType="TextBox">
+                    <Setter Property="Foreground" Value="#18181B"/><Setter Property="Background" Value="Transparent"/><Setter Property="CaretBrush" Value="#18181B"/>
+                    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TextBox"><ScrollViewer x:Name="PART_ContentHost"/></ControlTemplate></Setter.Value></Setter>
+                </Style>
             </Style.Resources>
         </Style>
         <Style TargetType="ComboBoxItem"><Setter Property="Foreground" Value="#18181B"/></Style>

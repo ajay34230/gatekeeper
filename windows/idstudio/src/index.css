@@ -25,3 +25,7 @@
   .export-page:last-child { break-after: auto; page-break-after: auto; }
   .export-page .xv-card { box-shadow: none !important; border-radius: 0; border-width: 0; }
 }
+
+/* Drop-down lists: the open list uses the system colours, so give options explicit readable colours. */
+select { color-scheme: dark; }
+select option, select optgroup { background-color: #0f172a; color: #f1f5f9; }
