@@ -14,8 +14,10 @@ android {
         applicationId = "com.xv.accesscontrol"
         minSdk = 26
         targetSdk = 35
-        versionCode = 100
-        versionName = "1.0.0"
+        // Every CI build has its own version (updates install over older builds; logs name the exact build).
+        val ciRun = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0
+        versionCode = 100 + ciRun
+        versionName = "1.0.$ciRun"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
             // CI runs the on-device tests on an x86_64 emulator (-PxvEmulator); phones use the ARM libraries only.

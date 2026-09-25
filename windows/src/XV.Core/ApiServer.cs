@@ -22,7 +22,8 @@ namespace XV.Core;
 /// </summary>
 public sealed class ApiServer : IAsyncDisposable
 {
-    public const string Version = "1.0.0";
+    /// <summary>Build version (1.0.&lt;CI run&gt;), shown to terminals and in diagnostics.</summary>
+    public static readonly string Version = typeof(ApiServer).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
     readonly Store _store;
     readonly X509Certificate2 _cert;
     WebApplication? _app;

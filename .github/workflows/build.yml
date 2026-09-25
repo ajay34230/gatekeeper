@@ -8,6 +8,11 @@ on:
 permissions:
   contents: write
 
+# A newer push to the same branch replaces builds still running for older commits.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   server-tests:
     runs-on: ubuntu-latest
@@ -48,7 +53,7 @@ jobs:
           npm ci --no-audit --no-fund
           npm run build
       - name: Publish Command Center (self-contained x64)
-        run: dotnet publish windows/src/XV.CommandCenter -c Release -r win-x64 --self-contained true -o windows/dist/app
+        run: dotnet publish windows/src/XV.CommandCenter -c Release -r win-x64 --self-contained true -p:Version=1.0.${{ github.run_number }} -o windows/dist/app
       - name: Screenshots of the real app (CI test data only)
         shell: pwsh
         run: |
@@ -63,7 +68,7 @@ jobs:
         shell: pwsh
         run: |
           choco install nsis -y --no-progress
-          & "C:\Program Files (x86)\NSIS\makensis.exe" /DSRC=..\dist\app /DVERSION=1.0.0 windows\installer\XVCommandCenter.nsi
+          & "C:\Program Files (x86)\NSIS\makensis.exe" /DSRC=..\dist\app /DVERSION=1.0.${{ github.run_number }} windows\installer\XVCommandCenter.nsi
       - uses: actions/upload-artifact@v4
         with: { name: XV-CommandCenter-Setup, path: windows/installer/XV-CommandCenter-Setup-*.exe }
       - uses: actions/upload-artifact@v4
@@ -95,7 +100,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - name: Build app and test APKs (with x86_64 libraries for the emulator)
         working-directory: android
-        run: chmod +x gradlew && ./gradlew --no-daemon -PxvEmulator :app:assembleDebug :app:assembleDebugAndroidTest
+        run: chmod +x gradlew && ./gradlew --no-daemon -PxvEmulator :app:assembleDebug :app:assembleDebugAndroidTest :app:assembleRelease
       - name: Run on-device tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -106,7 +111,9 @@ jobs:
           emulator-boot-timeout: 900
           emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back emulated -camera-front none
           working-directory: android
-          script: adb logcat -c; ./gradlew --no-daemon -PxvEmulator :app:connectedDebugAndroidTest || { adb logcat -d > /tmp/logcat.txt; grep -n -E "FATAL EXCEPTION|XV-GATE|XV-APP|TestRunner|AssertionError|ComposeTimeout|at com\.teamxv" /tmp/logcat.txt | head -300; exit 1; }
+          script: |
+            adb logcat -c; ./gradlew --no-daemon -PxvEmulator :app:connectedDebugAndroidTest || { adb logcat -d > /tmp/logcat.txt; grep -n -E "FATAL EXCEPTION|XV-GATE|XV-APP|TestRunner|AssertionError|ComposeTimeout|at com\.teamxv" /tmp/logcat.txt | head -300; exit 1; }
+            adb install -r app/build/outputs/apk/release/app-release.apk && adb logcat -c && adb shell monkey -p com.xv.accesscontrol --pct-syskeys 0 --throttle 250 -s 42 -v 1500 > /tmp/monkey.txt 2>&1; tail -5 /tmp/monkey.txt; adb logcat -d > /tmp/rel.txt; if grep -q -E "FATAL EXCEPTION|// CRASH|ANR in com.xv" /tmp/monkey.txt /tmp/rel.txt; then grep -n -A30 -E "FATAL EXCEPTION|// CRASH|ANR in" /tmp/monkey.txt /tmp/rel.txt | head -200; exit 1; fi; echo "release build: no crash in 1500 random actions"
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: android-device-test-report, path: android/app/build/reports/androidTests }
