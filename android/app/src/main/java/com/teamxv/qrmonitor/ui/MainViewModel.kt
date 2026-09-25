@@ -119,6 +119,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         api
     ) { config.baseUrl }
 
+    /**
+     * Gate actions (scan, identify, record) never close the app on an unexpected error: the guard sees what failed and
+     * can scan again; the full error goes to the device log.
+     */
+    private val gateErrors = kotlinx.coroutines.CoroutineExceptionHandler { _, e ->
+        android.util.Log.e("XV-GATE", "Gate action failed", e)
+        showSuccess = false
+        session = ScanSession.Unknown("This action could not be completed (${e.javaClass.simpleName}: ${e.message ?: "no details"}). Scan again; if it repeats, sync with the Command Center.")
+    }
+
     var events by mutableStateOf(listOf<MovementEvent>())
         private set
     var pending by mutableIntStateOf(0)
@@ -337,7 +347,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun onQr(raw: String) {
         val target = scannerTarget ?: return
         closeScanner()
-        viewModelScope.launch {
+        viewModelScope.launch(gateErrors) {
             val expected = when (target) {
                 ScannerTarget.PERSON,
                 ScannerTarget.DRIVER,
@@ -435,7 +445,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun confirmPerson(reason: String = "", remarks: String = "", expectedReturn: Long = 0L) {
         val s = session as? ScanSession.PersonResult ?: return
-        viewModelScope.launch {
+        viewModelScope.launch(gateErrors) {
             when (
                 val result = repo.createPersonEntryOrExit(
                     s.person.id,
@@ -508,7 +518,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun confirmVehicleEntry() {
         val s = session as? ScanSession.VehicleOccupants ?: return
-        viewModelScope.launch {
+        viewModelScope.launch(gateErrors) {
             val vehicle = repo.lookupIdentity(s.vehicleId, EntityType.VEHICLE).vehicle
             if (vehicle == null) {
                 session = ScanSession.Unknown("Vehicle no longer exists locally.")
@@ -545,7 +555,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun confirmVehicleExit() {
         val s = session as? ScanSession.VehicleScan ?: return
-        viewModelScope.launch {
+        viewModelScope.launch(gateErrors) {
             when (
                 val result = repo.createVehicleExit(
                     s.vehicleId,
@@ -629,13 +639,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Opens the identification screen for a person picked from the home roster (same checks as a scan). */
     fun selectPerson(id: String) {
-        viewModelScope.launch { handlePerson(repo.lookupIdentity(id, EntityType.PERSON, config.locationId)) }
+        viewModelScope.launch(gateErrors) { handlePerson(repo.lookupIdentity(id, EntityType.PERSON, config.locationId)) }
     }
 
     /** Starts the vehicle flow for a vehicle picked from the home fleet list. */
     fun selectVehicle(id: String) {
         showSuccess = false; completedEvent = null; completedVehicle = null
-        viewModelScope.launch { handleVehicle(repo.lookupIdentity(id, EntityType.VEHICLE, config.locationId)) }
+        viewModelScope.launch(gateErrors) { handleVehicle(repo.lookupIdentity(id, EntityType.VEHICLE, config.locationId)) }
     }
 
     fun trySync() {
