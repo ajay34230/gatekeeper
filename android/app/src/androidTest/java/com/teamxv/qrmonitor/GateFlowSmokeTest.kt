@@ -48,7 +48,7 @@ class GateFlowSmokeTest {
         if (Build.VERSION.SDK_INT >= 33) ui.grantRuntimePermission(ctx.packageName, Manifest.permission.POST_NOTIFICATIONS)
         ui.grantRuntimePermission(ctx.packageName, Manifest.permission.CAMERA)
         val cfg = AppConfig(ctx)
-        cfg.saveLogin("OP-TEST", "Test Operator", "GATEKEEPER", "", System.currentTimeMillis() + 3_600_000, 3_600)
+        cfg.saveLogin("OP-TEST", "Test Operator", "RP", "", System.currentTimeMillis() + 3_600_000, 3_600)
         cfg.locationId = "LOC01"; cfg.locationName = "Main Gate Post"; cfg.gateId = "G1"; cfg.gateName = "Gate 1"
         runBlocking {
             val persons = AppDatabase.get(ctx).personDao()
@@ -188,7 +188,7 @@ class GateFlowSmokeTest {
 
     @Test
     fun everyTabAndMainButtonOpensWithoutError() {
-        for ((tab, expected) in listOf("Activity" to "Recent Activity", "Sync" to "Sync & Network Hub", "Comms" to "Message to Command Center", "Operator" to "Gatekeeper Profile", "Home" to "SCAN PERSON")) {
+        for ((tab, expected) in listOf("Activity" to "Recent Activity", "Sync" to "Sync & Network Hub", "Comms" to "Message to Command Center", "Operator" to "RP Profile", "Home" to "SCAN PERSON")) {
             compose.onAllNodesWithText(tab)[compose.onAllNodesWithText(tab).fetchSemanticsNodes().size - 1].performClick()
             waitText(expected)
         }

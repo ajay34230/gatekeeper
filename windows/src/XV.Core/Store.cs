@@ -310,7 +310,7 @@ public sealed partial class Store : IDisposable
     public List<Dictionary<string, object?>> Accounts() => Query("SELECT id,name,role,status,created_at,created_by,last_login FROM accounts ORDER BY status='PENDING' DESC, id");
 
     /// <summary>Creates an operator account. Returns the generated password when none was supplied.</summary>
-    public (string id, string? generated) CreateAccount(string name, string? id, string? password, string createdBy, string role = "Gatekeeper Operator")
+    public (string id, string? generated) CreateAccount(string name, string? id, string? password, string createdBy, string role = "RP")
     {
         name = (name ?? "").Trim();
         if (name.Length < 2 || name.Length > 60) throw new StoreException("INVALID_NAME", "Name must be 2 to 60 characters", 400);
@@ -369,7 +369,7 @@ public sealed partial class Store : IDisposable
         if (!ok)
         {
             lock (_failures) { _failures.TryGetValue(id + deviceId, out var f); _failures[id + deviceId] = (NowMs - f.first > 600_000 ? 1 : f.n + 1, f.n == 0 || NowMs - f.first > 600_000 ? NowMs : f.first); }
-            throw new StoreException("INVALID_CREDENTIALS", "Invalid Gatekeeper ID or password", 401);
+            throw new StoreException("INVALID_CREDENTIALS", "Invalid RP ID or password", 401);
         }
         lock (_failures) _failures.Remove(id + deviceId);
         var status = S(a!["status"]);

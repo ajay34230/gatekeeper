@@ -218,11 +218,11 @@ public static class Dialogs
 
     sealed class AccountDialog : DarkWindow
     {
-        public AccountDialog() : base("+ Create Operator Account", "Operators sign in on the Android terminal with this Gatekeeper ID and password.", 480, 470)
+        public AccountDialog() : base("+ Create Operator Account", "Operators sign in on the Android terminal with this RP ID and password.", 480, 470)
         {
             var fName = Field("Rank and name");
-            var fId = Field("Gatekeeper ID (blank = assign automatically, e.g. GK-101)", "", mono: true);
-            var fRole = Choice("Role", ["Gatekeeper Operator", "Gate Supervisor", "Duty Officer"], "Gatekeeper Operator", editable: true);
+            var fId = Field("RP ID (blank = assign automatically, e.g. GK-101)", "", mono: true);
+            var fRole = Choice("Role", ["RP", "Gate Supervisor", "Duty Officer"], "RP", editable: true);
             var fPw = Field("Password (blank = generate a secure one)", "", mono: true);
             AddButton("Cancel", Close);
             AddButton("Create Account", () =>

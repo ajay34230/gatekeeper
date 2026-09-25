@@ -31,7 +31,7 @@ First-time setup on the PC:
 
 1. **Stations & Settings** → add your locations (e.g. `LOC07` "Location 07 (Main Hub)") and gates (e.g. `G02` "Gate 02 (Primary)").
 2. **+ Add Soldier** / **+ Add Vehicle**, or **Import / Export** → *Blank template* → fill in Excel → *Import CSV*.
-3. **Accounts & Devices** tab → **+ Create Operator** for each gatekeeper (or let them use *Create Account* in the app and approve them here).
+3. **Accounts & Devices** tab → **+ Create Operator** for each RP (or let them use *Create Account* in the app and approve them here).
 4. For each person/vehicle: **ID Card & QR** / **Windshield QR** → *Print* or *Save PNG*.
 
 ## 3. Install on the phone (Android 8+)

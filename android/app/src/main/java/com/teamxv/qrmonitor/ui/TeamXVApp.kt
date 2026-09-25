@@ -302,11 +302,11 @@ private fun LoginScreen(vm: MainViewModel) {
             Spacer(Modifier.height(12.dp))
         }
         CompactField(
-            label = if (signUp) "GATEKEEPER ID (OPTIONAL)" else "GATEKEEPER ID",
+            label = if (signUp) "RP ID (OPTIONAL)" else "RP ID",
             value = user,
             onValueChange = { user = it.uppercase(Locale.getDefault()) },
             icon = Icons.Default.PersonOutline,
-            placeholder = if (signUp) "Leave blank to be assigned one" else "Enter your Gatekeeper ID"
+            placeholder = if (signUp) "Leave blank to be assigned one" else "Enter your RP ID"
         )
         Spacer(Modifier.height(12.dp))
         CompactField(
@@ -1319,7 +1319,7 @@ private fun OperatorScreen(vm: MainViewModel, onOpenSettings: () -> Unit) {
         Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 15.dp)
     ) {
-        ScreenHeader("Gatekeeper Profile", "Active terminal operator credentials")
+        ScreenHeader("RP Profile", "Active terminal operator credentials")
         Spacer(Modifier.height(14.dp))
 
         Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = CardShape, border = BorderStroke(1.dp, UiBorder)) {
@@ -1330,7 +1330,7 @@ private fun OperatorScreen(vm: MainViewModel, onOpenSettings: () -> Unit) {
                     }
                     Spacer(Modifier.width(11.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("FIELD GATEKEEPER", fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 8.sp, letterSpacing = 1.sp, color = UiFaint)
+                        Text("FIELD RP", fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 8.sp, letterSpacing = 1.sp, color = UiFaint)
                         Text(cfg.operatorName.ifBlank { cfg.operatorId.ifBlank { "Unassigned Operator" } }, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = UiInk)
                         Text(cfg.operatorRole, fontFamily = Sans, fontSize = 10.sp, color = UiMuted)
                     }

@@ -492,7 +492,7 @@ public partial class MainWindow : Window
     {
         var accounts = App.Store.Accounts();
         var devices = App.Store.Devices();
-        Header("GATEKEEPER ACCOUNTS & PAIRED TERMINALS", $"{accounts.Count} accounts • {devices.Count} terminals",
+        Header("RP ACCOUNTS & PAIRED TERMINALS", $"{accounts.Count} accounts • {devices.Count} terminals",
             App.Settings.RequireApproval ? "Self-registered operators must be approved here before they can sign in." : "Self-registration is auto-approved (change in Stations & Settings).");
         SectionActions.Children.Add(Btn("+ Create Operator", (_, _) => Dialogs.CreateAccount(this), "BtnAmber"));
         SectionActions.Children.Add(Btn("Pair Terminal", Pair_Click, "BtnGold"));
