@@ -1040,7 +1040,12 @@ private fun ActivityScreen(vm: MainViewModel) {
 
     val current = selected
     if (current != null) {
-        ActivityDetailSheet(current) { selected = null }
+        // The time between this exit and the matching entry before it, so a movement history sheet reads like the
+        // PC's own record view: how long the person or vehicle was actually on site.
+        val stayMs = if (current.eventType == EventType.EXIT) vm.events
+            .filter { it.entityId == current.entityId && it.entityType == current.entityType && it.eventType == EventType.ENTRY && it.eventTimestamp < current.eventTimestamp }
+            .maxByOrNull { it.eventTimestamp }?.let { current.eventTimestamp - it.eventTimestamp } else null
+        ActivityDetailSheet(current, stayMs) { selected = null }
     }
 }
 
@@ -1067,7 +1072,7 @@ private fun ActivityRow(event: MovementEvent, title: String) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ActivityDetailSheet(event: MovementEvent, onDismiss: () -> Unit) {
+private fun ActivityDetailSheet(event: MovementEvent, stayMs: Long? = null, onDismiss: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = UiSurface,
@@ -1086,6 +1091,7 @@ private fun ActivityDetailSheet(event: MovementEvent, onDismiss: () -> Unit) {
             Surface(Modifier.fillMaxWidth(), color = UiBackground, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
                 Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                     ReviewRow("Recorded Time", formatLongTime(event.eventTimestamp))
+                    if (stayMs != null && stayMs > 0) ReviewRow("Stay Duration (Entry → Exit)", formatDuration(stayMs), valueColor = UiWarning)
                     ReviewRow("Location / Gate", "${event.locationId} • ${event.gateId}")
                     if (event.reason.isNotBlank()) ReviewRow("Reason", event.reason)
                     if (event.remarks.isNotBlank()) ReviewRow("Remarks", event.remarks)

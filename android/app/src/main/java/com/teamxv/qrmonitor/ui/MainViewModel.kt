@@ -466,7 +466,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 is OperationResult.Success -> {
                     val e = result.value
                     completedEvent = e
-                    completedDurationMs = 0L
+                    // On exit, the time between the matching entry and this exit — shown as "Total Verified Stay".
+                    completedDurationMs = if (e.eventType == EventType.EXIT && s.insideSince > 0) (e.eventTimestamp - s.insideSince).coerceAtLeast(0L) else 0L
                     message = "${e.eventType.name} RECORDED • ${s.person.name} • ${e.eventId}"
                     session = ScanSession.Closed
                     showSuccess = true
