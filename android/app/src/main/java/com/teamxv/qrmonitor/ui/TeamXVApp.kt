@@ -54,6 +54,9 @@ import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.*
@@ -90,22 +93,34 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-private val UiBackground = Color(0xFFF4F4F5)
-private val UiSurface = Color(0xFFFFFFFF)
-private val UiSurfaceSubtle = Color(0xFFFAFAFA)
-private val UiInk = Color(0xFF18181B)
-private val UiMuted = Color(0xFF71717A)
-private val UiFaint = Color(0xFFA1A1AA)
-private val UiBorder = Color(0xFFE4E4E7)
-private val UiBorderSoft = Color(0xFFF4F4F5)
-private val UiSuccess = Color(0xFF059669)
-private val UiSuccessBg = Color(0xFFECFDF5)
-private val UiWarning = Color(0xFFD97706)
-private val UiWarningBg = Color(0xFFFFFBEB)
-private val UiError = Color(0xFFE11D48)
-private val UiErrorBg = Color(0xFFFFF1F2)
-private val UiBlue = Color(0xFF2563EB)
-private val UiBlueBg = Color(0xFFEFF6FF)
+// Palette: light (day) and dark (night duty); read in composition, so switching re-colours the whole app.
+private val UiBackground: Color get() = if (UiPrefs.dark) Color(0xFF09090B) else Color(0xFFF4F4F5)
+private val UiSurface: Color get() = if (UiPrefs.dark) Color(0xFF18181B) else Color(0xFFFFFFFF)
+private val UiSurfaceSubtle: Color get() = if (UiPrefs.dark) Color(0xFF1F1F23) else Color(0xFFFAFAFA)
+private val UiInk: Color get() = if (UiPrefs.dark) Color(0xFFFAFAFA) else Color(0xFF18181B)
+private val UiMuted: Color get() = if (UiPrefs.dark) Color(0xFFA1A1AA) else Color(0xFF71717A)
+private val UiFaint: Color get() = if (UiPrefs.dark) Color(0xFF71717A) else Color(0xFFA1A1AA)
+private val UiBorder: Color get() = if (UiPrefs.dark) Color(0xFF3F3F46) else Color(0xFFE4E4E7)
+private val UiBorderSoft: Color get() = if (UiPrefs.dark) Color(0xFF27272A) else Color(0xFFF4F4F5)
+private val UiSuccess: Color get() = if (UiPrefs.dark) Color(0xFF10B981) else Color(0xFF059669)
+private val UiSuccessBg: Color get() = if (UiPrefs.dark) Color(0xFF052E1F) else Color(0xFFECFDF5)
+private val UiWarning: Color get() = if (UiPrefs.dark) Color(0xFFF59E0B) else Color(0xFFD97706)
+private val UiWarningBg: Color get() = if (UiPrefs.dark) Color(0xFF2A1F05) else Color(0xFFFFFBEB)
+private val UiError: Color get() = if (UiPrefs.dark) Color(0xFFF43F5E) else Color(0xFFE11D48)
+private val UiErrorBg: Color get() = if (UiPrefs.dark) Color(0xFF2A0A12) else Color(0xFFFFF1F2)
+private val UiBlue: Color get() = if (UiPrefs.dark) Color(0xFF3B82F6) else Color(0xFF2563EB)
+private val UiBlueBg: Color get() = if (UiPrefs.dark) Color(0xFF0B1B36) else Color(0xFFEFF6FF)
+private val UiOnInk: Color get() = if (UiPrefs.dark) Color(0xFF09090B) else Color(0xFFFFFFFF)
+
+/** Dark-mode counterparts of the one-off light greys and tints used in the layouts. */
+private val DarkTints = mapOf(
+    0xFF27272A to 0xFFD4D4D8, 0xFFE4E4E7 to 0xFF3F3F46, 0xFF3F3F46 to 0xFFD4D4D8, 0xFF52525B to 0xFFA1A1AA, 0xFFD4D4D8 to 0xFF52525B,
+    0xFFA7F3D0 to 0xFF065F46, 0xFF064E3B to 0xFF6EE7B7, 0xFF71717A to 0xFFA1A1AA, 0xFF9CA3AF to 0xFF71717A, 0xFFFDE68A to 0xFF78350F,
+    0xFFF4F4F5 to 0xFF27272A, 0xFF155EAD to 0xFF3B82F6, 0xFF404040 to 0xFFD4D4D4, 0xFF92400E to 0xFFFCD34D, 0xFF451A03 to 0xFFFDE68A,
+    0xFFFBCFE8 to 0xFF881337, 0xFFBFDBFE to 0xFF1E3A8A, 0xFFE5E5E5 to 0xFF27272A, 0xFFFFF7D6 to 0xFF3A2E05, 0xFFFCD34D to 0xFFB45309,
+)
+
+private fun tc(argb: Long): Color = Color(if (UiPrefs.dark) DarkTints[argb] ?: argb else argb)
 private val Sans = FontFamily.SansSerif
 private val Mono = FontFamily.Monospace
 private val CardShape = RoundedCornerShape(16.dp)
@@ -145,14 +160,15 @@ fun TeamXVApp(vm: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel
         }
     }
 
-    val darkUi = vm.scannerTarget != null
+    val scanning = vm.scannerTarget != null // the scanner is always dark
+    val nightMode = UiPrefs.dark
     SideEffect {
         (context as? Activity)?.let { activity ->
-            activity.window.statusBarColor = if (darkUi) UiInk.toArgb() else UiBackground.toArgb()
+            activity.window.statusBarColor = if (scanning) Color(0xFF18181B).toArgb() else UiBackground.toArgb()
             activity.window.navigationBarColor = UiSurface.toArgb()
             WindowCompat.getInsetsController(activity.window, activity.window.decorView).apply {
-                isAppearanceLightStatusBars = !darkUi
-                isAppearanceLightNavigationBars = true
+                isAppearanceLightStatusBars = !scanning && !nightMode
+                isAppearanceLightNavigationBars = !nightMode
             }
         }
     }
@@ -239,13 +255,14 @@ private fun LoginScreen(vm: MainViewModel) {
             .padding(horizontal = 24.dp, vertical = 26.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { DisplayQuickControls() }
+        Spacer(Modifier.height(4.dp))
         Box(
             Modifier.size(64.dp).clip(RoundedCornerShape(16.dp))
-                .background(UiInk).border(1.dp, Color(0xFF27272A), RoundedCornerShape(16.dp)),
+                .background(UiInk).border(1.dp, tc(0xFF27272A), RoundedCornerShape(16.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.Shield, null, tint = Color.White, modifier = Modifier.size(32.dp))
+            Icon(Icons.Default.Shield, null, tint = UiOnInk, modifier = Modifier.size(32.dp))
         }
         Spacer(Modifier.height(16.dp))
         Text("XV DIGITAL ACCESS CONTROL", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = UiInk)
@@ -260,7 +277,7 @@ private fun LoginScreen(vm: MainViewModel) {
         Spacer(Modifier.height(20.dp))
 
         // Sign In / Create Account segmented control (reference: grid-cols-2 bg-zinc-200 rounded-lg)
-        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0xFFE4E4E7)).padding(4.dp)) {
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(tc(0xFFE4E4E7)).padding(4.dp)) {
             listOf(false to "SIGN IN", true to "CREATE ACCOUNT").forEach { (mode, label) ->
                 Box(
                     Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
@@ -339,7 +356,7 @@ private fun LoginScreen(vm: MainViewModel) {
                 ) {
                     Icon(Icons.Default.DevicesOther, null, tint = UiMuted, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("PC Server Connection", fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = Color(0xFF3F3F46), modifier = Modifier.weight(1f))
+                    Text("PC Server Connection", fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = tc(0xFF3F3F46), modifier = Modifier.weight(1f))
                     Box(Modifier.size(8.dp).clip(CircleShape).background(if (vm.paired) UiSuccess else UiWarning))
                     Spacer(Modifier.width(6.dp))
                     Text(if (vm.paired) "Paired" else "Not paired", fontFamily = Sans, fontSize = 11.sp, color = UiMuted)
@@ -353,7 +370,7 @@ private fun LoginScreen(vm: MainViewModel) {
                         )
                         if (vm.pairingMessage.isNotBlank()) {
                             Spacer(Modifier.height(8.dp))
-                            Text(vm.pairingMessage, fontFamily = Sans, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFF3F3F46))
+                            Text(vm.pairingMessage, fontFamily = Sans, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = tc(0xFF3F3F46))
                         }
                         Spacer(Modifier.height(10.dp))
                         PrimaryButton(if (vm.busy) "PAIRING…" else if (vm.paired) "RE-PAIR WITH PC (SCAN QR)" else "SCAN PC PAIRING QR", Icons.Default.QrCodeScanner, !vm.busy) { vm.openPairingScanner() }
@@ -424,7 +441,7 @@ private fun CompactField(
     password: Boolean = false,
     trailing: (@Composable () -> Unit)? = null
 ) {
-    Text(label, fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 9.sp, letterSpacing = 1.0.sp, color = Color(0xFF52525B))
+    Text(label, fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 9.sp, letterSpacing = 1.0.sp, color = tc(0xFF52525B))
     Spacer(Modifier.height(6.dp))
     OutlinedTextField(
         value = value, onValueChange = onValueChange, modifier = Modifier.fillMaxWidth(), singleLine = true,
@@ -434,7 +451,7 @@ private fun CompactField(
         visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
         colors = TextFieldDefaults.colors(
             focusedContainerColor = UiSurface, unfocusedContainerColor = UiSurface,
-            focusedIndicatorColor = UiInk, unfocusedIndicatorColor = Color(0xFFD4D4D8),
+            focusedIndicatorColor = UiInk, unfocusedIndicatorColor = tc(0xFFD4D4D8),
             focusedTextColor = UiInk, unfocusedTextColor = UiInk, cursorColor = UiInk
         ),
         shape = SmallShape
@@ -550,7 +567,7 @@ private fun HomeScreen(vm: MainViewModel) {
                             Modifier.weight(1f),
                             color = UiSuccessBg,
                             shape = SmallShape,
-                            border = BorderStroke(1.dp, Color(0xFFA7F3D0))
+                            border = BorderStroke(1.dp, tc(0xFFA7F3D0))
                         ) {
                             Column(Modifier.padding(10.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -559,7 +576,7 @@ private fun HomeScreen(vm: MainViewModel) {
                                 }
                                 Spacer(Modifier.height(4.dp))
                                 Row(verticalAlignment = Alignment.Bottom) {
-                                    Text(insideCount.toString(), fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 22.sp, color = Color(0xFF064E3B))
+                                    Text(insideCount.toString(), fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 22.sp, color = tc(0xFF064E3B))
                                     Spacer(Modifier.width(4.dp))
                                     Text("on site", fontFamily = Sans, fontSize = 10.sp, color = UiSuccess, modifier = Modifier.padding(bottom = 2.dp))
                                 }
@@ -573,7 +590,7 @@ private fun HomeScreen(vm: MainViewModel) {
                         ) {
                             Column(Modifier.padding(10.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Box(Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF71717A)))
+                                    Box(Modifier.size(6.dp).clip(CircleShape).background(tc(0xFF71717A)))
                                     Text("OUTSIDE", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = UiMuted)
                                 }
                                 Spacer(Modifier.height(4.dp))
@@ -618,7 +635,7 @@ private fun HomeScreen(vm: MainViewModel) {
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                         Box(
-                                            Modifier.size(6.dp).clip(CircleShape).background(if (isInside) UiSuccess else Color(0xFF9CA3AF))
+                                            Modifier.size(6.dp).clip(CircleShape).background(if (isInside) UiSuccess else tc(0xFF9CA3AF))
                                         )
                                         Column {
                                             Text(p.name, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = UiInk)
@@ -628,7 +645,7 @@ private fun HomeScreen(vm: MainViewModel) {
                                     Surface(
                                         color = if (isInside) UiSuccessBg else UiSurfaceSubtle,
                                         shape = RoundedCornerShape(100.dp),
-                                        border = BorderStroke(1.dp, if (isInside) Color(0xFFA7F3D0) else UiBorder)
+                                        border = BorderStroke(1.dp, if (isInside) tc(0xFFA7F3D0) else UiBorder)
                                     ) {
                                         Text(
                                             if (lastSeen != null) "Seen ${formatShort(lastSeen)}" else if (isInside) "On site" else "No activity",
@@ -669,7 +686,7 @@ private fun HomeScreen(vm: MainViewModel) {
                             Surface(
                                 Modifier.fillMaxWidth().padding(vertical = 2.dp).clickable { vm.selectVehicle(v.id) },
                                 color = if (inYard) UiWarningBg else UiBackground, shape = RoundedCornerShape(8.dp),
-                                border = BorderStroke(1.dp, if (inYard) Color(0xFFFDE68A) else UiBorder)
+                                border = BorderStroke(1.dp, if (inYard) tc(0xFFFDE68A) else UiBorder)
                             ) {
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                     Column {
@@ -744,7 +761,7 @@ private fun HomeScreen(vm: MainViewModel) {
                     .padding(bottom = 20.dp, start = 20.dp, end = 20.dp),
                 color = Color(0xFA18181B),
                 shape = RoundedCornerShape(100.dp),
-                border = BorderStroke(1.dp, Color(0xFF3F3F46)),
+                border = BorderStroke(1.dp, tc(0xFF3F3F46)),
                 shadowElevation = 8.dp
             ) {
                 Row(
@@ -756,7 +773,7 @@ private fun HomeScreen(vm: MainViewModel) {
                         modifier = Modifier
                             .size(10.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF10B981))
+                            .background(tc(0xFF10B981))
                     )
                     Text(
                         "Back Online • Transmitting pending records...",
@@ -801,14 +818,14 @@ private fun HomeActionCard(
     onClick: () -> Unit
 ) {
     val background = if (dark) UiInk else UiSurface
-    val foreground = if (dark) Color.White else UiInk
-    val secondary = if (dark) Color(0xFFE4E4E7) else UiInk
-    val iconColor = if (dark) Color.White else Color.Black
+    val foreground = if (dark) UiOnInk else UiInk
+    val secondary = if (dark) UiOnInk.copy(alpha = 0.85f) else UiInk
+    val iconColor = if (dark) UiOnInk else UiInk
     Surface(
         modifier = modifier.height(176.dp).clickable(onClick = onClick),
         color = background,
         shape = RoundedCornerShape(22.dp),
-        border = BorderStroke(2.dp, if (dark) UiInk else Color.Black),
+        border = BorderStroke(2.dp, if (dark) UiInk else UiInk),
         shadowElevation = if (dark) 2.dp else 0.dp
     ) {
         Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.SpaceBetween) {
@@ -882,7 +899,7 @@ private fun ActivityScreen(vm: MainViewModel) {
                 if (vm.networkStatus.serverReachable && vm.pending > 0) {
                     Surface(
                         modifier = Modifier.clickable { vm.trySync() },
-                        color = Color(0xFF059669),
+                        color = tc(0xFF059669),
                         shape = RoundedCornerShape(100.dp)
                     ) {
                         Row(
@@ -910,7 +927,7 @@ private fun ActivityScreen(vm: MainViewModel) {
                             csvBuilder.append("${ev.eventId},${ev.eventTimestamp},${ev.entityType},${ev.eventType},${ev.entityId},${ev.locationId},${ev.gateId},${ev.syncStatus == SyncStatus.SYNCED}\n")
                         }
                     },
-                    color = Color.White,
+                    color = UiSurface,
                     shape = RoundedCornerShape(100.dp),
                     border = BorderStroke(1.dp, UiBorder)
                 ) {
@@ -981,10 +998,10 @@ private fun ActivityScreen(vm: MainViewModel) {
                             fontFamily = Sans,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 11.sp,
-                            color = if (selectedChip) Color.White else UiMuted
+                            color = if (selectedChip) UiOnInk else UiMuted
                         )
                         Surface(
-                            color = if (selectedChip) Color(0xFF27272A) else Color(0xFFE4E4E7),
+                            color = if (selectedChip) tc(0xFF27272A) else tc(0xFFE4E4E7),
                             shape = RoundedCornerShape(100.dp)
                         ) {
                             Text(
@@ -992,7 +1009,7 @@ private fun ActivityScreen(vm: MainViewModel) {
                                 fontFamily = Mono,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 9.sp,
-                                color = if (selectedChip) Color(0xFFD4D4D8) else UiInk,
+                                color = if (selectedChip) tc(0xFFD4D4D8) else UiInk,
                                 modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
                             )
                         }
@@ -1027,7 +1044,7 @@ private fun ActivityRow(event: MovementEvent, title: String) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(formatShort(event.eventTimestamp), fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = UiFaint, modifier = Modifier.width(50.dp))
             Box(Modifier.size(26.dp).clip(RoundedCornerShape(7.dp)).background(UiBackground), contentAlignment = Alignment.Center) {
-                Icon(if (event.entityType == EntityType.VEHICLE) Icons.Default.LocalShipping else Icons.Default.Person, null, tint = Color(0xFF3F3F46), modifier = Modifier.size(14.dp))
+                Icon(if (event.entityType == EntityType.VEHICLE) Icons.Default.LocalShipping else Icons.Default.Person, null, tint = tc(0xFF3F3F46), modifier = Modifier.size(14.dp))
             }
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
@@ -1048,7 +1065,7 @@ private fun ActivityDetailSheet(event: MovementEvent, onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         containerColor = UiSurface,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        dragHandle = { Box(Modifier.padding(top = 8.dp).size(width = 42.dp, height = 4.dp).clip(CircleShape).background(Color(0xFFD4D4D8))) }
+        dragHandle = { Box(Modifier.padding(top = 8.dp).size(width = 42.dp, height = 4.dp).clip(CircleShape).background(tc(0xFFD4D4D8))) }
     ) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).navigationBarsPadding().padding(bottom = 16.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -1065,6 +1082,7 @@ private fun ActivityDetailSheet(event: MovementEvent, onDismiss: () -> Unit) {
                     ReviewRow("Location / Gate", "${event.locationId} • ${event.gateId}")
                     if (event.reason.isNotBlank()) ReviewRow("Reason", event.reason)
                     if (event.remarks.isNotBlank()) ReviewRow("Remarks", event.remarks)
+                    if (event.expectedReturn > 0) ReviewRow("Expected Back", SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(event.expectedReturn)), valueColor = if (event.expectedReturn < System.currentTimeMillis()) UiError else UiWarning)
                     ReviewRow("Operator", event.operatorId)
                     ReviewRow("Device", event.deviceId)
                     ReviewRow("Source", "${event.sourceType.name} • ${event.sourceId}")
@@ -1095,7 +1113,7 @@ private fun SyncStatusScreen(vm: MainViewModel) {
                         Box(
                             Modifier.size(40.dp).clip(RoundedCornerShape(12.dp))
                                 .background(if (connected) UiSuccessBg else UiWarningBg)
-                                .border(1.dp, if (connected) Color(0xFFA7F3D0) else Color(0xFFFDE68A), RoundedCornerShape(12.dp)),
+                                .border(1.dp, if (connected) tc(0xFFA7F3D0) else tc(0xFFFDE68A), RoundedCornerShape(12.dp)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(if (connected) Icons.Default.Wifi else Icons.Default.CloudOff, null, tint = if (connected) UiSuccess else UiWarning, modifier = Modifier.size(19.dp))
@@ -1147,7 +1165,7 @@ private fun SyncStatusScreen(vm: MainViewModel) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.CloudDone, null, tint = UiFaint, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(7.dp))
-                    Text("Local secure cache & queue", fontFamily = Sans, fontSize = 10.sp, color = Color(0xFF52525B))
+                    Text("Local secure cache & queue", fontFamily = Sans, fontSize = 10.sp, color = tc(0xFF52525B))
                 }
                 Text("ACTIVE", fontFamily = Mono, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = UiSuccess)
             }
@@ -1158,7 +1176,7 @@ private fun SyncStatusScreen(vm: MainViewModel) {
             Modifier.fillMaxWidth(),
             color = UiSurface,
             shape = CardShape,
-            border = BorderStroke(1.dp, if (vm.pending > 0 && connected) Color(0xFFA7F3D0) else UiBorder)
+            border = BorderStroke(1.dp, if (vm.pending > 0 && connected) tc(0xFFA7F3D0) else UiBorder)
         ) {
             Column(Modifier.padding(14.dp)) {
                 Row(
@@ -1244,7 +1262,7 @@ private fun CloudLinkCard(vm: MainViewModel) {
                 }
             }
             Spacer(Modifier.height(12.dp))
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFFF4F4F5)).padding(4.dp)) {
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(tc(0xFFF4F4F5)).padding(4.dp)) {
                 listOf("AUTO" to "Auto", "LAN" to "Local PC Wi-Fi", "CLOUD" to "Cloud Server").forEach { (m, label) ->
                     Box(
                         Modifier.weight(1f).clip(RoundedCornerShape(9.dp)).background(if (mode == m) UiSurface else Color.Transparent)
@@ -1301,7 +1319,7 @@ private fun OperatorScreen(vm: MainViewModel, onOpenSettings: () -> Unit) {
             Column(Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(UiInk), contentAlignment = Alignment.Center) {
-                        Text(cfg.operatorId.ifBlank { "OP" }.takeLast(6), fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color.White)
+                        Text(cfg.operatorId.ifBlank { "OP" }.takeLast(6), fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = UiOnInk)
                     }
                     Spacer(Modifier.width(11.dp))
                     Column(Modifier.weight(1f)) {
@@ -1333,10 +1351,15 @@ private fun OperatorScreen(vm: MainViewModel, onOpenSettings: () -> Unit) {
         }
 
         Spacer(Modifier.height(10.dp))
+        DisplaySettingsCard()
+
+        Spacer(Modifier.height(10.dp))
         SecondaryButton("CHANGE POST & CONNECTION", Icons.Default.Settings, onOpenSettings)
 
         Spacer(Modifier.height(12.dp))
-        DangerButton("HANDOVER SHIFT / LOG OUT", Icons.Default.Logout, vm::logout)
+        var handover by remember { mutableStateOf<HandoverReport?>(null) }
+        DangerButton("HANDOVER SHIFT / LOG OUT", Icons.Default.Logout) { handover = vm.handoverReport() }
+        handover?.let { report -> HandoverSheet(vm, report) { handover = null } }
         Spacer(Modifier.height(15.dp))
     }
 }
@@ -1393,7 +1416,7 @@ private fun ConfigField(label: String, value: String, password: Boolean = false,
         visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
         colors = TextFieldDefaults.colors(
             focusedContainerColor = UiSurface, unfocusedContainerColor = UiSurface,
-            focusedIndicatorColor = UiInk, unfocusedIndicatorColor = Color(0xFFD4D4D8),
+            focusedIndicatorColor = UiInk, unfocusedIndicatorColor = tc(0xFFD4D4D8),
             focusedTextColor = UiInk, unfocusedTextColor = UiInk, cursorColor = UiInk
         ),
         shape = SmallShape
@@ -1456,26 +1479,26 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
                     Modifier.fillMaxWidth().padding(top = 40.dp),
                     color = UiSurface,
                     shape = RoundedCornerShape(18.dp),
-                    border = BorderStroke(1.dp, Color(0xFFD4D4D8))
+                    border = BorderStroke(1.dp, tc(0xFFD4D4D8))
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Spacer(Modifier.height(43.dp))
                         Spacer(Modifier.height(2.dp))
                         Text(session.person.name, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 25.sp, color = UiInk, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 20.dp))
                         Spacer(Modifier.height(3.dp))
-                        Text(displayId(session.person.id) + (person.serviceNo.takeIf { it.isNotBlank() }?.let { "  •  $it" } ?: ""), fontFamily = Mono, fontSize = 15.sp, color = Color(0xFF52525B), fontWeight = FontWeight.Medium)
+                        Text(displayId(session.person.id) + (person.serviceNo.takeIf { it.isNotBlank() }?.let { "  •  $it" } ?: ""), fontFamily = Mono, fontSize = 15.sp, color = tc(0xFF52525B), fontWeight = FontWeight.Medium)
                         Spacer(Modifier.height(4.dp))
-                        Text(listOf(person.rank, person.company.takeIf { it.isNotBlank() }?.let { "$it Co" } ?: "", person.unit).filter { it.isNotBlank() }.joinToString(" • ").ifBlank { person.category }, fontFamily = Sans, fontSize = 15.sp, color = Color(0xFF52525B), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 20.dp))
-                        Divider(Modifier.padding(top = 20.dp), color = Color(0xFFD4D4D8))
+                        Text(listOf(person.rank, person.company.takeIf { it.isNotBlank() }?.let { "$it Co" } ?: "", person.unit).filter { it.isNotBlank() }.joinToString(" • ").ifBlank { person.category }, fontFamily = Sans, fontSize = 15.sp, color = tc(0xFF52525B), textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 20.dp))
+                        Divider(Modifier.padding(top = 20.dp), color = tc(0xFFD4D4D8))
                         Row(Modifier.fillMaxWidth().height(76.dp)) {
                             PersonDetailCell("Assigned Post", postName, Modifier.weight(1f))
-                            Box(Modifier.fillMaxHeight().width(1.dp).background(Color(0xFFD4D4D8)))
+                            Box(Modifier.fillMaxHeight().width(1.dp).background(tc(0xFFD4D4D8)))
                             PersonDetailCell("Current Status", if (session.inside) "On-Site (Inside)" else "Off-Site", Modifier.weight(1f))
                         }
-                        Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFFD4D4D8)))
+                        Box(Modifier.fillMaxWidth().height(1.dp).background(tc(0xFFD4D4D8)))
                         Row(Modifier.fillMaxWidth().height(76.dp)) {
                             PersonDetailCell("Entry Time", entryAt?.let(::formatShort) ?: "—", Modifier.weight(1f))
-                            Box(Modifier.fillMaxHeight().width(1.dp).background(Color(0xFFD4D4D8)))
+                            Box(Modifier.fillMaxHeight().width(1.dp).background(tc(0xFFD4D4D8)))
                             PersonDetailCell("Stay Duration", if (stayMs > 0) formatDuration(stayMs) else "—", Modifier.weight(1f), accent = session.inside)
                         }
                     }
@@ -1520,9 +1543,9 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
                 shadowElevation = 2.dp
             ) {
                 Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Shield, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.Shield, null, tint = UiOnInk, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("$action (${cfg.gateName.ifBlank { cfg.gateId }})", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
+                    Text("$action (${cfg.gateName.ifBlank { cfg.gateId }})", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = UiOnInk)
                 }
             }
             Surface(
@@ -1559,6 +1582,114 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
 }
 
 private const val REASON_CUSTOM = "Custom…"
+
+/** Language (English / हिन्दी) and night mode, compact form for the sign-in screen. */
+@Composable
+private fun DisplayQuickControls() {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        LanguageSwitch()
+        Spacer(Modifier.width(8.dp))
+        Surface(Modifier.size(34.dp).clickable { UiPrefs.updateDark(!UiPrefs.dark) }, color = UiSurface, shape = CircleShape, border = BorderStroke(1.dp, UiBorder)) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(if (UiPrefs.dark) Icons.Default.LightMode else Icons.Default.DarkMode, tr("Night mode (dark)"), tint = UiInk, modifier = Modifier.size(17.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun LanguageSwitch() {
+    Row(Modifier.clip(RoundedCornerShape(100.dp)).background(UiBorderSoft).border(1.dp, UiBorder, RoundedCornerShape(100.dp)).padding(3.dp)) {
+        listOf(false to "English", true to "हिन्दी").forEach { (hindi, label) ->
+            val on = UiPrefs.hindi == hindi
+            Box(Modifier.clip(RoundedCornerShape(100.dp)).background(if (on) UiInk else Color.Transparent).clickable { UiPrefs.updateHindi(hindi) }
+                .padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Text(label, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = if (on) UiOnInk else UiMuted)
+            }
+        }
+    }
+}
+
+/** Operator screen: night mode for night duty and the Hindi / English switch (kept on this phone). */
+@Composable
+private fun DisplaySettingsCard() {
+    Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
+        Column(Modifier.padding(13.dp)) {
+            Text("DISPLAY & LANGUAGE", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 1.sp, color = UiFaint)
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.DarkMode, null, tint = if (UiPrefs.dark) UiBlue else UiFaint, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Night mode (dark)", fontFamily = Sans, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = UiInk)
+                Spacer(Modifier.weight(1f))
+                TogglePill(UiPrefs.dark) { UiPrefs.updateDark(!UiPrefs.dark) }
+            }
+            Divider(color = UiBorderSoft, modifier = Modifier.padding(vertical = 10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Translate, null, tint = UiFaint, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Language", fontFamily = Sans, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = UiInk)
+                Spacer(Modifier.weight(1f))
+                LanguageSwitch()
+            }
+        }
+    }
+}
+
+/** Shift handover at logout: entries, exits, unsynced records and who is still inside; optionally sent to the PC. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HandoverSheet(vm: MainViewModel, report: HandoverReport, onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = UiSurface) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+            Text("Shift Handover", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = UiInk)
+            Text("Summary of your shift before you log out", fontFamily = Sans, fontSize = 12.sp, color = UiMuted)
+            Spacer(Modifier.height(12.dp))
+            val fmt = SimpleDateFormat("dd MMM HH:mm", Locale.getDefault())
+            KeyValueRow("Assigned Post", report.post.ifBlank { "—" }, Icons.Default.Map)
+            Spacer(Modifier.height(8.dp))
+            KeyValueRow("SHIFT", (if (report.shiftStart > 0) fmt.format(Date(report.shiftStart)) else "—") + "  →  " + fmt.format(Date(report.now)), Icons.Default.AccessTime)
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                HandoverStat("Entries", report.entries, UiSuccess, Modifier.weight(1f))
+                HandoverStat("Exits", report.exits, UiBlue, Modifier.weight(1f))
+                HandoverStat("Not yet synced", report.pending, if (report.pending > 0) UiWarning else UiMuted, Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                HandoverStat("Vehicle entries", report.vehicleEntries, UiSuccess, Modifier.weight(1f))
+                HandoverStat("Vehicle exits", report.vehicleExits, UiBlue, Modifier.weight(1f))
+            }
+            if (report.pending > 0) { Spacer(Modifier.height(8.dp)); StatusBanner(tr("Records not yet synced stay safely on this terminal and are sent at the next connection."), BannerTone.Warning) }
+            Spacer(Modifier.height(14.dp))
+            Text(tr("STILL INSIDE") + " (${report.inside.size})", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 1.sp, color = UiMuted)
+            Spacer(Modifier.height(6.dp))
+            if (report.inside.isEmpty()) Text("No one is recorded inside.", fontFamily = Sans, fontSize = 12.sp, color = UiFaint)
+            report.inside.forEach { Text("• $it", fontFamily = Sans, fontSize = 13.sp, color = UiInk, modifier = Modifier.padding(vertical = 2.dp)) }
+            if (report.vehiclesInside.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                Text(tr("VEHICLES STILL INSIDE") + " (${report.vehiclesInside.size})", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 1.sp, color = UiMuted)
+                Spacer(Modifier.height(6.dp))
+                report.vehiclesInside.forEach { Text("• $it", fontFamily = Mono, fontSize = 13.sp, color = UiInk, modifier = Modifier.padding(vertical = 2.dp)) }
+            }
+            if (vm.handoverError.isNotBlank()) { Spacer(Modifier.height(10.dp)); StatusBanner(vm.handoverError, BannerTone.Error) }
+            Spacer(Modifier.height(16.dp))
+            PrimaryButton("SEND TO COMMAND CENTER & LOG OUT", enabled = vm.paired) { vm.sendHandoverAndLogout(report) }
+            Spacer(Modifier.height(8.dp))
+            DangerButton("LOG OUT WITHOUT SENDING", Icons.Default.Logout) { onDismiss(); vm.logout() }
+        }
+    }
+}
+
+@Composable
+private fun HandoverStat(label: String, value: Int, tint: Color, modifier: Modifier) {
+    Surface(modifier, color = UiSurfaceSubtle, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, UiBorder)) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Text(value.toString(), fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 22.sp, color = tint)
+            Text(label, fontFamily = Sans, fontSize = 10.sp, color = UiMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
 
 /** Expected return date for leave / TD exits (end of the chosen day), required for the reasons set on the PC. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1708,23 +1839,23 @@ private fun VehicleIdentityCard(vehicle: VehicleEntity) {
     Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, UiBorder), shadowElevation = 2.dp) {
         Column {
             Column(Modifier.padding(horizontal = 17.dp, vertical = 16.dp)) {
-                Text("Vehicle Details", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Color.Black)
+                Text("Vehicle Details", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = UiInk)
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.LocalShipping, null, tint = Color.Black, modifier = Modifier.size(46.dp))
+                    Icon(Icons.Default.LocalShipping, null, tint = UiInk, modifier = Modifier.size(46.dp))
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
                         Text(vehicle.registration.ifBlank { "VEHICLE ${vehicle.id}" }, fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 25.sp, color = Color.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("Vehicle ID: ${vehicle.id}", fontFamily = Sans, fontSize = 14.sp, color = Color(0xFF404040), fontWeight = FontWeight.Medium)
+                        Text("Vehicle ID: ${vehicle.id}", fontFamily = Sans, fontSize = 14.sp, color = tc(0xFF404040), fontWeight = FontWeight.Medium)
                     }
                 }
             }
-            Divider(color = Color(0xFFD4D4D8))
+            Divider(color = tc(0xFFD4D4D8))
             Text(
                 "Type: ${vehicle.type.ifBlank { "—" }}",
                 fontFamily = Sans,
                 fontSize = 15.sp,
-                color = Color.Black,
+                color = UiInk,
                 modifier = Modifier.padding(horizontal = 17.dp, vertical = 14.dp)
             )
         }
@@ -1781,7 +1912,7 @@ private fun VehicleCoDriverScreen(vm: MainViewModel, session: ScanSession.Vehicl
                 Modifier.size(56.dp).clip(RoundedCornerShape(14.dp)).background(UiBackground).border(1.dp, UiBorder, RoundedCornerShape(14.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.PersonAdd, null, tint = Color(0xFF52525B), modifier = Modifier.size(27.dp))
+                Icon(Icons.Default.PersonAdd, null, tint = tc(0xFF52525B), modifier = Modifier.size(27.dp))
             }
             Spacer(Modifier.height(9.dp))
             Text("Is there a Co-Driver?", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = UiInk, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
@@ -1812,25 +1943,25 @@ private fun VehicleOccupantsScreen(vm: MainViewModel, session: ScanSession.Vehic
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
                     ManifestScreenshotRow("Primary Driver:", "${session.driver.name} (${session.driver.id})", verified = true)
                     session.coDriver?.let {
-                        Divider(color = Color(0xFFD4D4D8), modifier = Modifier.padding(vertical = 7.dp))
+                        Divider(color = tc(0xFFD4D4D8), modifier = Modifier.padding(vertical = 7.dp))
                         ManifestScreenshotRow("Co-Driver:", "${it.name} (${it.id})", verified = true, removable = true, onRemove = vm::removeCoDriver)
                     }
-                    Divider(color = Color(0xFFD4D4D8), modifier = Modifier.padding(vertical = 7.dp))
+                    Divider(color = tc(0xFFD4D4D8), modifier = Modifier.padding(vertical = 7.dp))
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Person, null, tint = Color(0xFF155EAD), modifier = Modifier.size(28.dp))
+                        Icon(Icons.Default.Person, null, tint = tc(0xFF155EAD), modifier = Modifier.size(28.dp))
                         Spacer(Modifier.width(11.dp))
                         Text(
                             "$totalAdditional Additional Occupants",
                             fontFamily = Sans,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Medium,
-                            color = Color.Black
+                            color = UiInk
                         )
                     }
                     if (session.occupants.isNotEmpty()) {
                         Spacer(Modifier.height(9.dp))
                         session.occupants.forEachIndexed { index, person ->
-                            Divider(color = Color(0xFFE4E4E7), modifier = Modifier.padding(start = 40.dp, top = if (index == 0) 0.dp else 6.dp, bottom = 6.dp))
+                            Divider(color = tc(0xFFE4E4E7), modifier = Modifier.padding(start = 40.dp, top = if (index == 0) 0.dp else 6.dp, bottom = 6.dp))
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                 Text("#${index + 1}", fontFamily = Mono, fontSize = 9.sp, color = UiFaint, modifier = Modifier.width(34.dp))
                                 Text("${person.name} (${person.id})", fontFamily = Sans, fontSize = 11.sp, color = UiInk, modifier = Modifier.weight(1f))
@@ -1861,7 +1992,7 @@ private fun ManifestScreenshotRow(
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         if (verified) {
-            Box(Modifier.size(28.dp).clip(CircleShape).background(Color(0xFF155EAD)), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(28.dp).clip(CircleShape).background(tc(0xFF155EAD)), contentAlignment = Alignment.Center) {
                 Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(17.dp))
             }
         }
@@ -1869,8 +2000,8 @@ private fun ManifestScreenshotRow(
         Column(Modifier.weight(1f)) {
             Text(buildString {
                 append(label).append(' ').append(value)
-            }, fontFamily = Sans, fontSize = 15.sp, color = Color.Black, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (verified) Text("[Verified]", fontFamily = Sans, fontSize = 14.sp, color = Color(0xFF155EAD), fontWeight = FontWeight.Medium)
+            }, fontFamily = Sans, fontSize = 15.sp, color = UiInk, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (verified) Text("[Verified]", fontFamily = Sans, fontSize = 14.sp, color = tc(0xFF155EAD), fontWeight = FontWeight.Medium)
         }
         if (removable && onRemove != null) IconButton(onClick = onRemove) { Icon(Icons.Default.DeleteOutline, "Remove", tint = UiFaint, modifier = Modifier.size(18.dp)) }
     }
@@ -1914,7 +2045,7 @@ private fun UnknownResultScreen(vm: MainViewModel, message: String) {
     ) {
         ScreenHeader("Scan Result", "Verification outcome", vm::returnToHome)
         Spacer(Modifier.height(28.dp))
-        Box(Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)).background(UiWarningBg).border(1.dp, Color(0xFFFDE68A), RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)).background(UiWarningBg).border(1.dp, tc(0xFFFDE68A), RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
             Icon(Icons.Default.WarningAmber, null, tint = UiWarning, modifier = Modifier.size(31.dp))
         }
         Spacer(Modifier.height(13.dp))
@@ -1977,14 +2108,14 @@ private fun SuccessScreen(
                         DetailTile(Modifier.weight(1f), "ACCESS POINT", event.gateId, Icons.Default.Security)
                     }
                     if (exit && durationMs > 0) {
-                        Surface(Modifier.fillMaxWidth(), color = UiWarningBg, shape = SmallShape, border = BorderStroke(1.dp, Color(0xFFFDE68A))) {
+                        Surface(Modifier.fillMaxWidth(), color = UiWarningBg, shape = SmallShape, border = BorderStroke(1.dp, tc(0xFFFDE68A))) {
                             Row(Modifier.padding(11.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Default.AccessTime, null, tint = UiWarning, modifier = Modifier.size(15.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text("TOTAL VERIFIED STAY", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = Color(0xFF92400E))
+                                    Text("TOTAL VERIFIED STAY", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = tc(0xFF92400E))
                                 }
-                                Text(formatDuration(durationMs), fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF451A03))
+                                Text(formatDuration(durationMs), fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = tc(0xFF451A03))
                             }
                         }
                     }
@@ -2055,7 +2186,7 @@ private fun ConfirmBottomSheet(
         containerColor = UiSurface,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
         dragHandle = {
-            Box(Modifier.padding(top = 8.dp).size(width = 42.dp, height = 4.dp).clip(CircleShape).background(Color(0xFFD4D4D8)))
+            Box(Modifier.padding(top = 8.dp).size(width = 42.dp, height = 4.dp).clip(CircleShape).background(tc(0xFFD4D4D8)))
         }
     ) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).navigationBarsPadding().padding(bottom = 12.dp)) {
@@ -2085,13 +2216,13 @@ private fun PrimaryButton(
 ) {
     Surface(
         Modifier.then(modifier).fillMaxWidth().height(50.dp).clickable(enabled = enabled, onClick = onClick),
-        color = if (enabled) UiInk else Color(0xFFD4D4D8),
-        contentColor = Color.White,
+        color = if (enabled) UiInk else tc(0xFFD4D4D8),
+        contentColor = UiOnInk,
         shape = RoundedCornerShape(12.dp),
         shadowElevation = if (enabled) 2.dp else 0.dp
     ) {
         Row(Modifier.fillMaxSize().padding(horizontal = 15.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-            Text(text, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = if (enabled) Color.White else UiMuted, textAlign = TextAlign.Center)
+            Text(text, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = if (enabled) UiOnInk else UiMuted, textAlign = TextAlign.Center)
             icon?.let {
                 Spacer(Modifier.width(7.dp))
                 Icon(it, null, tint = if (enabled) UiSuccess else UiMuted, modifier = Modifier.size(16.dp))
@@ -2121,7 +2252,7 @@ private fun SecondaryButton(
         color = UiSurface, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, UiBorder)
     ) {
         Row(Modifier.fillMaxSize().padding(horizontal = 15.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-            icon?.let { Icon(it, null, tint = Color(0xFF52525B), modifier = Modifier.size(16.dp)); Spacer(Modifier.width(7.dp)) }
+            icon?.let { Icon(it, null, tint = tc(0xFF52525B), modifier = Modifier.size(16.dp)); Spacer(Modifier.width(7.dp)) }
             Text(text, fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 10.sp, color = UiInk, textAlign = TextAlign.Center)
         }
     }
@@ -2140,7 +2271,7 @@ private fun SecondaryTextButton(text: String, onClick: () -> Unit) {
 
 @Composable
 private fun DangerButton(text: String, icon: ImageVector, onClick: () -> Unit) {
-    Surface(Modifier.fillMaxWidth().height(48.dp).clickable(onClick = onClick), color = UiErrorBg, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, Color(0xFFFBCFE8))) {
+    Surface(Modifier.fillMaxWidth().height(48.dp).clickable(onClick = onClick), color = UiErrorBg, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, tc(0xFFFBCFE8))) {
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, tint = UiError, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(7.dp))
@@ -2151,7 +2282,7 @@ private fun DangerButton(text: String, icon: ImageVector, onClick: () -> Unit) {
 
 @Composable
 private fun TogglePill(enabled: Boolean, onToggle: () -> Unit) {
-    Surface(Modifier.size(width = 44.dp, height = 26.dp).clickable(onClick = onToggle), color = if (enabled) UiInk else Color(0xFFD4D4D8), shape = RoundedCornerShape(100.dp)) {
+    Surface(Modifier.size(width = 44.dp, height = 26.dp).clickable(onClick = onToggle), color = if (enabled) UiInk else tc(0xFFD4D4D8), shape = RoundedCornerShape(100.dp)) {
         Box(Modifier.fillMaxSize()) {
             Box(Modifier.size(18.dp).clip(CircleShape).background(Color.White).align(if (enabled) Alignment.CenterEnd else Alignment.CenterStart).padding(3.dp))
         }
@@ -2168,10 +2299,10 @@ private fun StatusPill(text: String, tone: StatusTone, compact: Boolean = false)
         StatusTone.Neutral -> UiSurfaceSubtle
     }
     val border = when (tone) {
-        StatusTone.Success -> Color(0xFFA7F3D0)
-        StatusTone.Warning -> Color(0xFFFDE68A)
-        StatusTone.Error -> Color(0xFFFBCFE8)
-        StatusTone.Info -> Color(0xFFBFDBFE)
+        StatusTone.Success -> tc(0xFFA7F3D0)
+        StatusTone.Warning -> tc(0xFFFDE68A)
+        StatusTone.Error -> tc(0xFFFBCFE8)
+        StatusTone.Info -> tc(0xFFBFDBFE)
         StatusTone.Neutral -> UiBorder
     }
     val dot = when (tone) {
@@ -2205,9 +2336,9 @@ private fun StatusBanner(text: String, tone: BannerTone) {
         BannerTone.Neutral -> UiMuted
     }
     val border = when (tone) {
-        BannerTone.Success -> Color(0xFFA7F3D0)
-        BannerTone.Warning -> Color(0xFFFDE68A)
-        BannerTone.Error -> Color(0xFFFBCFE8)
+        BannerTone.Success -> tc(0xFFA7F3D0)
+        BannerTone.Warning -> tc(0xFFFDE68A)
+        BannerTone.Error -> tc(0xFFFBCFE8)
         BannerTone.Neutral -> UiBorder
     }
     Surface(Modifier.fillMaxWidth(), color = bg, shape = SmallShape, border = BorderStroke(1.dp, border)) {
@@ -2237,16 +2368,16 @@ private fun ScreenHeader(title: String, subtitle: String, onBack: (() -> Unit)? 
 private fun FlowHeader(text: String) {
     Surface(
         Modifier.fillMaxWidth(),
-        color = Color(0xFFE5E5E5),
+        color = tc(0xFFE5E5E5),
         shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, Color(0xFFE4E4E7))
+        border = BorderStroke(1.dp, tc(0xFFE4E4E7))
     ) {
         Text(
             text,
             fontFamily = Sans,
             fontWeight = FontWeight.Bold,
             fontSize = 17.sp,
-            color = Color.Black,
+            color = UiInk,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 16.dp)
         )
@@ -2283,7 +2414,7 @@ private fun ManifestPersonCard(label: String, person: PersonEntity, removable: B
     Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
         Row(Modifier.padding(11.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(34.dp).clip(RoundedCornerShape(9.dp)).background(UiBackground), contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.Person, null, tint = Color(0xFF52525B), modifier = Modifier.size(17.dp))
+                Icon(Icons.Default.Person, null, tint = tc(0xFF52525B), modifier = Modifier.size(17.dp))
             }
             Spacer(Modifier.width(9.dp))
             Column(Modifier.weight(1f)) {
@@ -2338,8 +2469,8 @@ private fun DetailTile(modifier: Modifier = Modifier, label: String, value: Stri
 @Composable
 private fun DataBadge(value: String, accent: Color = UiBackground) {
     val isPlate = accent == UiWarning
-    Surface(color = if (isPlate) Color(0xFFFFF7D6) else UiBackground, shape = RoundedCornerShape(7.dp), border = BorderStroke(1.dp, if (isPlate) Color(0xFFFCD34D) else UiBorder)) {
-        Text(value, fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = if (isPlate) Color(0xFF451A03) else UiInk, modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp))
+    Surface(color = if (isPlate) tc(0xFFFFF7D6) else UiBackground, shape = RoundedCornerShape(7.dp), border = BorderStroke(1.dp, if (isPlate) tc(0xFFFCD34D) else UiBorder)) {
+        Text(value, fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = if (isPlate) tc(0xFF451A03) else UiInk, modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp))
     }
 }
 
@@ -2510,7 +2641,7 @@ private fun CommsScreen(vm: MainViewModel) {
             Spacer(Modifier.width(8.dp))
             FilledIconButton(onClick = { vm.sendComms("MESSAGE", text) { text = "" } }, enabled = text.isNotBlank(),
                 colors = IconButtonDefaults.filledIconButtonColors(containerColor = UiInk)) {
-                Icon(Icons.Default.Send, "Send", tint = Color.White)
+                Icon(Icons.Default.Send, "Send", tint = UiOnInk)
             }
         }
         Spacer(Modifier.height(6.dp))
@@ -2560,15 +2691,15 @@ private fun CommsBubble(m: com.teamxv.qrmonitor.comms.CommsMessageEntity) {
                 Text(
                     (if (alert) "⚠ ALERT • " else "") + (if (mine) "You" else m.sender),
                     fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 11.sp,
-                    color = when { alert -> UiError; mine -> Color(0xFFFCD34D); else -> UiBlue }
+                    color = when { alert -> UiError; mine -> tc(0xFFFCD34D); else -> UiBlue }
                 )
                 Spacer(Modifier.height(3.dp))
-                Text(m.body, fontFamily = Sans, fontSize = 14.sp, color = if (mine && !alert) Color.White else UiInk)
+                Text(m.body, fontFamily = Sans, fontSize = 14.sp, color = if (mine && !alert) UiOnInk else UiInk)
                 Spacer(Modifier.height(4.dp))
                 val tick = if (!mine) "" else when (m.state) { "READ" -> " • read"; "DELIVERED" -> " • delivered"; "SENT" -> " • sent"; else -> " • waiting for link" }
                 Text(
                     SimpleDateFormat("dd MMM HH:mm", Locale.getDefault()).format(Date(m.createdAt)) + tick,
-                    fontFamily = Mono, fontSize = 10.sp, color = if (mine && !alert) Color(0xFFA1A1AA) else UiMuted
+                    fontFamily = Mono, fontSize = 10.sp, color = if (mine && !alert) tc(0xFFA1A1AA) else UiMuted
                 )
             }
         }

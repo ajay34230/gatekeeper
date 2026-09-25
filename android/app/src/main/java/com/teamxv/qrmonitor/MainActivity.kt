@@ -9,10 +9,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
 import com.teamxv.qrmonitor.comms.CommsNotifications
 import com.teamxv.qrmonitor.ui.TeamXVApp
+import com.teamxv.qrmonitor.ui.UiPrefs
 
 /** Set when a Comms notification is tapped; the UI switches to the Comms tab. */
 object CommsNav { val openRequested = mutableStateOf(false) }
@@ -26,8 +29,9 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        UiPrefs.init(this)
         setContent {
-            MaterialTheme {
+            MaterialTheme(colorScheme = if (UiPrefs.dark) darkColorScheme() else lightColorScheme()) {
                 TeamXVApp()
             }
         }

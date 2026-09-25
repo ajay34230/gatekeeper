@@ -58,6 +58,7 @@ import com.teamxv.qrmonitor.data.local.PersonEntity
 import com.teamxv.qrmonitor.data.local.VehicleEntity
 import com.teamxv.qrmonitor.data.model.EntityType
 import com.teamxv.qrmonitor.data.model.EventType
+import com.teamxv.qrmonitor.data.model.PresenceStatus
 import com.teamxv.qrmonitor.data.model.MovementEvent
 import com.teamxv.qrmonitor.data.model.NetworkStatus
 import com.teamxv.qrmonitor.data.model.PersonPresence
@@ -282,6 +283,37 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             completedEvent = null
             completedVehicle = null
             completedDurationMs = 0L
+        }
+    }
+
+    /** Shift handover: what happened at this terminal since sign-in and who is still inside. */
+    fun handoverReport(): HandoverReport {
+        val from = config.shiftStartedAt
+        val shift = events.filter { from == 0L || it.eventTimestamp >= from }
+        fun count(type: EntityType, ev: EventType) = shift.count { it.entityType == type && it.eventType == ev }
+        val regs = vehicles.associate { it.id to it.registration.ifBlank { it.id } }
+        return HandoverReport(
+            shiftStart = from, now = System.currentTimeMillis(),
+            post = listOf(config.locationName.ifBlank { config.locationId }, config.gateName.ifBlank { config.gateId }).filter { it.isNotBlank() }.joinToString(" / "),
+            operator = config.operatorName.ifBlank { config.operatorId },
+            entries = count(EntityType.PERSON, EventType.ENTRY), exits = count(EntityType.PERSON, EventType.EXIT),
+            vehicleEntries = count(EntityType.VEHICLE, EventType.ENTRY), vehicleExits = count(EntityType.VEHICLE, EventType.EXIT),
+            pending = pending,
+            inside = personnel.filter { it.currentStatus == PresenceStatus.INSIDE }.map { if (it.name.isBlank()) it.id else "${it.name} (${it.id})" }.sorted(),
+            vehiclesInside = vehiclesInside.map { regs[it] ?: it }.sorted()
+        )
+    }
+
+    var handoverError by mutableStateOf("")
+        private set
+
+    /** Sends the handover summary to the Command Center (queued if the link is down), then signs out. */
+    fun sendHandoverAndLogout(report: HandoverReport) {
+        val who = config.operatorName.ifBlank { config.operatorId }.ifBlank { config.deviceId }
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { com.teamxv.qrmonitor.comms.CommsEngine.queue(getApplication(), "MESSAGE", report.toMessage(), if (report.post.isBlank()) who else "$who • ${report.post}") }
+                .onSuccess { handoverError = ""; logout() }
+                .onFailure { handoverError = "Handover summary could not be queued." + (it.message?.let { m -> " $m" } ?: "") }
         }
     }
 
@@ -831,3 +863,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 }
 
+data class HandoverReport(
+    val shiftStart: Long, val now: Long, val post: String, val operator: String,
+    val entries: Int, val exits: Int, val vehicleEntries: Int, val vehicleExits: Int, val pending: Int,
+    val inside: List<String>, val vehiclesInside: List<String>
+) {
+    /** Plain-text summary for the Command Center (within the 2000-character Comms limit). */
+    fun toMessage(): String {
+        val fmt = java.text.SimpleDateFormat("dd MMM HH:mm", java.util.Locale.ENGLISH)
+        fun list(items: List<String>, max: Int): String =
+            if (items.isEmpty()) "none" else items.take(max).joinToString(", ") + if (items.size > max) " +${items.size - max} more" else ""
+        val text = "SHIFT HANDOVER — ${post.ifBlank { "post not set" }} • operator ${operator.ifBlank { "—" }} • " +
+            "${if (shiftStart > 0) fmt.format(java.util.Date(shiftStart)) else "—"} to ${fmt.format(java.util.Date(now))}\n" +
+            "Personnel: $entries entries, $exits exits • Vehicles: $vehicleEntries entries, $vehicleExits exits • Not yet synced: $pending\n" +
+            "Still inside (${inside.size}): ${list(inside, 40)}\n" +
+            "Vehicles inside (${vehiclesInside.size}): ${list(vehiclesInside, 20)}"
+        return if (text.length <= 2000) text else text.take(1990) + "…"
+    }
+}

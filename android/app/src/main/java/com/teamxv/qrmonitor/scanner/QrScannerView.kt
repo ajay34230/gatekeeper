@@ -1,5 +1,6 @@
 package com.teamxv.qrmonitor.scanner
 
+import com.teamxv.qrmonitor.ui.tr
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -137,19 +138,19 @@ fun QrScannerView(
                 Icon(Icons.Default.CameraAlt, null, tint = Emerald, modifier = Modifier.size(31.dp))
             }
             Spacer(Modifier.height(16.dp))
-            Text("CAMERA ACCESS REQUIRED", color = White, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Text(tr("CAMERA ACCESS REQUIRED"), color = White, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 15.sp)
             Spacer(Modifier.height(6.dp))
             Text(
-                "Camera access is required to verify QR credentials on this terminal.",
+                tr("Camera access is required to verify QR credentials on this terminal."),
                 color = Muted,
                 fontFamily = Sans,
                 fontSize = 11.sp,
                 textAlign = TextAlign.Center
             )
             Spacer(Modifier.height(18.dp))
-            Button(onClick = { launcher.launch(Manifest.permission.CAMERA) }) { Text("ALLOW CAMERA") }
+            Button(onClick = { launcher.launch(Manifest.permission.CAMERA) }) { Text(tr("ALLOW CAMERA")) }
             Spacer(Modifier.height(8.dp))
-            TextButton(onClick = onCancel) { Text("CANCEL", color = Muted, fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 10.sp) }
+            TextButton(onClick = onCancel) { Text(tr("CANCEL"), color = Muted, fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 10.sp) }
         }
         return
     }
@@ -221,7 +222,7 @@ fun QrScannerView(
                         Icon(Icons.Default.ArrowBack, null, tint = White, modifier = Modifier.size(21.dp))
                     }
                     Column(Modifier.weight(1f)) {
-                        Text(title.uppercase(), fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = White)
+                        Text(tr(title).uppercase(), fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = White)
                         Text("OPTICAL QR AUTHENTICATOR", fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 8.sp, letterSpacing = 1.sp, color = Emerald)
                     }
                     StatusDot()
@@ -232,7 +233,7 @@ fun QrScannerView(
                 ScannerReticle()
 
                 Text(
-                    subtitle,
+                    tr(subtitle),
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(bottom = 76.dp)
@@ -287,10 +288,10 @@ fun QrScannerView(
             AlertDialog(
                 onDismissRequest = { manualOpen = false },
                 containerColor = Ink,
-                title = { Text("ENTER CODE MANUALLY", color = White, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 15.sp) },
+                title = { Text(tr("ENTER CODE MANUALLY"), color = White, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 15.sp) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        Text("Enter the QR payload exactly as printed on the credential.", color = Muted, fontFamily = Sans, fontSize = 10.sp)
+                        Text(tr("Enter the QR payload exactly as printed on the credential."), color = Muted, fontFamily = Sans, fontSize = 10.sp)
                         OutlinedTextField(
                             value = manualCode,
                             onValueChange = { manualCode = it.uppercase() },
@@ -309,10 +310,10 @@ fun QrScannerView(
                             manualOpen = false
                             onResult(manualCode.trim())
                         }
-                    ) { Text("VERIFY CODE") }
+                    ) { Text(tr("VERIFY CODE")) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { manualOpen = false }) { Text("CANCEL", color = Muted) }
+                    TextButton(onClick = { manualOpen = false }) { Text(tr("CANCEL"), color = Muted) }
                 }
             )
         }
