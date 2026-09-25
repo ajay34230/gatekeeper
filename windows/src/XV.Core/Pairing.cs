@@ -92,26 +92,11 @@ public static class RegistryImport
     /// <summary>Imports personnel from CSV (headers: id,name,rank,service_no,unit,company,role,category,status,mobile,id_card,blood_group,access_locations). Returns (ok, errors).</summary>
     public static (int ok, List<string> errors) Persons(Store store, string csv)
     {
-        int ok = 0; var errors = new List<string>(); var line = 1;
-        foreach (var r in Csv.Parse(csv))
-        {
-            line++;
-            try
-            {
-                var id = Pick(r, "id", "personnel id", "person_id");
-                if (id.Length == 0) id = store.NextId("P", "persons");
-                store.UpsertPerson(new System.Text.Json.Nodes.JsonObject
-                {
-                    ["id"] = id, ["name"] = Pick(r, "name", "full name"), ["rank"] = Pick(r, "rank"), ["serviceNo"] = Pick(r, "service_no", "service number", "army number"),
-                    ["unit"] = Pick(r, "unit"), ["company"] = Pick(r, "company"), ["role"] = Pick(r, "role", "designation"), ["category"] = Pick(r, "category"),
-                    ["status"] = Pick(r, "status"), ["mobile"] = Pick(r, "mobile", "phone"), ["idCard"] = Pick(r, "id_card", "id card"),
-                    ["bloodGroup"] = Pick(r, "blood_group", "blood group"), ["accessLocations"] = Pick(r, "access_locations", "access locations"),
-                }, "PC-IMPORT");
-                ok++;
-            }
-            catch (Exception ex) { errors.Add($"Row {line}: {ex.Message}"); }
-        }
-        return (ok, errors);
+        // Same importer as the soldier register: columns missing from the file keep their current values, and rows
+        // without an ID are matched by army number (no duplicate soldiers on re-import).
+        var headers = Csv.ParseRows(csv).FirstOrDefault()?.Select(h => h.Trim()).Where(h => h.Length > 0).ToList() ?? [];
+        var (added, updated, errors) = SoldierFile.Import(store, headers, Csv.Parse(csv), store.Settings.CustomFields);
+        return (added + updated, errors);
     }
 
     /// <summary>Imports vehicles from CSV (headers: id,plate,mil_reg,type,model,company,status).</summary>
@@ -124,11 +109,20 @@ public static class RegistryImport
             try
             {
                 var id = Pick(r, "id", "vehicle id", "vehicle_id");
+                var plate = Pick(r, "plate", "registration", "plate number");
+                string Norm(string p) => new string(p.ToUpperInvariant().Where(char.IsLetterOrDigit).ToArray());
+                // No ID: the same plate is the same vehicle (re-importing does not duplicate the fleet).
+                if (id.Length == 0 && plate.Length > 0)
+                    id = store.Vehicles().FirstOrDefault(v => Norm(v["plate"]?.ToString() ?? "") == Norm(plate))?["id"]?.ToString() ?? "";
                 if (id.Length == 0) id = store.NextId("V", "vehicles");
+                var cur = store.Vehicles().FirstOrDefault(v => v["id"]?.ToString() == Store.CanonId(id));
+                // Columns missing from the file (or left empty) keep the vehicle's current values.
+                string Keep(string value, string column) => value.Length > 0 || cur == null ? value : cur[column]?.ToString() ?? "";
                 store.UpsertVehicle(new System.Text.Json.Nodes.JsonObject
                 {
-                    ["id"] = id, ["plate"] = Pick(r, "plate", "registration", "plate number"), ["milReg"] = Pick(r, "mil_reg", "military reg"),
-                    ["type"] = Pick(r, "type"), ["model"] = Pick(r, "model"), ["company"] = Pick(r, "company"), ["status"] = Pick(r, "status"),
+                    ["id"] = id, ["plate"] = Keep(plate, "plate"), ["milReg"] = Keep(Pick(r, "mil_reg", "military reg"), "mil_reg"),
+                    ["type"] = Keep(Pick(r, "type"), "type"), ["model"] = Keep(Pick(r, "model"), "model"), ["company"] = Keep(Pick(r, "company"), "company"),
+                    ["status"] = Keep(Pick(r, "status"), "status"),
                 }, "PC-IMPORT");
                 ok++;
             }

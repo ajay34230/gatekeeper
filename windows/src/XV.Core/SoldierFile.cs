@@ -206,6 +206,9 @@ public static class SoldierFile
         int added = 0, updated = 0, line = 1;
         var errors = new List<string>();
         var known = store.Persons().Select(p => p["id"]?.ToString() ?? "").ToHashSet();
+        // Rows without an ID are matched to an existing soldier by army number, so re-importing does not duplicate soldiers.
+        var byArmyNo = store.Persons().Where(p => (p["service_no"]?.ToString() ?? "").Trim().Length > 0)
+            .GroupBy(p => p["service_no"]!.ToString()!.Trim().ToUpperInvariant()).ToDictionary(g => g.Key, g => g.First()["id"]?.ToString() ?? "");
         foreach (var r in rows)
         {
             line++;
@@ -220,6 +223,7 @@ public static class SoldierFile
                     else o[key] = key == "company" ? CanonCompany(v) : v;
                 }
                 var id = Store.CanonId(o["id"]?.ToString());
+                if (id.Length == 0 && byArmyNo.TryGetValue((o["serviceNo"]?.ToString() ?? "").Trim().ToUpperInvariant(), out var existingId)) id = existingId;
                 var isNew = id.Length == 0 || !known.Contains(id);
                 if (id.Length == 0) id = store.NextId("P", "persons");
                 o["id"] = id;
@@ -230,6 +234,7 @@ public static class SoldierFile
                 if (cfo.Count > 0) o["custom"] = cfo;
                 store.UpsertPerson(o, "PC-IMPORT");
                 known.Add(id);
+                if ((o["serviceNo"]?.ToString() ?? "").Trim() is { Length: > 0 } sn) byArmyNo[sn.ToUpperInvariant()] = id;
                 if (isNew) added++; else updated++;
             }
             catch (Exception ex) { errors.Add($"Row {line}: {ex.Message}"); }
