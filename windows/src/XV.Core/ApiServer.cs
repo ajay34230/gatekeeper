@@ -154,7 +154,7 @@ public sealed class ApiServer : IAsyncDisposable
         int code; JsonNode body;
         try { (code, body) = Dispatch(request, deviceId, Ip(ctx), viaInternet); }
         catch (StoreException ex) { code = ex.Status; body = new JsonObject { ["status"] = "rejected", ["reason"] = ex.Code, ["message"] = ex.Message }; }
-        catch (Exception ex) { code = 500; body = new JsonObject { ["status"] = "error", ["reason"] = "SERVER_ERROR", ["message"] = "The Command Center could not process the request." }; LastError = ex.ToString(); Log?.Invoke("RPC error: " + ex.Message); }
+        catch (Exception ex) { code = 500; body = new JsonObject { ["status"] = "error", ["reason"] = "SERVER_ERROR", ["message"] = "The Command Center could not process the request." }; LastError = ex.ToString(); Diag.Error($"RPC {request["op"]} from {deviceId} failed", ex); Log?.Invoke("RPC error: " + ex.Message); }
 
         var plain = new JsonObject { ["code"] = code, ["body"] = body }.ToJsonString();
         var (iv, ct) = Envelope.Seal(key, plain, Envelope.ResponseAad(deviceId, nonce));

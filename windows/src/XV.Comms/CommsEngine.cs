@@ -207,6 +207,10 @@ public sealed class CommsEngine : IAsyncDisposable
         {
             Log?.Invoke($"Comms: {dev} disconnected ({ex.GetType().Name})");
         }
+        catch (Exception ex)
+        {
+            Core.Diag.Error($"Comms: connection of {dev} ended by an unexpected error", ex);
+        }
         finally
         {
             _links.TryRemove(new KeyValuePair<string, Link>(dev, link));
