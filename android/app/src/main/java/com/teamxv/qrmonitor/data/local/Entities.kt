@@ -33,7 +33,9 @@ data class MovementEventEntity(
     val scannedLocation: String = "",
     /** Reason chosen at the gate (list set on the PC, or typed) and free remarks. */
     val reason: String = "",
-    val remarks: String = ""
+    val remarks: String = "",
+    /** Expected return (epoch ms) for exits on leave / TD; 0 when not asked. */
+    val expectedReturn: Long = 0L
 )
 
 @Entity(tableName = "presence_sessions", indices = [

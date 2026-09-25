@@ -20,5 +20,8 @@ data class PersonEntity(
     val status: String = "ACTIVE",
     val accessLocations: String = "",
     /** SHA-256 of the QR secret (Minimal mode keeps only this, never the secret or personal details). */
-    val secretHash: String = ""
+    val secretHash: String = "",
+    /** Visitor / temporary pass validity (epoch ms, 0 = no limit). Personnel credentials never expire. */
+    val validFrom: Long = 0L,
+    val validTo: Long = 0L
 )

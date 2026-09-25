@@ -32,6 +32,7 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
         config.cachedGates = m.gates.map { it.id to it.name }
         config.sharingMode = m.sharingMode
         if (m.reasons.isNotEmpty()) config.movementReasons = m.reasons
+        config.returnReasons = m.returnReasons
         api.commsInfo().onSuccess { ci -> config.commsPort = ci.port; config.commsPublicUrl = ci.publicUrl; config.commsPublicUsesCa = ci.publicUsesCaCertificate }
 
         return@withContext try {

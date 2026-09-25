@@ -48,7 +48,7 @@ class HttpFailure(val code: Int, val bodyText: String) : Exception(
     val locationId: String, val gateId: String, val deviceId: String, val operatorId: String,
     val eventTimestamp: Long, val createdAt: Long, val sourceType: String = "DIRECT", val sourceId: String? = null,
     val locationMismatch: Boolean = false, val scannedLocation: String = "",
-    val reason: String = "", val remarks: String = ""
+    val reason: String = "", val remarks: String = "", val expectedReturn: Long = 0L
 )
 @Serializable data class VehicleManifestPayload(
     val manifestId: String, val vehicleId: String, val entryEventId: String, val locationId: String,
@@ -60,7 +60,7 @@ class HttpFailure(val code: Int, val bodyText: String) : Exception(
     val personId: String, val name: String, val category: String = "PERSONNEL", val active: Boolean = true,
     val secretCode: String = "", val rank: String = "", val serviceNo: String = "", val unit: String = "",
     val company: String = "", val role: String = "", val status: String = "ACTIVE", val accessLocations: String = "",
-    val secretHash: String = ""
+    val secretHash: String = "", val validFrom: Long = 0L, val validTo: Long = 0L
 )
 @Serializable data class MasterVehicle(
     val vehicleId: String, val registration: String, val type: String = "", val active: Boolean = true,
@@ -77,13 +77,15 @@ class HttpFailure(val code: Int, val bodyText: String) : Exception(
 @Serializable data class VerifyResponse(
     val type: String, val id: String, val name: String = "", val rank: String = "", val serviceNo: String = "", val unit: String = "",
     val company: String = "", val category: String = "", val status: String = "ACTIVE", val inside: Boolean = false, val insideSince: Long = 0L,
-    val registration: String = "", val vehicleType: String = "", val manifest: ManifestItem? = null
+    val registration: String = "", val vehicleType: String = "", val manifest: ManifestItem? = null,
+    val validFrom: Long = 0L, val validTo: Long = 0L
 )
 @Serializable data class MasterBootstrapResponse(
     val sharingMode: String = "FULL", val manifests: List<ManifestItem> = emptyList(),
     val version: String = "", val persons: List<MasterPerson> = emptyList(), val vehicles: List<MasterVehicle> = emptyList(),
     val locations: List<NamedItem> = emptyList(), val gates: List<NamedItem> = emptyList(),
-    val presence: List<PresenceItem> = emptyList(), val serverTime: Long = 0L, val reasons: List<String> = emptyList()
+    val presence: List<PresenceItem> = emptyList(), val serverTime: Long = 0L, val reasons: List<String> = emptyList(),
+    val returnReasons: List<String> = emptyList()
 )
 
 /** Contents of the pairing QR shown by the PC Command Center ("XVGK1:" + base64url JSON). */
@@ -151,8 +153,13 @@ class ApiClient(private val profile: ConnectionProfile? = null) {
         fun list(k: String) = json.decodeFromJsonElement(kotlinx.serialization.builtins.ListSerializer(NamedItem.serializer()), r[k] ?: kotlinx.serialization.json.JsonArray(emptyList())).map { it.id to it.name }
         val reasons = (r["reasons"] as? kotlinx.serialization.json.JsonArray)?.map { it.jsonPrimitive.content }
         reasonsFromServer = reasons
+        returnReasonsFromServer = (r["returnReasons"] as? kotlinx.serialization.json.JsonArray)?.map { it.jsonPrimitive.content }
         list("locations") to list("gates")
     }
+
+    /** Exit reasons that need an expected return date, from the last stations.list call. */
+    @Volatile var returnReasonsFromServer: List<String>? = null
+        private set
 
     /** Entry/exit reasons from the last stations.list call (null when the PC did not send any). */
     @Volatile var reasonsFromServer: List<String>? = null
@@ -192,7 +199,7 @@ class ApiClient(private val profile: ConnectionProfile? = null) {
             event.eventId, event.entityType.name, event.entityId, event.eventType.name,
             event.locationId, event.gateId, event.deviceId, event.operatorId,
             event.eventTimestamp, event.createdAt, event.sourceType.name, event.sourceId,
-            event.locationMismatch, event.scannedLocation, event.reason, event.remarks
+            event.locationMismatch, event.scannedLocation, event.reason, event.remarks, event.expectedReturn
         ))).toString()
     }
 
@@ -243,6 +250,8 @@ class ApiClient(private val profile: ConnectionProfile? = null) {
                     lastRoute = if (ep.internet) "Internet • ${ep.baseUrl}" else "Local Wi-Fi • ${ep.baseUrl}"
                     return result
                 } catch (e: HttpFailure) {
+                    // Revoked on the Command Center (answer over the pinned TLS link, so it is authentic): erase this terminal.
+                    if (e.code == 401 && e.reason == "DEVICE_REVOKED") { onDeviceRevoked?.invoke(); throw e }
                     if (e.code == 401 && e.reason == "STALE_OR_REPLAYED" && syncClock(ep, p)) {
                         val result = call(ep, p, key, request)
                         preferred = ep.baseUrl
@@ -339,6 +348,8 @@ class ApiClient(private val profile: ConnectionProfile? = null) {
 
     companion object {
         const val DISCOVERY_PORT = 47913
+        /** Set by the application: erases the terminal when the Command Center reports it revoked. */
+        @Volatile var onDeviceRevoked: (() -> Unit)? = null
         private val JSON_TYPE = "application/json; charset=utf-8".toMediaType()
 
         fun seal(key: ByteArray, plaintext: String, aad: String): Pair<String, String> {

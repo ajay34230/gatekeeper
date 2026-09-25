@@ -62,6 +62,11 @@ class AppConfig(context: Context) : ConnectionProfile {
         get() = (prefs.getString("movementReasons", null) ?: DEFAULT_REASONS.joinToString("\n")).split('\n').map { it.trim() }.filter { it.isNotEmpty() }
         set(value) = prefs.edit().putString("movementReasons", value.joinToString("\n")).apply()
 
+    /** Exit reasons that require an expected return date (set on the PC). */
+    var returnReasons: List<String>
+        get() = (prefs.getString("returnReasons", null) ?: DEFAULT_RETURN_REASONS.joinToString("\n")).split('\n').map { it.trim() }.filter { it.isNotEmpty() }
+        set(value) = prefs.edit().putString("returnReasons", value.joinToString("\n")).apply()
+
     // Comms engine (separate listener on the PC)
     var commsPort: Int
         get() = prefs.getInt("commsPort", 8444)
@@ -228,5 +233,6 @@ class AppConfig(context: Context) : ConnectionProfile {
     companion object {
         /** Used until the first contact with the Command Center. */
         val DEFAULT_REASONS = listOf("TD", "Proceeding on Leave", "Rejoining from Leave", "Posting Out", "Posting In", "Local Work")
+        val DEFAULT_RETURN_REASONS = listOf("TD", "Proceeding on Leave", "Local Work")
     }
 }

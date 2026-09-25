@@ -68,6 +68,8 @@ abstract class CommsDatabase : RoomDatabase() {
     companion object {
         @Volatile private var INSTANCE: CommsDatabase? = null
 
+        fun closeInstance() = synchronized(this) { INSTANCE?.close(); INSTANCE = null }
+
         fun get(context: Context): CommsDatabase = INSTANCE ?: synchronized(this) {
             INSTANCE ?: run {
                 System.loadLibrary("sqlcipher")

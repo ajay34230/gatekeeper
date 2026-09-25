@@ -249,6 +249,12 @@ private fun LoginScreen(vm: MainViewModel) {
         }
         Spacer(Modifier.height(16.dp))
         Text("XV DIGITAL ACCESS CONTROL", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = UiInk)
+        val context = LocalContext.current
+        val wipedAt = remember { com.teamxv.qrmonitor.security.TerminalWipe.wipedAt(context) }
+        if (wipedAt > 0 && !vm.paired) {
+            Spacer(Modifier.height(10.dp))
+            StatusBanner("This terminal was revoked by the Command Center on ${formatLongTime(wipedAt)}. All its data was erased. Scan a new pairing QR to use it again.", BannerTone.Error)
+        }
         Spacer(Modifier.height(4.dp))
         Text("FIELD ACCESS CONTROL SYSTEM", fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 10.sp, letterSpacing = 1.3.sp, color = UiMuted)
         Spacer(Modifier.height(20.dp))
@@ -468,6 +474,8 @@ private fun HomeScreen(vm: MainViewModel) {
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 15.dp)
         ) {
+            SosButton(vm)
+            Spacer(Modifier.height(12.dp))
             Text(
                 "Operator: ${cfg.operatorId} ${cfg.operatorName}".trim(),
                 fontFamily = Sans,
@@ -1395,7 +1403,9 @@ private fun ConfigField(label: String, value: String, password: Boolean = false,
 @Composable
 private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonResult) {
     var confirm by rememberSaveable { mutableStateOf(false) }
-    var reason by rememberSaveable(session.person.id) { mutableStateOf("") }
+    var reason by rememberSaveable(session.person.id) { mutableStateOf(if (session.inside) "" else vm.suggestedEntryReason(session.person.id)) }
+    var expectedReturn by rememberSaveable(session.person.id) { mutableStateOf(0L) }
+    var needDate by remember { mutableStateOf(false) }
     var customReason by rememberSaveable(session.person.id) { mutableStateOf("") }
     var remarks by rememberSaveable(session.person.id) { mutableStateOf("") }
     val finalReason = if (reason == REASON_CUSTOM) customReason.trim() else reason
@@ -1408,7 +1418,10 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
         }.maxByOrNull { it.eventTimestamp }?.eventTimestamp ?: session.insideSince.takeIf { it > 0 }
     }
     val person = session.person
-    val allowed = person.active && person.status == "ACTIVE"
+    val nowMs = System.currentTimeMillis()
+    // Visitor / temporary passes admit entry only inside their validity window (exit is always allowed).
+    val passBlocked = !session.inside && ((person.validTo > 0 && nowMs > person.validTo) || (person.validFrom > 0 && nowMs < person.validFrom))
+    val allowed = person.active && person.status == "ACTIVE" && !passBlocked
     val postName = cfg.locationName.ifBlank { cfg.locationId }
     val stayMs = if (session.inside && entryAt != null) System.currentTimeMillis() - entryAt else 0L
     val action = if (session.inside) "RECORD EXIT" else "RECORD ENTRY"
@@ -1488,9 +1501,20 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
             if (!allowed) {
                 StatusBanner("ACCESS DENIED • Credential is ${person.status.lowercase()}. Direct the individual to the central security desk.", BannerTone.Error)
             }
+            if (person.validTo > 0) {
+                StatusBanner("VISITOR / TEMPORARY PASS • valid ${formatLongTime(person.validFrom)} → ${formatLongTime(person.validTo)}" +
+                    if (passBlocked) (if (nowMs > person.validTo) " • PASS EXPIRED — entry refused" else " • NOT YET VALID — entry refused") else "",
+                    if (passBlocked) BannerTone.Error else BannerTone.Warning)
+            }
+            val needsReturn = session.inside && vm.returnReasons.any { it.equals(finalReason, ignoreCase = true) }
             if (allowed) ReasonPicker(vm.reasons, reason, { reason = it }, customReason, { customReason = it }, remarks, { remarks = it })
+            if (allowed && needsReturn) ReturnDatePicker(expectedReturn) { expectedReturn = it; needDate = false }
+            if (allowed && needsReturn && needDate && expectedReturn == 0L) StatusBanner("Choose the expected return date for \"$finalReason\" before recording the exit.", BannerTone.Error)
             if (allowed) Surface(
-                Modifier.fillMaxWidth().height(58.dp).clickable { confirm = true },
+                Modifier.fillMaxWidth().height(58.dp).clickable {
+                    if (session.inside && vm.returnReasons.any { it.equals(finalReason, ignoreCase = true) } && expectedReturn == 0L) needDate = true
+                    else confirm = true
+                },
                 color = UiInk,
                 shape = RoundedCornerShape(100.dp),
                 shadowElevation = 2.dp
@@ -1519,11 +1543,13 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
             title = "CONFIRM ${if (session.inside) "EXIT" else "ENTRY"}",
             subtitle = "Confirmation Required",
             onDismiss = { confirm = false },
-            onConfirm = { confirm = false; vm.confirmPerson(finalReason, remarks) }
+            onConfirm = { confirm = false; vm.confirmPerson(finalReason, remarks, if (session.inside && vm.returnReasons.any { it.equals(finalReason, ignoreCase = true) }) expectedReturn else 0L) }
         ) {
             ReviewRow("Personnel", "${session.person.name} (${displayId(session.person.id)})")
             ReviewRow("Reason", finalReason.ifBlank { "—" })
             if (remarks.isNotBlank()) ReviewRow("Remarks", remarks.trim())
+            if (session.inside && expectedReturn > 0 && vm.returnReasons.any { it.equals(finalReason, ignoreCase = true) })
+                ReviewRow("Expected Back", SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(expectedReturn)), valueColor = UiWarning)
             ReviewRow("Location / Gate", "$postName • ${cfg.gateName.ifBlank { cfg.gateId }}")
             if (session.locationMismatch) ReviewRow("Location Flag", "QR: ${session.scannedLocation}", valueColor = UiWarning)
             ReviewRow("Timestamp", formatLongTime(System.currentTimeMillis()))
@@ -1533,6 +1559,71 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
 }
 
 private const val REASON_CUSTOM = "Custom…"
+
+/** Expected return date for leave / TD exits (end of the chosen day), required for the reasons set on the PC. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReturnDatePicker(value: Long, onPick: (Long) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Surface(Modifier.fillMaxWidth().clickable { open = true }, color = if (value == 0L) UiWarningBg else UiSurface, shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, if (value == 0L) UiWarning else UiBorder)) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.AccessTime, null, tint = UiWarning, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text("EXPECTED RETURN DATE", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 1.sp, color = UiMuted)
+                Text(if (value == 0L) "Tap to choose (required)" else SimpleDateFormat("EEEE, dd MMM yyyy", Locale.getDefault()).format(Date(value)),
+                    fontFamily = Sans, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = if (value == 0L) UiWarning else UiInk)
+            }
+        }
+    }
+    if (open) {
+        val state = rememberDatePickerState(initialSelectedDateMillis = if (value > 0) value else System.currentTimeMillis() + 86_400_000L,
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis >= System.currentTimeMillis() - 86_400_000L
+            })
+        DatePickerDialog(onDismissRequest = { open = false }, confirmButton = {
+            TextButton(onClick = {
+                state.selectedDateMillis?.let { utc ->
+                    // End of that calendar day in local time: overdue starts the day after.
+                    val cal = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply { timeInMillis = utc }
+                    val local = Calendar.getInstance().apply { set(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH), 23, 59, 59); set(Calendar.MILLISECOND, 0) }
+                    onPick(local.timeInMillis)
+                }
+                open = false
+            }) { Text("OK") }
+        }, dismissButton = { TextButton(onClick = { open = false }) { Text("Cancel") } }) { DatePicker(state = state) }
+    }
+}
+
+/** SOS: confirm, ask for location permission if needed, then send the alert with GPS. */
+@Composable
+private fun SosButton(vm: MainViewModel, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    var confirm by remember { mutableStateOf(false) }
+    val permission = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()) { vm.sendSos() }
+    Surface(modifier.fillMaxWidth().height(52.dp).clickable { confirm = true }, color = UiError, shape = RoundedCornerShape(14.dp)) {
+        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.WarningAmber, null, tint = Color.White, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("SOS — EMERGENCY ALERT", fontFamily = Sans, fontWeight = FontWeight.Black, fontSize = 15.sp, color = Color.White, letterSpacing = 1.sp)
+        }
+    }
+    if (vm.sosState.isNotBlank()) { Spacer(Modifier.height(6.dp)); Text(vm.sosState, fontFamily = Sans, fontSize = 12.sp, color = UiError, fontWeight = FontWeight.SemiBold) }
+    if (confirm) AlertDialog(
+        onDismissRequest = { confirm = false },
+        title = { Text("Send SOS?", fontFamily = Sans, fontWeight = FontWeight.Bold, color = UiError) },
+        text = { Text("An emergency alert with this post, your name and the phone's GPS position is sent to the Command Center at once.", fontFamily = Sans) },
+        confirmButton = {
+            TextButton(onClick = {
+                confirm = false
+                if (com.teamxv.qrmonitor.comms.SosLocation.permitted(context)) vm.sendSos()
+                else permission.launch(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION))
+            }) { Text("SEND SOS", color = UiError, fontWeight = FontWeight.Black) }
+        },
+        dismissButton = { TextButton(onClick = { confirm = false }) { Text("Cancel") } }
+    )
+}
 
 /** Reason for the movement (list from the Command Center + custom text) and optional remarks; sent with the record. */
 @Composable
@@ -2362,6 +2453,8 @@ private fun CommsScreen(vm: MainViewModel) {
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding().padding(horizontal = 16.dp, vertical = 14.dp)) {
         ScreenHeader("Comms", "Messages, alerts & calls with ${vm.currentConfig().serverName.ifBlank { "the Command Center" }}")
         Spacer(Modifier.height(10.dp))
+        SosButton(vm)
+        Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { vm.startCall(false) }, enabled = state.online, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) {
                 Icon(Icons.Default.Call, null, tint = UiSuccess, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))

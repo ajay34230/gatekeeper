@@ -392,8 +392,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Entry/exit reasons set on the Command Center (the operator may also type a custom one). */
     var reasons by mutableStateOf(config.movementReasons)
+    /** Exit reasons that need an expected return date (leave, TD …). */
+    var returnReasons by mutableStateOf(config.returnReasons)
 
-    fun confirmPerson(reason: String = "", remarks: String = "") {
+    /** Reason to pre-select when this person enters: coming back from leave recorded at this terminal. */
+    fun suggestedEntryReason(personId: String): String {
+        val lastExit = events.filter { it.entityId == personId && it.eventType == com.teamxv.qrmonitor.data.model.EventType.EXIT }.maxByOrNull { it.eventTimestamp }
+        return if (lastExit?.reason?.contains("leave", ignoreCase = true) == true && reasons.any { it.equals("Rejoining from Leave", true) }) "Rejoining from Leave" else ""
+    }
+
+    fun confirmPerson(reason: String = "", remarks: String = "", expectedReturn: Long = 0L) {
         val s = session as? ScanSession.PersonResult ?: return
         viewModelScope.launch {
             when (
@@ -406,7 +414,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     s.locationMismatch,
                     s.scannedLocation,
                     reason,
-                    remarks
+                    remarks,
+                    expectedReturn
                 )
             ) {
                 is OperationResult.Success -> {
@@ -711,6 +720,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         commsError = com.teamxv.qrmonitor.comms.CallManager.startOutgoing(getApplication(), video) ?: ""
     }
 
+    var sosState by mutableStateOf("")
+
+    /** SOS: one alert to the Command Center with post, operator and GPS position (queued if the link is down). */
+    fun sendSos() {
+        sosState = "Getting location…"
+        viewModelScope.launch {
+            val loc = com.teamxv.qrmonitor.comms.SosLocation.current(getApplication())
+            val who = config.operatorName.ifBlank { config.operatorId }.ifBlank { "Unknown operator" }
+            val post = listOf(config.locationName.ifBlank { config.locationId }, config.gateName.ifBlank { config.gateId }).filter { it.isNotBlank() }.joinToString(" / ").ifBlank { "post not set" }
+            val body = "SOS — EMERGENCY at $post • operator $who (${config.operatorId}) • terminal ${config.deviceId} • " +
+                com.teamxv.qrmonitor.comms.SosLocation.describe(loc) + " • " + java.text.SimpleDateFormat("dd MMM HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+            runCatching { com.teamxv.qrmonitor.comms.CommsEngine.queue(getApplication(), "ALERT", body, "$who • $post") }
+                .onSuccess { sosState = if (com.teamxv.qrmonitor.comms.CommsEngine.state.value.online) "SOS sent to the Command Center" else "SOS queued — it is sent the moment the link returns" }
+                .onFailure { sosState = "SOS could not be queued: ${it.message}" }
+        }
+    }
+
     fun commsSeen() {
         viewModelScope.launch(Dispatchers.IO) { com.teamxv.qrmonitor.comms.CommsEngine.markSeen(getApplication()) }
     }
@@ -720,6 +746,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             api.stations().onSuccess { (locs, gts) ->
                 api.reasonsFromServer?.let { config.movementReasons = it; reasons = it }
+                api.returnReasonsFromServer?.let { config.returnReasons = it; returnReasons = it }
                 config.cachedLocations = locs; config.cachedGates = gts
                 locations = locs; gates = gts
             }

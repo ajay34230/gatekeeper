@@ -155,6 +155,7 @@ object CommsEngine {
                     dao.advanceOut(id, if (frame["state"]?.jsonPrimitive?.content == "READ") "READ" else "DELIVERED")
                 }
                 "call" -> CallManager.onSignal(context, frame)
+                "sync" -> com.teamxv.qrmonitor.sync.SyncScheduler.enqueueNow(context) // e.g. a card was reported lost
             }
         }
         socket = null; link = null

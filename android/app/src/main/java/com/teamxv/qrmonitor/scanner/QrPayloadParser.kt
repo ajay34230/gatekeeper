@@ -2,7 +2,7 @@ package com.teamxv.qrmonitor.scanner
 
 /** Parses gate QR payloads. See EventRepository.lookupIdentity for how the code part is resolved. */
 object QrPayloadParser {
-    private val person = Regex("^P[0-9]{3,6}$")
+    private val person = Regex("^[PG][0-9]{3,6}$") // soldiers P…, visitor passes G…
     private val vehicle = Regex("^V[0-9]{3,6}$")
 
     data class Parsed(val code: String, val location: String)

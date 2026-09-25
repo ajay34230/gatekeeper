@@ -61,7 +61,7 @@ class EventRepository(
     suspend fun applyMasterBootstrap(master: com.teamxv.qrmonitor.network.MasterBootstrapResponse) {
         db.withTransaction {
             persons.upsertAll(master.persons.map {
-                PersonEntity(it.personId, it.name, it.category, it.active, it.secretCode, it.rank, it.serviceNo, it.unit, it.company, it.role, it.status, it.accessLocations, it.secretHash)
+                PersonEntity(it.personId, it.name, it.category, it.active, it.secretCode, it.rank, it.serviceNo, it.unit, it.company, it.role, it.status, it.accessLocations, it.secretHash, it.validFrom, it.validTo)
             })
             vehicles.upsertAll(master.vehicles.map {
                 VehicleEntity(it.vehicleId, it.registration, it.type, it.active, it.secretCode, it.milReg, it.model, it.company, it.status, it.secretHash)
@@ -167,11 +167,11 @@ class EventRepository(
      */
     suspend fun applyOnlineVerification(v: com.teamxv.qrmonitor.network.VerifyResponse): IdentityResult = db.withTransaction {
         if (v.type == "PERSON") {
-            persons.upsert(PersonEntity(v.id, "", v.category, v.status == "ACTIVE", status = v.status))
+            persons.upsert(PersonEntity(v.id, "", v.category, v.status == "ACTIVE", status = v.status, validFrom = v.validFrom, validTo = v.validTo))
             val local = sessions.activeForPerson(v.id)
             if (v.inside && local == null) sessions.insert(PresenceSessionEntity("SRV-${v.id}-${v.insideSince}", v.id, null, "DIRECT", null, "SERVER", v.insideSince, "", ""))
             if (!v.inside && local != null && events.pendingCount() == 0) sessions.closeDirectForPerson(v.id, System.currentTimeMillis())
-            IdentityResult(person = PersonEntity(v.id, v.name.ifBlank { "ID " + v.id }, v.category, v.status == "ACTIVE", "", v.rank, v.serviceNo, v.unit, v.company, "", v.status))
+            IdentityResult(person = PersonEntity(v.id, v.name.ifBlank { "ID " + v.id }, v.category, v.status == "ACTIVE", "", v.rank, v.serviceNo, v.unit, v.company, "", v.status, validFrom = v.validFrom, validTo = v.validTo))
         } else {
             vehicles.upsert(VehicleEntity(v.id, "", "", v.status == "ACTIVE", status = v.status))
             val m = v.manifest
@@ -199,7 +199,8 @@ class EventRepository(
         locationMismatch: Boolean = false,
         scannedLocation: String = "",
         reason: String = "",
-        remarks: String = ""
+        remarks: String = "",
+        expectedReturn: Long = 0L
     ): OperationResult<MovementEvent> = db.withTransaction {
         val p = persons.find(personId) ?: return@withTransaction OperationResult.Rejected("PERSON_NOT_FOUND")
         if (!p.active) return@withTransaction OperationResult.Rejected("INACTIVE_PERSON")
@@ -207,6 +208,9 @@ class EventRepository(
         val active = sessions.activeForPerson(personId)
         val type = if (active == null) EventType.ENTRY else EventType.EXIT
         val now = System.currentTimeMillis()
+        // Visitor passes only admit entry inside their validity window (exit is always allowed).
+        if (type == EventType.ENTRY && p.validTo > 0 && now > p.validTo) return@withTransaction OperationResult.Rejected("PASS_EXPIRED")
+        if (type == EventType.ENTRY && p.validFrom > 0 && now < p.validFrom) return@withTransaction OperationResult.Rejected("PASS_NOT_YET_VALID")
         val eventId = newEventId()
         val event = MovementEvent(
             eventId, EntityType.PERSON, personId, type, location, gate, device, operator,
@@ -216,7 +220,8 @@ class EventRepository(
             locationMismatch = locationMismatch,
             scannedLocation = scannedLocation,
             reason = reason.trim().take(60),
-            remarks = remarks.trim().take(300)
+            remarks = remarks.trim().take(300),
+            expectedReturn = if (type == EventType.EXIT) expectedReturn else 0L
         )
         events.insert(toEntity(event))
         if (type == EventType.ENTRY) {
@@ -381,7 +386,7 @@ class EventRepository(
         e.eventId, e.entityType.name, e.entityId, e.eventType.name,
         e.locationId, e.gateId, e.deviceId, e.operatorId, e.eventTimestamp,
         e.createdAt, e.syncStatus.name, 0, null, e.createdAt,
-        e.sourceType.name, e.sourceId, e.locationMismatch, e.scannedLocation, e.reason, e.remarks
+        e.sourceType.name, e.sourceId, e.locationMismatch, e.scannedLocation, e.reason, e.remarks, e.expectedReturn
     )
 
     private fun toModel(e: MovementEventEntity) = MovementEvent(
@@ -389,7 +394,7 @@ class EventRepository(
         EventType.valueOf(e.eventType), e.locationId, e.gateId,
         e.deviceId, e.operatorId, e.eventTimestamp, e.createdAt,
         SyncStatus.valueOf(e.syncStatus), PresenceSource.valueOf(e.sourceType), e.sourceId,
-        e.locationMismatch, e.scannedLocation, e.reason, e.remarks
+        e.locationMismatch, e.scannedLocation, e.reason, e.remarks, e.expectedReturn
     )
 
     private fun newEventId() = "EVT-" + UUID.randomUUID().toString().replace("-", "").take(12).uppercase()

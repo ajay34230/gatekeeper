@@ -36,7 +36,8 @@ data class MovementEvent(
     val locationMismatch: Boolean = false,
     val scannedLocation: String = "",
     val reason: String = "",
-    val remarks: String = ""
+    val remarks: String = "",
+    val expectedReturn: Long = 0L
 )
 
 data class NetworkStatus(

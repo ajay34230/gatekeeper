@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         VehicleManifestEntity::class,
         VehicleManifestMemberEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -80,6 +80,18 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v8: visitor pass validity on persons; expected return on gate records. */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE persons ADD COLUMN validFrom INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE persons ADD COLUMN validTo INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE movement_events ADD COLUMN expectedReturn INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        /** Closes the open database (used before the terminal is wiped). */
+        fun closeInstance() = synchronized(this) { INSTANCE?.close(); INSTANCE = null }
+
         val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
 
         fun get(context: Context): AppDatabase =
@@ -91,7 +103,7 @@ abstract class AppDatabase : RoomDatabase() {
                     val passphrase = com.teamxv.qrmonitor.security.SecureStore(context.applicationContext).databasePassphrase()
                     Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "xv_access_control_secure.db")
                         .openHelperFactory(net.zetetic.database.sqlcipher.SupportOpenHelperFactory(passphrase))
-                        .addMigrations(MIGRATION_5_6, MIGRATION_6_7)
+                        .addMigrations(MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                         .fallbackToDestructiveMigration()
                         .build()
                 }
