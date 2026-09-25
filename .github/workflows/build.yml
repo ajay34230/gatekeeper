@@ -103,7 +103,7 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back emulated -camera-front none
           working-directory: android
           script: adb logcat -c; ./gradlew --no-daemon -PxvEmulator :app:connectedDebugAndroidTest || { adb logcat -d > /tmp/logcat.txt; grep -n -E "FATAL EXCEPTION|AndroidRuntime|XV-GATE|Caused by|at com\.teamxv" /tmp/logcat.txt | head -300; exit 1; }
       - uses: actions/upload-artifact@v4

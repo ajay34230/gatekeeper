@@ -44,8 +44,9 @@ class GateFlowSmokeTest {
 
     @Before
     fun seed() {
-        if (Build.VERSION.SDK_INT >= 33) InstrumentationRegistry.getInstrumentation().uiAutomation
-            .grantRuntimePermission(ctx.packageName, Manifest.permission.POST_NOTIFICATIONS)
+        val ui = InstrumentationRegistry.getInstrumentation().uiAutomation
+        if (Build.VERSION.SDK_INT >= 33) ui.grantRuntimePermission(ctx.packageName, Manifest.permission.POST_NOTIFICATIONS)
+        ui.grantRuntimePermission(ctx.packageName, Manifest.permission.CAMERA)
         val cfg = AppConfig(ctx)
         cfg.saveLogin("OP-TEST", "Test Operator", "GATEKEEPER", "", System.currentTimeMillis() + 3_600_000, 3_600)
         cfg.locationId = "LOC01"; cfg.locationName = "Main Gate Post"; cfg.gateId = "G1"; cfg.gateName = "Gate 1"
@@ -64,8 +65,11 @@ class GateFlowSmokeTest {
     @After
     fun tearDown() { UiPrefs.updateDark(false); UiPrefs.updateHindi(false); if (::scenario.isInitialized) scenario.close() }
 
+    /** Opens the real camera scanner, lets frames flow for a moment, then delivers the code as the scanner does. */
     private fun scan(code: String) {
-        scenario.onActivity { vm.openPersonScanner(); vm.onQr(code) }
+        scenario.onActivity { vm.openPersonScanner() }
+        Thread.sleep(2_500)
+        scenario.onActivity { vm.onQr(code) }
         compose.waitUntil(15_000) { compose.onAllNodesWithText("Person Identified").fetchSemanticsNodes().isNotEmpty() || compose.onAllNodesWithText("व्यक्ति की पहचान हुई").fetchSemanticsNodes().isNotEmpty() }
     }
 

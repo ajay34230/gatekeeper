@@ -171,10 +171,12 @@ fun QrScannerView(
         controller.bindToLifecycle(lifecycleOwner)
         controller.setImageAnalysisAnalyzer(
             executor,
+            // Results arrive on the main thread: that executor is never shut down, so a detection still in flight
+            // when the scanner closes cannot be rejected (RejectedExecutionException used to crash the app).
             MlKitAnalyzer(
                 listOf(scanner),
                 ImageAnalysis.COORDINATE_SYSTEM_VIEW_REFERENCED,
-                executor
+                ContextCompat.getMainExecutor(context)
             ) { result ->
                 if (locked.get()) return@MlKitAnalyzer
                 val barcodeResult = result.getValue(scanner) ?: return@MlKitAnalyzer
@@ -189,17 +191,20 @@ fun QrScannerView(
                 val payload = raw ?: return@MlKitAnalyzer
                 if (locked.compareAndSet(false, true)) {
                     if (soundEnabled) playScanTone(context)
-                    ContextCompat.getMainExecutor(context).execute { onResult(payload.trim()) }
+                    onResult(payload.trim())
                 }
             }
         )
 
         onDispose {
-            controller.enableTorch(false)
+            runCatching { controller.enableTorch(false) }
             controller.clearImageAnalysisAnalyzer()
             controller.unbind()
-            scanner.close()
-            executor.shutdownNow()
+            // Let a frame that is still being analysed finish before its detector and thread are released.
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                runCatching { scanner.close() }
+                executor.shutdown()
+            }, 1_500)
         }
     }
 
@@ -324,11 +329,9 @@ fun QrScannerView(
 private fun playScanTone(context: Context) {
     runCatching {
         val tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80)
-        try {
-            tone.startTone(ToneGenerator.TONE_PROP_BEEP, 90)
-        } finally {
-            tone.release()
-        }
+        if (tone.startTone(ToneGenerator.TONE_PROP_BEEP, 120))
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ tone.release() }, 250)
+        else tone.release()
     }
 }
 
