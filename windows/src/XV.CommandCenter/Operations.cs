@@ -333,6 +333,53 @@ public static class OverdueMonitor
     }
 }
 
+/// <summary>Reminds once, up to 24 hours ahead, that someone on leave is due back soon — so their return is
+/// expected in advance instead of only finding out after they're already overdue. Visitor passes aren't included:
+/// an overstaying visitor is already overdue the moment their pass ends, so there is no "soon" to warn about.</summary>
+public static class DueSoonMonitor
+{
+    static readonly HashSet<string> Alerted = [];
+    static readonly DispatcherTimer Timer = new() { Interval = TimeSpan.FromMinutes(2) };
+    const long LeadMs = 24 * 60 * 60 * 1000;
+
+    public static void Start()
+    {
+        Timer.Tick += (_, _) => Check();
+        Timer.Start();
+        Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, Check);
+    }
+
+    public static void Check()
+    {
+        List<Dictionary<string, object?>> dueSoon;
+        try
+        {
+            var now = Store.NowMs;
+            dueSoon = App.Store.Absences().Where(a => S(a["kind"]) == "RETURN" && a["overdue"] is not true
+                && L(a["expected_return"]) - now > 0 && L(a["expected_return"]) - now <= LeadMs).ToList();
+        }
+        catch { return; }
+        var fresh = dueSoon.Where(a => Alerted.Add($"{S(a["person_id"])}|{L(a["expected_return"])}")).ToList();
+        if (fresh.Count == 0 || Application.Current.MainWindow is not Window main) return;
+        foreach (var a in fresh) App.Store.AdminAudit("RETURN_DUE_SOON_ALERT", $"{S(a["person_id"])} {S(a["reason"])} due {Time(L(a["expected_return"]), "yyyy-MM-dd HH:mm")}");
+        SystemSounds.Asterisk.Play();
+        var w = new Window
+        {
+            Title = "Expected Back Soon", Width = 520, SizeToContent = SizeToContent.Height, Topmost = true, Background = B("#2A1F08"), ResizeMode = ResizeMode.NoResize,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen, Icon = new BitmapImage(new Uri("pack://application:,,,/Assets/app.ico")),
+        };
+        var list = Col(fresh.Take(8).Select(a => (UIElement)T($"• {S(a["rank"])} {S(a["name"])} ({DisplayId(S(a["person_id"]))}) — {S(a["reason"])}, due {Time(L(a["expected_return"]), "dd MMM HH:mm")}", 12.5, "#FEF3C7").M(0, 3)).ToArray());
+        if (fresh.Count > 8) list.Children.Add(T($"… and {fresh.Count - 8} more", 12, "#FCD34D"));
+        w.Content = new Border
+        {
+            Padding = new Thickness(20), BorderBrush = B("#92400E"), BorderThickness = new Thickness(0, 4, 0, 0),
+            Child = Col(T($"⏰  {fresh.Count} EXPECTED BACK WITHIN 24 HOURS", 16, "#FCD34D", bold: true), T("Due to return from leave soon — not yet overdue.", 11, "#FDE68A").M(0, 4), list.M(0, 10),
+                Row(Btn("Open Leave & Overdue", (_, _) => { w.Close(); LeaveWindow.ShowWindow(main); }, "BtnAmber"), Btn("Dismiss", (_, _) => w.Close()).M(8)).M(0, 14)),
+        };
+        w.Show();
+    }
+}
+
 // ====================================================================== card lifecycle
 
 public sealed class CardRegisterWindow : DarkWindow

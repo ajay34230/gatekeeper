@@ -90,6 +90,7 @@ public partial class App : Application
             MessageBox.Show(main, "The backup was restored. Paired terminals keep working (same server identity and certificate).", "Restore finished");
         }
         OverdueMonitor.Start();
+        DueSoonMonitor.Start();
         AutoLock.Start();
         // First start: protect the Command Center before it is used (auto-lock, restore, exports need this password).
         if (!Settings.HasAdminPassword && Current.MainWindow is Window mw)
