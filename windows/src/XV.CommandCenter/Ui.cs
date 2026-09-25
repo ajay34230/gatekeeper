@@ -55,6 +55,26 @@ public static class Ui
         return d;
     }
 
+    /// <summary>Details on the left (wrapping), actions on the right at their natural width.</summary>
+    public static Grid SpreadWrap(UIElement left, UIElement right)
+    {
+        var g = new Grid();
+        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        if (right is FrameworkElement fe) { fe.VerticalAlignment = VerticalAlignment.Center; fe.Margin = new Thickness(12, 0, 0, 0); }
+        Grid.SetColumn(left, 0); Grid.SetColumn(right, 1);
+        g.Children.Add(left); g.Children.Add(right);
+        return g;
+    }
+
+    public static TextBlock Wrap(this TextBlock t) { t.TextWrapping = TextWrapping.Wrap; return t; }
+
+    /// <summary>Joins the non-empty parts with " • " (no stray separators for blank fields).</summary>
+    public static string Parts(params string[] parts) => string.Join("  •  ", parts.Where(p => !string.IsNullOrWhiteSpace(p)));
+
+    /// <summary>"Label: value", or empty when the value is blank.</summary>
+    public static string Labeled(string label, string value) => string.IsNullOrWhiteSpace(value) ? "" : $"{label}: {value}";
+
     public static T M<T>(this T e, double l, double t = 0, double r = 0, double b = 0) where T : FrameworkElement { e.Margin = new Thickness(l, t, r, b); return e; }
 
     public static Button Btn(string text, RoutedEventHandler click, string style = "BtnSmall", string? tip = null)

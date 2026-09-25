@@ -78,8 +78,8 @@ public sealed class VisitorsWindow : DarkWindow
             var (text, fg, bg, border) = State(v);
             var info = Col(
                 Row(T(S(v["name"]), 14, "#F4F4F5", bold: true), Pill(text, fg, bg, border, 9).M(10)),
-                T($"{id}  •  {S(v["unit"])}  •  ID proof: {S(v["id_proof"])}  •  Mobile: {S(v["mobile"])}", 11, "#A1A1AA", mono: true).M(0, 3),
-                T($"Purpose: {S(v["pass_purpose"])}   •   Visiting: {S(v["pass_host"])}", 11.5, "#D4D4D8").M(0, 3),
+                T(Parts(id, S(v["unit"]), Labeled("ID proof", S(v["id_proof"])), Labeled("Mobile", S(v["mobile"]))), 11, "#A1A1AA", mono: true).Wrap().M(0, 3),
+                T(Parts(Labeled("Purpose", S(v["pass_purpose"])), Labeled("Visiting", S(v["pass_host"]))), 11.5, "#D4D4D8").Wrap().M(0, 3),
                 T($"Valid {Time(L(v["valid_from"]), "dd MMM yyyy HH:mm")} → {Time(L(v["valid_to"]), "dd MMM yyyy HH:mm")}" +
                   (v["inside_since"] != null ? $"   •   inside since {Time(L(v["inside_since"]), "HH:mm")}" : ""), 11, "#FCD34D", mono: true).M(0, 3));
             var actions = Row(
@@ -90,7 +90,7 @@ public sealed class VisitorsWindow : DarkWindow
                     if (MessageBox.Show($"End the pass of {S(v["name"])} now? Entry will be refused from this moment; exit stays possible.", "End pass", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
                     App.Store.EndVisitorPass(id); App.Comms.RequestSyncAll("visitor pass ended");
                 }, "BtnDanger").M(6));
-            _list.Children.Add(Card(Spread(info, actions), pad: 12).M(0, 0, 0, 8));
+            _list.Children.Add(Card(SpreadWrap(info, actions), pad: 12).M(0, 0, 0, 8));
         }
     }
 
@@ -367,14 +367,14 @@ public sealed class CardRegisterWindow : DarkWindow
                     Pill($"CARD #{Math.Max(1, L(r["issues"]))}", "#FCD34D", "#2A1F08", "#92400E", 9).M(10),
                     L(r["lost"]) > 0 ? Pill($"LOST ×{L(r["lost"])}", "#FDA4AF", "#2A0F14", "#9F1239", 9).M(6) : new TextBlock(),
                     S(r["status"]) != "ACTIVE" ? Pill(S(r["status"]), "#FDA4AF", "#2A0F14", "#9F1239", 9).M(6) : new TextBlock()),
-                T($"{DisplayId(id)}  •  Army No {S(r["service_no"])}  •  {S(r["company"])} {S(r["platoon"])} {S(r["section"])}  •  Card ref {S(r["card_serial"])}", 11, "#A1A1AA", mono: true).M(0, 3),
+                T(Parts(DisplayId(id), Labeled("Army No", S(r["service_no"])), $"{S(r["company"])} {S(r["platoon"])} {S(r["section"])}".Trim(), Labeled("Card ref", S(r["card_serial"]))), 11, "#A1A1AA", mono: true).Wrap().M(0, 3),
                 T($"Issued {Time(issued, "dd MMM yyyy")}" + (r["reissued_at"] != null ? $"   •   last re-issued {Time(L(r["reissued_at"]), "dd MMM yyyy HH:mm")}" : "") +
-                  $"   •   last printed {(r["printed_at"] != null ? Time(L(r["printed_at"]), "dd MMM yyyy HH:mm") : "never")}   •   QR: no expiry", 11, "#D4D4D8", mono: true).M(0, 3));
+                  $"   •   last printed {(r["printed_at"] != null ? Time(L(r["printed_at"]), "dd MMM yyyy HH:mm") : "never")}   •   QR: no expiry", 11, "#D4D4D8", mono: true).Wrap().M(0, 3));
             var actions = Row(
                 Btn("History", (_, _) => History(id)),
                 Btn("Open in ID Card Studio", (_, _) => CardStudioWindow.Show(Owner, [id]), "BtnGold").M(6),
                 Btn("Report lost…", (_, _) => ReportLost(id, $"{S(r["rank"])} {S(r["name"])}"), "BtnDanger").M(6));
-            _list.Children.Add(Card(Spread(info, actions), pad: 12).M(0, 0, 0, 8));
+            _list.Children.Add(Card(SpreadWrap(info, actions), pad: 12).M(0, 0, 0, 8));
         }
     }
 
