@@ -1545,7 +1545,7 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
                 Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Shield, null, tint = UiOnInk, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("$action (${cfg.gateName.ifBlank { cfg.gateId }})", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = UiOnInk)
+                    Text(tr(action) + " (${cfg.gateName.ifBlank { cfg.gateId }})", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = UiOnInk)
                 }
             }
             Surface(
@@ -1563,7 +1563,7 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
 
     if (confirm) {
         ConfirmBottomSheet(
-            title = "CONFIRM ${if (session.inside) "EXIT" else "ENTRY"}",
+            title = tr("CONFIRM") + " " + tr(if (session.inside) "EXIT" else "ENTRY"),
             subtitle = "Confirmation Required",
             onDismiss = { confirm = false },
             onConfirm = { confirm = false; vm.confirmPerson(finalReason, remarks, if (session.inside && vm.returnReasons.any { it.equals(finalReason, ignoreCase = true) }) expectedReturn else 0L) }

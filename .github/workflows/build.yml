@@ -106,7 +106,7 @@ jobs:
           emulator-boot-timeout: 900
           emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back emulated -camera-front none
           working-directory: android
-          script: adb logcat -c; ./gradlew --no-daemon -PxvEmulator :app:connectedDebugAndroidTest || { adb logcat -d > /tmp/logcat.txt; grep -n -E "FATAL EXCEPTION|AndroidRuntime|XV-GATE|Caused by|at com\.teamxv" /tmp/logcat.txt | head -300; exit 1; }
+          script: adb logcat -c; ./gradlew --no-daemon -PxvEmulator :app:connectedDebugAndroidTest || { adb logcat -d > /tmp/logcat.txt; grep -n -E "FATAL EXCEPTION|XV-GATE|XV-APP|TestRunner|AssertionError|ComposeTimeout|at com\.teamxv" /tmp/logcat.txt | head -300; exit 1; }
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: android-device-test-report, path: android/app/build/reports/androidTests }

@@ -77,7 +77,7 @@ class GateFlowSmokeTest {
 
     private fun confirmAndFinish() {
         waitText("CONFIRM")
-        compose.onAllNodesWithText("CONFIRM")[1].performClick() // [0] is the sheet title "CONFIRM ENTRY/EXIT"
+        compose.onNodeWithText("CONFIRM").performClick() // exact match: the button (the sheet title is "CONFIRM ENTRY/EXIT")
         waitText("SCAN NEXT TARGET")
         compose.onNodeWithText("RETURN TO TERMINAL HOME", substring = true).performScrollTo().performClick()
         waitText("SCAN PERSON")
