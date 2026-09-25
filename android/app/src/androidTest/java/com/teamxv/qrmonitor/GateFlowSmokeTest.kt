@@ -125,4 +125,14 @@ class GateFlowSmokeTest {
         compose.onNodeWithText("शिफ्ट सौंपें / लॉग आउट").performScrollTo().performClick()
         waitText("शिफ्ट हस्तांतरण")
     }
+
+    @Test
+    fun diagnosticsExportContainsLoggedErrors() {
+        com.teamxv.qrmonitor.diag.CrashLog.e("XV-TEST", "diagnostics probe 4711")
+        val file = com.teamxv.qrmonitor.diag.CrashLog.export(ctx, "test summary")
+        val text = file.readText()
+        assertTrue(text.contains("terminal diagnostics"))
+        assertTrue(text.contains("diagnostics probe 4711"))
+        assertTrue(text.contains("test summary"))
+    }
 }

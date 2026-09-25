@@ -151,6 +151,26 @@ public sealed class StationsWindow : DarkWindow
 {
     readonly StackPanel _locs = new(), _gates = new();
 
+    /// <summary>What the exported diagnostics describe about this PC (no registry data, keys or passwords).</summary>
+    static string DiagnosticSummary()
+    {
+        var st = App.Settings;
+        var (entries, problems) = App.Store.VerifyAudit();
+        var devices = App.Store.Devices();
+        return string.Join("\n", [
+            $"XV Command Center {ApiServer.Version}",
+            $"Exported: {DateTime.Now:yyyy-MM-dd HH:mm:ss} (UTC{DateTimeOffset.Now:zzz})",
+            $"Windows: {Environment.OSVersion} ({(Environment.Is64BitOperatingSystem ? "64" : "32")}-bit), .NET {Environment.Version}",
+            $"Uptime of this program: {DateTime.Now - System.Diagnostics.Process.GetCurrentProcess().StartTime:d\\.hh\\:mm\\:ss}",
+            $"Gate server: port {st.Port}, running {App.Server?.Running}, last error: {(App.Server?.LastError ?? "none").Split('\n')[0]}",
+            $"Comms: {App.CommsStatus}",
+            $"Internet access: {st.InternetEnabled}, data sharing: {st.DataSharing}, auto-lock: {st.AutoLockMinutes} min",
+            $"Terminals: {devices.Count} ({devices.Count(d => Convert.ToInt64(d["active"]) == 1)} active)",
+            $"Audit trail: {entries} entries, {problems.Count} problem(s)",
+            ..problems.Select(p => "  " + p),
+            ""]);
+    }
+
     public StationsWindow() : base("Stations & Settings", "Locations and gates appear in the terminal's sign-in screen. Nothing is pre-filled — add the real posts of your base.", 700, 880)
     {
         var s = App.Settings;
@@ -191,6 +211,29 @@ public sealed class StationsWindow : DarkWindow
         Body.Children.Add(block);
         Body.Children.Add(Para("Incoming connections from paired terminals, the local network and VPN addresses keep working. The Command Center itself never uploads data anywhere.", "#71717A"));
         Body.Children.Add(Row(Btn(s.HasAdminPassword ? "Change administrator password" : "Set administrator password", (_, _) => AdminGate.ChangePassword(this), "BtnGold")).M(0, 6));
+
+        Body.Children.Add(Label("Diagnostics"));
+        Body.Children.Add(Para("Errors and crashes of this Command Center are written to a diagnostic log (technical messages only — no registry data or passwords). Export it and send the file to support when something goes wrong.", "#71717A"));
+        var diagInfo = T($"Log size: {Diag.SizeBytes() / 1024.0:0.#} KB", 11, "#A1A1AA", mono: true);
+        Body.Children.Add(Row(
+            Btn("Export diagnostic logs…", (_, _) =>
+            {
+                if (App.Settings.HasAdminPassword && !AdminGate.Require(this, "Export diagnostic logs")) return;
+                var dlg = new Microsoft.Win32.SaveFileDialog { FileName = $"XV-CommandCenter-logs-{DateTime.Now:yyyyMMdd-HHmm}.zip", Filter = "Zip archive|*.zip" };
+                if (dlg.ShowDialog(this) != true) return;
+                try
+                {
+                    var files = Diag.Export(dlg.FileName, DiagnosticSummary());
+                    App.Store.AdminAudit("DIAGNOSTICS_EXPORTED", System.IO.Path.GetFileName(dlg.FileName));
+                    MessageBox.Show(this, $"Diagnostic logs saved ({files} files):\n{dlg.FileName}", "Diagnostics");
+                }
+                catch (Exception ex) { MessageBox.Show(this, ex.Message, "Diagnostics"); }
+            }, "BtnGold"),
+            Btn("Clear logs", (_, _) =>
+            {
+                if (MessageBox.Show(this, "Delete the diagnostic log files?", "Diagnostics", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+                Diag.Clear(); diagInfo.Text = "Log size: 0 KB";
+            }).M(8), diagInfo.M(12)).M(0, 4));
 
         Body.Children.Add(Label("Maintenance"));
         Body.Children.Add(Row(Btn("Wipe gate records", (_, _) =>

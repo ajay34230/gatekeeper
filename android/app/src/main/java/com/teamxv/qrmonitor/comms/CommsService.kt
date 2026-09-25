@@ -71,7 +71,7 @@ class CommsService : Service() {
         runCatching {
             if (Build.VERSION.SDK_INT >= 34) startForeground(CommsNotifications.SERVICE_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING)
             else startForeground(CommsNotifications.SERVICE_ID, n)
-        }.onFailure { android.util.Log.w("XV-COMMS", "Foreground start refused", it); stopSelf() }
+        }.onFailure { com.teamxv.qrmonitor.diag.CrashLog.w("XV-COMMS", "Foreground start refused", it); stopSelf() }
     }
 
     companion object {

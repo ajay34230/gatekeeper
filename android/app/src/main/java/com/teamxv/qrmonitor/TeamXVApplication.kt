@@ -6,6 +6,7 @@ import com.teamxv.qrmonitor.sync.SyncScheduler
 class TeamXVApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        com.teamxv.qrmonitor.diag.CrashLog.install(this)
         com.teamxv.qrmonitor.network.ApiClient.onDeviceRevoked = { com.teamxv.qrmonitor.security.TerminalWipe.wipe(this) }
         SyncScheduler.ensurePeriodic(this)
     }

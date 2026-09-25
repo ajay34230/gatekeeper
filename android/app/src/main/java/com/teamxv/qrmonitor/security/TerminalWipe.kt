@@ -26,6 +26,7 @@ object TerminalWipe {
         runCatching { WorkManager.getInstance(app).cancelAllWork() }
         runCatching { AppDatabase.closeInstance() }
         runCatching { CommsDatabase.closeInstance() }
+        runCatching { java.io.File(app.filesDir, "logs").deleteRecursively(); java.io.File(app.cacheDir, "diag").deleteRecursively() }
         app.databaseList().forEach { runCatching { app.deleteDatabase(it) } }
         listOf("xv_config", "teamxv_secure", "teamxv_sync_state").forEach { runCatching { app.deleteSharedPreferences(it) } }
         runCatching { java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(KEY_ALIAS) }

@@ -121,7 +121,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Background work (sign-in, pairing, sync, Comms): an unexpected error is shown and logged, never a crash. */
     private val appErrors = kotlinx.coroutines.CoroutineExceptionHandler { _, e ->
-        android.util.Log.e("XV-APP", "Background action failed", e)
+        com.teamxv.qrmonitor.diag.CrashLog.e("XV-APP", "Background action failed", e)
         busy = false
         message = "Action failed: ${e.message ?: e.javaClass.simpleName}"
     }
@@ -131,7 +131,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * can scan again; the full error goes to the device log.
      */
     private val gateErrors = kotlinx.coroutines.CoroutineExceptionHandler { _, e ->
-        android.util.Log.e("XV-GATE", "Gate action failed", e)
+        com.teamxv.qrmonitor.diag.CrashLog.e("XV-GATE", "Gate action failed", e)
         showSuccess = false
         session = ScanSession.Unknown("This action could not be completed (${e.javaClass.simpleName}: ${e.message ?: "no details"}). Scan again; if it repeats, sync with the Command Center.")
     }
@@ -886,6 +886,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun updateSoundEnabled(enabled: Boolean) {
         soundEnabled = enabled
         config.soundEnabled = enabled
+    }
+
+    /** Settings → Diagnostics: exports crash reports and logs (with this summary) to one shareable text file. */
+    fun exportDiagnostics(onReady: (java.io.File) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO + appErrors) {
+            val summary = listOf(
+                "Paired: ${config.paired} • server ${config.serverName} • terminal ${config.deviceId}",
+                "Post: ${config.locationId}/${config.gateId} • operator ${config.operatorId} • signed in $loggedIn",
+                "Data sharing: ${config.sharingMode} • pending uploads $pending • needing attention $attention",
+                "Network: ${networkStatus.transport} • ${networkStatus.message} • route ${networkStatus.server}",
+                "Comms: ${com.teamxv.qrmonitor.comms.CommsEngine.state.value.status} ${com.teamxv.qrmonitor.comms.CommsEngine.state.value.detail}",
+                "Display: dark ${UiPrefs.dark} • Hindi ${UiPrefs.hindi}"
+            ).joinToString("\n")
+            val f = com.teamxv.qrmonitor.diag.CrashLog.export(getApplication(), summary)
+            kotlinx.coroutines.withContext(Dispatchers.Main) { onReady(f) }
+        }
     }
 
     fun currentConfig(): AppConfig = config

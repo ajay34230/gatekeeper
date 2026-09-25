@@ -404,6 +404,13 @@ private val Hindi: Map<String, String> = mapOf(
     "ENTER CODE MANUALLY" to "कोड स्वयं दर्ज करें",
     "Enter the QR payload exactly as printed on the credential." to "कार्ड पर छपा QR कोड हूबहू दर्ज करें।",
     "VERIFY CODE" to "कोड सत्यापित करें",
+    "DIAGNOSTICS" to "निदान",
+    "Crash reports" to "क्रैश रिपोर्ट",
+    "Log size" to "लॉग आकार",
+    "EXPORT LOGS" to "लॉग निर्यात करें",
+    "PREPARING…" to "तैयार हो रहा है…",
+    "CLEAR" to "साफ़ करें",
+    "Export and send this file to support when the app misbehaves. Technical messages only — no personnel data or passwords." to "ऐप में समस्या होने पर यह फ़ाइल निर्यात कर सहायता को भेजें। केवल तकनीकी संदेश — कोई कार्मिक डेटा या पासवर्ड नहीं।",
     "Wipe notice" to "डेटा मिटाने की सूचना",
     "Visitor pass" to "आगंतुक पास",
 )

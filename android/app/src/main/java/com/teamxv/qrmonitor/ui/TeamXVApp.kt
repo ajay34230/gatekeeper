@@ -1354,6 +1354,9 @@ private fun OperatorScreen(vm: MainViewModel, onOpenSettings: () -> Unit) {
         DisplaySettingsCard()
 
         Spacer(Modifier.height(10.dp))
+        DiagnosticsCard(vm)
+
+        Spacer(Modifier.height(10.dp))
         SecondaryButton("CHANGE POST & CONNECTION", Icons.Default.Settings, onOpenSettings)
 
         Spacer(Modifier.height(12.dp))
@@ -1631,6 +1634,33 @@ private fun DisplaySettingsCard() {
                 Text("Language", fontFamily = Sans, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = UiInk)
                 Spacer(Modifier.weight(1f))
                 LanguageSwitch()
+            }
+        }
+    }
+}
+
+/** Settings → Diagnostics: crash reports and logs, exported as one file through the share sheet. */
+@Composable
+private fun DiagnosticsCard(vm: MainViewModel) {
+    val context = LocalContext.current
+    var crashes by remember { mutableIntStateOf(com.teamxv.qrmonitor.diag.CrashLog.crashCount()) }
+    var size by remember { mutableStateOf(com.teamxv.qrmonitor.diag.CrashLog.sizeKb()) }
+    var busy by remember { mutableStateOf(false) }
+    Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
+        Column(Modifier.padding(13.dp)) {
+            Text("DIAGNOSTICS", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 1.sp, color = UiFaint)
+            Spacer(Modifier.height(6.dp))
+            Text(tr("Crash reports") + ": $crashes • " + tr("Log size") + ": $size KB", fontFamily = Mono, fontSize = 11.sp, color = if (crashes > 0) UiError else UiMuted)
+            Text("Export and send this file to support when the app misbehaves. Technical messages only — no personnel data or passwords.", fontFamily = Sans, fontSize = 10.sp, color = UiMuted, modifier = Modifier.padding(top = 4.dp))
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PrimaryButton(Modifier.weight(1f), if (busy) "PREPARING…" else "EXPORT LOGS", null, !busy) {
+                    busy = true
+                    vm.exportDiagnostics { f -> busy = false; runCatching { com.teamxv.qrmonitor.diag.CrashLog.share(context, f) } }
+                }
+                SecondaryButton(Modifier.weight(1f), "CLEAR", null) {
+                    com.teamxv.qrmonitor.diag.CrashLog.clear(); crashes = 0; size = 0L
+                }
             }
         }
     }

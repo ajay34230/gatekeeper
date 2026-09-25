@@ -24,8 +24,17 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        // Crash collector: every unexpected error goes to the diagnostic log (Stations & Settings → Diagnostics → Export).
+        AppDomain.CurrentDomain.UnhandledException += (_, ex) =>
+        {
+            Diag.Error("FATAL unhandled exception" + (ex.IsTerminating ? " (program closing)" : ""), ex.ExceptionObject as Exception);
+            try { File.AppendAllText(Paths.File("error.log"), $"{DateTime.Now:u} FATAL {ex.ExceptionObject}\n"); } catch { }
+        };
+        TaskScheduler.UnobservedTaskException += (_, ex) => { Diag.Error("Unobserved background task error", ex.Exception); ex.SetObserved(); };
+        Diag.Info($"Command Center {ApiServer.Version} starting on {Environment.OSVersion} (.NET {Environment.Version})");
         DispatcherUnhandledException += (_, ex) =>
         {
+            Diag.Error("UI error", ex.Exception);
             File.AppendAllText(Paths.File("error.log"), $"{DateTime.Now:u} {ex.Exception}\n");
             MessageBox.Show(ex.Exception.Message, "XV Command Center", MessageBoxButton.OK, MessageBoxImage.Warning);
             ex.Handled = true;
@@ -56,6 +65,8 @@ public partial class App : Application
             {
                 if (m.Kind == "ALERT") Current.Dispatcher.BeginInvoke(() => { if (Current.MainWindow is Window w && screenshotDir == null) CommsWindow.ShowIncomingAlert(w, m); });
             };
+            Server.Log += Diag.Info;
+            Comms.Log += Diag.Info;
             Calls.Init();
             await StartServerAsync();
         }
