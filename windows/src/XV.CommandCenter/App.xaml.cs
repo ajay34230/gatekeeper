@@ -91,6 +91,13 @@ public partial class App : Application
         }
         OverdueMonitor.Start();
         AutoLock.Start();
+        // First start: protect the Command Center before it is used (auto-lock, restore, exports need this password).
+        if (!Settings.HasAdminPassword && Current.MainWindow is Window mw)
+            mw.Dispatcher.BeginInvoke(() =>
+            {
+                MessageBox.Show(mw, "Set the administrator password now. It protects exports, backups, restore, lost-card reports and settings changes, and unlocks the Command Center after auto-lock.\n\nKeep it safe: it cannot be recovered.", "Secure this Command Center", MessageBoxButton.OK, MessageBoxImage.Information);
+                AdminGate.ChangePassword(mw);
+            }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
     }
 
     /// <summary>Stops everything, replaces the data with the backup and starts a fresh instance.</summary>
