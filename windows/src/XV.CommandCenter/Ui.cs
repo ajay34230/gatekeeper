@@ -92,13 +92,14 @@ public static class Ui
 
     public static string Time(long ms, string fmt = "HH:mm:ss") => ms <= 0 ? "—" : DateTimeOffset.FromUnixTimeMilliseconds(ms).LocalDateTime.ToString(fmt);
 
-    /// <summary>"Xmo Yd Zh Wm" breakdown for stay durations — months and days only appear once the stay is long enough.</summary>
+    /// <summary>"Yd Zh Wm" breakdown for stay durations (days only once the stay is long enough); with "Show months in
+    /// durations" on in Stations &amp; Settings, 30+ days are folded into "Xmo Yd Zh Wm" instead of piling up days.</summary>
     public static string Duration(long ms)
     {
         if (ms <= 0) return "0m";
         var t = TimeSpan.FromMilliseconds(ms);
-        var months = t.Days / 30;
-        var days = t.Days % 30;
+        var months = App.Settings.ShowMonthsInDuration ? t.Days / 30 : 0;
+        var days = months > 0 ? t.Days % 30 : t.Days;
         var parts = new List<string>();
         if (months > 0) parts.Add($"{months}mo");
         if (months > 0 || days > 0) parts.Add($"{days}d");

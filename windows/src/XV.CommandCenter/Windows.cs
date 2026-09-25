@@ -200,6 +200,8 @@ public sealed class StationsWindow : DarkWindow
         reasons.AcceptsReturn = true; reasons.MinHeight = 110; reasons.TextWrapping = TextWrapping.Wrap;
         var tokenH = Field("Operator sign-in length on terminals (hours, at least 24)", s.TokenHours.ToString(), mono: true);
         var graceH = Field("Offline grace period after session expiry (hours)", s.OfflineGraceHours.ToString(), mono: true);
+        var showMonths = new CheckBox { Content = "Show months in stay durations once they pass 30 days (e.g. \"1mo 5d 2h 10m\") — off shows plain days/hours/mins", IsChecked = s.ShowMonthsInDuration, Margin = new Thickness(0, 8, 0, 0) };
+        Body.Children.Add(showMonths);
 
         Body.Children.Add(Label("Data protection"));
         Body.Children.Add(Para("Terminals only ever receive data when they ask for it. Choose how much of the registry they are given. Gate records always flow from the terminals to this PC.", "#71717A"));
@@ -264,6 +266,7 @@ public sealed class StationsWindow : DarkWindow
             var restart = p != s.Port;
             s.ServerName = name.Text.Trim().Length > 0 ? name.Text.Trim() : Environment.MachineName; s.Port = p; s.RequireApproval = approval.IsChecked == true;
             s.StartWithWindows = autostart.IsChecked == true; s.TokenHours = th; s.OfflineGraceHours = gh;
+            s.ShowMonthsInDuration = showMonths.IsChecked == true;
             static List<string> Lines(string t) => t.Split('\n', '\r', ',').Select(x => x.Trim()).Where(x => x.Length > 0 && x.Length <= 40).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             s.CustomFields = Lines(fields.Text);
             s.ReturnDateReasons = Lines(returnReasons.Text);

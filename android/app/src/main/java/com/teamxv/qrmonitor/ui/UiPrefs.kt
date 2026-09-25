@@ -28,6 +28,9 @@ object UiPrefs {
         private set
     var hindi by mutableStateOf(false)
         private set
+    /** Off by default: stay durations stay as plain days/hours/mins until this is turned on in Settings. */
+    var showMonths by mutableStateOf(false)
+        private set
     private var appContext: Context? = null
 
     fun init(context: Context) {
@@ -35,13 +38,16 @@ object UiPrefs {
         val p = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
         dark = p.getBoolean("dark", false)
         hindi = p.getBoolean("hindi", false)
+        showMonths = p.getBoolean("showMonths", false)
     }
 
     fun updateDark(value: Boolean) { dark = value; save() }
     fun updateHindi(value: Boolean) { hindi = value; save() }
+    fun updateShowMonths(value: Boolean) { showMonths = value; save() }
 
     private fun save() {
-        appContext?.getSharedPreferences(FILE, Context.MODE_PRIVATE)?.edit()?.putBoolean("dark", dark)?.putBoolean("hindi", hindi)?.apply()
+        appContext?.getSharedPreferences(FILE, Context.MODE_PRIVATE)?.edit()
+            ?.putBoolean("dark", dark)?.putBoolean("hindi", hindi)?.putBoolean("showMonths", showMonths)?.apply()
     }
 }
 

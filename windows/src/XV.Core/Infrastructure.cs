@@ -122,6 +122,9 @@ public sealed class Settings
     public int OfflineGraceHours { get; set; } = 12;
     public bool StartWithWindows { get; set; } = true;
 
+    /// <summary>Break a long stay into months once it passes 30 days ("1mo 5d") instead of just piling up days.</summary>
+    public bool ShowMonthsInDuration { get; set; }
+
     static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
     static string FilePath => Paths.File("settings.json");
 

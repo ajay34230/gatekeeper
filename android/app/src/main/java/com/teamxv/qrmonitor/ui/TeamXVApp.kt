@@ -1658,6 +1658,17 @@ private fun DisplaySettingsCard() {
                 Spacer(Modifier.weight(1f))
                 LanguageSwitch()
             }
+            Divider(color = UiBorderSoft, modifier = Modifier.padding(vertical = 10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.AccessTime, null, tint = if (UiPrefs.showMonths) UiBlue else UiFaint, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Show months in stay durations", fontFamily = Sans, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = UiInk)
+                    Text("Off shows plain days/hours/mins; on folds 30+ day stays into months", fontFamily = Sans, fontSize = 9.sp, color = UiMuted)
+                }
+                Spacer(Modifier.width(8.dp))
+                TogglePill(UiPrefs.showMonths) { UiPrefs.updateShowMonths(!UiPrefs.showMonths) }
+            }
         }
     }
 }
@@ -2619,13 +2630,14 @@ private fun displayId(id: String): String =
 private fun initials(name: String): String =
     name.trim().split(Regex("\\s+")).take(2).joinToString("") { it.firstOrNull()?.uppercase() ?: "" }.ifBlank { "?" }
 
-/** "Xmo Yd Zh Wm" breakdown, same as the Command Center's — months and days only appear once the stay is long enough. */
+/** "Yd Zh Wm" breakdown, same as the Command Center's; with "Show months in durations" on in Settings, 30+ day
+ * stays fold into "Xmo Yd Zh Wm" instead of piling up days. */
 private fun formatDuration(ms: Long): String {
     if (ms <= 0) return "0m"
     val totalMinutes = TimeUnit.MILLISECONDS.toMinutes(ms)
-    var days = totalMinutes / 1440
-    val months = days / 30
-    days %= 30
+    val totalDays = totalMinutes / 1440
+    val months = if (UiPrefs.showMonths) totalDays / 30 else 0L
+    val days = if (months > 0) totalDays % 30 else totalDays
     val hours = (totalMinutes / 60) % 24
     val minutes = totalMinutes % 60
     val parts = mutableListOf<String>()
