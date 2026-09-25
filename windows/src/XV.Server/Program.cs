@@ -137,6 +137,8 @@ if (args.Contains("--ci-control"))
         {
             await Task.Delay(300);
             if (File.Exists(f)) { var id = File.ReadAllText(f).Trim(); File.Delete(f); store.RevokeDevice(id); Console.WriteLine("REVOKED " + id); }
+            var sf = Paths.File("ci-suspend");
+            if (File.Exists(sf)) { var pid = File.ReadAllText(sf).Trim(); File.Delete(sf); store.SetPersonStatus(pid, "SUSPENDED", "CI"); Console.WriteLine("SUSPENDED " + pid); }
         }
     });
 var done = new TaskCompletionSource();

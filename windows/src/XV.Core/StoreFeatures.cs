@@ -144,6 +144,14 @@ public sealed partial class Store
         RotateSecret("persons", id, "Replacement for lost card" + (remarks.Trim().Length > 0 ? " — " + remarks.Trim() : ""));
     }
 
+    /// <summary>Activates or suspends a credential (ACTIVE, SUSPENDED, …); a non-active person is refused at every gate.</summary>
+    public void SetPersonStatus(string personId, string status, string actor = "PC-ADMIN")
+    {
+        var id = CanonId(personId); status = Upper(status);
+        if (Exec("UPDATE persons SET status=$1, updated_at=$2 WHERE id=$3", status, NowMs, id) == 0) throw new StoreException("PERSON_NOT_FOUND", "Person is not in the register", 404);
+        Audit(actor, "PERSON_STATUS_" + status, "PERSON", id); Notify();
+    }
+
     // ================================================================== visitor / temporary passes
 
     /// <summary>Creates a visitor pass (ID G0001…): a person record limited to the validity window.</summary>

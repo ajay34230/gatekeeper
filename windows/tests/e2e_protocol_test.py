@@ -135,6 +135,34 @@ vi2 = ev("EVT-V5", "VEHICLE", "V014", "ENTRY")
 m5 = dict(man, manifestId="MNF-V5", entryEventId="EVT-V5", occupants=[vis[1]], driverId=vis[1], createdAt=vi2["createdAt"])
 code, body, _ = rpc("vehicle.transaction", {"event": vi2, "manifest": m5}, tok); assert code == 403 and body["reason"] == "PASS_EXPIRED", (code, body)
 print("visitor passes ok")
+# ---- failure cases the gate must handle safely
+code, body, _ = rpc("auth.login", {"username": "GK-01", "password": "wrong-password"}); assert code == 401 and body["reason"] == "INVALID_CREDENTIALS", (code, body)
+for _ in range(5): rpc("auth.login", {"username": "GK-77", "password": "nope"})
+code, body, _ = rpc("auth.login", {"username": "GK-77", "password": "nope"}); assert code == 429 and body["reason"] == "TOO_MANY_ATTEMPTS", (code, body)
+ts, nonce = int(time.time() * 1000), base64.urlsafe_b64encode(os.urandom(16)).decode().rstrip("=")
+r = S.post(host + "/api/v1/rpc", headers={"X-GK-Device": dev, "X-GK-Ts": str(ts), "X-GK-Nonce": nonce}, json={"iv": base64.b64encode(os.urandom(12)).decode(), "ct": base64.b64encode(os.urandom(48)).decode()})
+assert r.status_code == 400 and r.json()["reason"] == "DECRYPT_FAILED", (r.status_code, r.text)
+r = S.post(host + "/api/v1/rpc", headers={"X-GK-Device": dev, "X-GK-Ts": str(ts), "X-GK-Nonce": nonce + "x"}, data="not json")
+assert r.status_code == 400, r.status_code
+code, body, _ = rpc("events.create", dict(ev("EVT-1", "PERSON", "P001", "EXIT")), tok); assert code == 409 and body["reason"] == "EVENT_ID_REUSED", (code, body)
+code, body, _ = rpc("events.create", ev("EVT-F1", "PERSON", "P002", "EXIT"), tok); assert code == 409 and body["reason"] == "NOT_INSIDE", (code, body)
+code, body, _ = rpc("events.create", {"eventId": "EVT-F2"}, tok); assert code == 400, (code, body)
+code, body, _ = rpc("no.such.operation", {}, tok); assert code == 404, (code, body)
+# two gates scan the same person at the same moment: exactly one entry is recorded
+import threading
+res = []
+def gate(i): res.append(rpc("events.create", dict(ev(f"EVT-RACE-{i}", "PERSON", "P002", "ENTRY"), gateId=f"G0{i}"), tok)[0])
+th = [threading.Thread(target=gate, args=(i,)) for i in range(1, 5)]; [t.start() for t in th]; [t.join() for t in th]
+assert sorted(res) == [201, 409, 409, 409], res
+code, body, _ = rpc("events.create", ev("EVT-RACE-X", "PERSON", "P002", "EXIT"), tok); assert code == 201, (code, body)
+# a suspended person is refused at the gate (entry) and shown as suspended on verify
+open(os.path.join(os.environ["XV_CI_DATA"], "ci-suspend"), "w").write("P002")
+for _ in range(50):
+    if "SUSPENDED P002" in open(os.environ.get("XV_SRV_LOG", "srv.log")).read(): break
+    time.sleep(0.2)
+code, body, _ = rpc("events.create", ev("EVT-S1", "PERSON", "P002", "ENTRY"), tok); assert code == 409 and body["reason"] == "INACTIVE_PERSON", (code, body)
+code, who, _ = rpc("credential.verify", {"code": "CI-0002", "expected": "PERSON"}, tok); assert code == 200 and who["status"] == "SUSPENDED", (code, who)
+print("failure cases ok")
 # ---- leave tracking: exit with reason + expected return date (already passed → overdue on the PC)
 code, st2, _ = rpc("stations.list"); assert "TD" in st2["returnReasons"], st2
 code, body, _ = rpc("events.create", ev("EVT-L1", "PERSON", "P001", "EXIT", {"reason": "TD", "remarks": "CI", "expectedReturn": int(time.time() * 1000) - 3_600_000}), tok)
