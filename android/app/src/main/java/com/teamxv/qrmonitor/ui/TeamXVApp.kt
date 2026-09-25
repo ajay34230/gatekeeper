@@ -375,6 +375,13 @@ private fun LoginScreen(vm: MainViewModel) {
                         Spacer(Modifier.height(10.dp))
                         PrimaryButton(if (vm.busy) "PAIRING…" else if (vm.paired) "RE-PAIR WITH PC (SCAN QR)" else "SCAN PC PAIRING QR", Icons.Default.QrCodeScanner, !vm.busy) { vm.openPairingScanner() }
 
+                        // If the QR's addresses are not reachable (router isolating Wi-Fi clients, unusual PC network),
+                        // the guard types the PC address shown in the PC's pairing window; it is tried first.
+                        Spacer(Modifier.height(10.dp))
+                        Text("PC IP ADDRESS (OPTIONAL — IF PAIRING CANNOT REACH THE PC)", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 0.8.sp, color = UiMuted)
+                        Spacer(Modifier.height(4.dp))
+                        ConfigField("e.g. 192.168.1.20", vm.manualPcHost) { vm.manualPcHost = it.trim() }
+
                         // Remote pairing: the PC admin can send the pairing text (e.g. by message) to an off-base phone.
                         Spacer(Modifier.height(12.dp))
                         Text("OR PASTE PAIRING TEXT FROM THE PC", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 0.8.sp, color = UiMuted)

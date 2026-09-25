@@ -713,8 +713,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun openPairingScanner() { pairingMessage = ""; scannerTarget = ScannerTarget.PAIRING }
 
+    /** PC address typed by the guard (from the PC's pairing window); tried before the addresses in the QR. */
+    var manualPcHost by mutableStateOf("")
+
     fun pairWithQr(raw: String) {
-        val parsed = com.teamxv.qrmonitor.network.PairingInfo.parse(raw)
+        val typed = manualPcHost.trim().removePrefix("https://").substringBefore('/').substringBefore(':')
+        val parsed = com.teamxv.qrmonitor.network.PairingInfo.parse(raw)?.let { p ->
+            if (typed.matches(Regex("^[0-9]{1,3}(\\.[0-9]{1,3}){3}$|^[A-Za-z0-9.-]+$"))) p.copy(h = listOf(typed) + p.h.filter { it != typed }) else p
+        }
         // If the QR carries no internet address but one was entered on this phone, try it too.
         val info = parsed?.let { if (it.u.isBlank() && config.publicUrl.isNotBlank()) it.copy(u = config.publicUrl, pc = config.publicUsesCaCertificate) else it }
         if (info == null) { pairingMessage = "That is not a Command Center pairing QR. On the PC click 'Local Wi-Fi & Pair Device'."; return }

@@ -173,22 +173,41 @@ public static class CertManager
 
 public static class NetUtil
 {
-    /// <summary>IPv4 addresses of active LAN adapters, most likely first.</summary>
+    /// <summary>
+    /// IPv4 addresses phones can use to reach this PC, best first: real Wi-Fi / Ethernet adapters that have a gateway
+    /// (the router the phones are on). Virtual adapters (Hyper-V / WSL vEthernet, VirtualBox, VMware, VPN / TAP,
+    /// Bluetooth) and "no network" 169.254.x.x addresses are left out — a phone cannot reach them, and trying them
+    /// first made pairing slow or fail.
+    /// </summary>
     public static List<string> LanAddresses()
     {
-        var list = new List<string>();
+        var found = new List<(string ip, int rank)>();
+        string[] virtualNames = ["virtual", "vethernet", "hyper-v", "vmware", "virtualbox", "wsl", "tap", "tun", "vpn", "bluetooth", "loopback", "docker", "npcap", "zerotier", "hamachi"];
         try
         {
             foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
             {
-                if (ni.OperationalStatus != OperationalStatus.Up || ni.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
-                foreach (var ua in ni.GetIPProperties().UnicastAddresses)
-                    if (ua.Address.AddressFamily == AddressFamily.InterNetwork && IsPrivate(ua.Address))
-                        list.Add(ua.Address.ToString());
+                if (ni.OperationalStatus != OperationalStatus.Up || ni.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel) continue;
+                var name = (ni.Name + " " + ni.Description).ToLowerInvariant();
+                var isVirtual = virtualNames.Any(name.Contains);
+                var props = ni.GetIPProperties();
+                var hasGateway = props.GatewayAddresses.Any(g => g.Address.AddressFamily == AddressFamily.InterNetwork && !g.Address.Equals(IPAddress.Any));
+                foreach (var ua in props.UnicastAddresses)
+                {
+                    var a = ua.Address;
+                    if (a.AddressFamily != AddressFamily.InterNetwork || !IsPrivate(a) || IPAddress.IsLoopback(a)) continue;
+                    var b = a.GetAddressBytes();
+                    if (b[0] == 169 && b[1] == 254) continue; // no DHCP answer: not on any network
+                    // Tailscale / other overlay networks (100.64/10) stay usable but come after the real LAN.
+                    var rank = isVirtual ? 3 : hasGateway ? 0 : (b[0] == 100 ? 2 : 1);
+                    if (isVirtual && !(b[0] == 100)) continue; // Hyper-V, VirtualBox, VMware … are never reachable from a phone
+                    found.Add((a.ToString(), rank));
+                }
             }
         }
         catch { /* adapters unavailable */ }
-        return list.Distinct().OrderBy(a => a.StartsWith("192.168.") ? 0 : a.StartsWith("10.") ? 1 : 2).ToList();
+        return found.OrderBy(f => f.rank).ThenBy(f => f.ip.StartsWith("192.168.") ? 0 : f.ip.StartsWith("10.") ? 1 : 2)
+            .Select(f => f.ip).Distinct().ToList();
     }
 
     public static bool IsPrivate(IPAddress? ip)
