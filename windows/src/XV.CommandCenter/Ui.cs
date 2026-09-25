@@ -92,13 +92,16 @@ public static class Ui
 
     public static string Time(long ms, string fmt = "HH:mm:ss") => ms <= 0 ? "—" : DateTimeOffset.FromUnixTimeMilliseconds(ms).LocalDateTime.ToString(fmt);
 
-    /// <summary>Same "Xd Yh Zm" breakdown the reference uses for stay durations.</summary>
+    /// <summary>"Xmo Yd Zh Wm" breakdown for stay durations — months and days only appear once the stay is long enough.</summary>
     public static string Duration(long ms)
     {
         if (ms <= 0) return "0m";
         var t = TimeSpan.FromMilliseconds(ms);
+        var months = t.Days / 30;
+        var days = t.Days % 30;
         var parts = new List<string>();
-        if (t.Days > 0) parts.Add($"{t.Days}d");
+        if (months > 0) parts.Add($"{months}mo");
+        if (months > 0 || days > 0) parts.Add($"{days}d");
         parts.Add($"{t.Hours}h"); parts.Add($"{t.Minutes}m");
         return string.Join(" ", parts);
     }

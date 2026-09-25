@@ -2619,11 +2619,21 @@ private fun displayId(id: String): String =
 private fun initials(name: String): String =
     name.trim().split(Regex("\\s+")).take(2).joinToString("") { it.firstOrNull()?.uppercase() ?: "" }.ifBlank { "?" }
 
+/** "Xmo Yd Zh Wm" breakdown, same as the Command Center's — months and days only appear once the stay is long enough. */
 private fun formatDuration(ms: Long): String {
-    val totalMinutes = TimeUnit.MILLISECONDS.toMinutes(ms.coerceAtLeast(0L))
-    val hours = totalMinutes / 60
+    if (ms <= 0) return "0m"
+    val totalMinutes = TimeUnit.MILLISECONDS.toMinutes(ms)
+    var days = totalMinutes / 1440
+    val months = days / 30
+    days %= 30
+    val hours = (totalMinutes / 60) % 24
     val minutes = totalMinutes % 60
-    return if (hours > 0) "${hours}h ${minutes}m" else "${minutes.coerceAtLeast(1)}m"
+    val parts = mutableListOf<String>()
+    if (months > 0) parts += "${months}mo"
+    if (months > 0 || days > 0) parts += "${days}d"
+    parts += "${hours}h"
+    parts += "${minutes}m"
+    return parts.joinToString(" ")
 }
 
 private fun formatShort(ts: Long) = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(ts))
