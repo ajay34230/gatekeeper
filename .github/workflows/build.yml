@@ -148,7 +148,7 @@ jobs:
           emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back emulated -camera-front none
           working-directory: android
           script: |
-            adb logcat -c; ./gradlew --no-daemon -PxvEmulator "-Pandroid.testInstrumentationRunnerArguments.pairQr=$PAIRQR" :app:connectedDebugAndroidTest || { adb logcat -d > /tmp/logcat.txt; grep -E "TestRunner: (started|failed|run finished)|FATAL EXCEPTION|XV-GATE|XV-APP|Timed out|Error:|Exception:|at com\.teamxv" /tmp/logcat.txt | grep -v "at androidx\|at org.junit\|at java.lang.reflect" | head -120; exit 1; }
+            adb logcat -c; ./gradlew --no-daemon -PxvEmulator "-Pandroid.testInstrumentationRunnerArguments.pairQr=$PAIRQR" :app:connectedDebugAndroidTest || { adb logcat -d > /tmp/logcat.txt; grep -E "TestRunner: (failed|run finished|java\.|junit\.|androidx\.)|Timed out: |XV-GATE|XV-APP|FATAL EXCEPTION" /tmp/logcat.txt | grep -v "TestRunner: .at " | head -60; exit 1; }
             adb install -r app/build/outputs/apk/release/app-release.apk && adb logcat -c && adb shell monkey -p com.xv.accesscontrol --pct-syskeys 0 --throttle 250 -s 42 -v 1500 > /tmp/monkey.txt 2>&1; tail -5 /tmp/monkey.txt; adb logcat -d > /tmp/rel.txt; if grep -q -E "FATAL EXCEPTION|// CRASH|ANR in com.xv" /tmp/monkey.txt /tmp/rel.txt; then grep -n -A30 -E "FATAL EXCEPTION|// CRASH|ANR in" /tmp/monkey.txt /tmp/rel.txt | head -200; exit 1; fi; echo "release build: no crash in 1500 random actions"
       - uses: actions/upload-artifact@v4
         if: always()
