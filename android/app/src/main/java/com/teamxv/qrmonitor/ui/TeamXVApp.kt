@@ -1436,6 +1436,8 @@ private fun ConfigField(label: String, value: String, password: Boolean = false,
 @Composable
 private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonResult) {
     var confirm by rememberSaveable { mutableStateOf(false) }
+    // Defaults to what the presence tracker expects; the operator can flip it before confirming.
+    var chosenType by rememberSaveable(session.person.id) { mutableStateOf(if (session.inside) EventType.EXIT else EventType.ENTRY) }
     var reason by rememberSaveable(session.person.id) { mutableStateOf(if (session.inside) "" else vm.suggestedEntryReason(session.person.id)) }
     var expectedReturn by rememberSaveable(session.person.id) { mutableStateOf(0L) }
     var needDate by remember { mutableStateOf(false) }
@@ -1452,12 +1454,15 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
     }
     val person = session.person
     val nowMs = System.currentTimeMillis()
+    val exiting = chosenType == EventType.EXIT
+    val overridesPresence = exiting != session.inside
     // Visitor / temporary passes admit entry only inside their validity window (exit is always allowed).
-    val passBlocked = !session.inside && ((person.validTo > 0 && nowMs > person.validTo) || (person.validFrom > 0 && nowMs < person.validFrom))
+    val passBlocked = !exiting && ((person.validTo > 0 && nowMs > person.validTo) || (person.validFrom > 0 && nowMs < person.validFrom))
     val allowed = person.active && person.status == "ACTIVE" && !passBlocked
     val postName = cfg.locationName.ifBlank { cfg.locationId }
     val stayMs = if (session.inside && entryAt != null) System.currentTimeMillis() - entryAt else 0L
-    val action = if (session.inside) "RECORD EXIT" else "RECORD ENTRY"
+    val action = if (exiting) "RECORD EXIT" else "RECORD ENTRY"
+    val needsReturn = exiting && vm.returnReasons.any { it.equals(finalReason, ignoreCase = true) }
 
     Column(
         Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)
@@ -1539,13 +1544,17 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
                     if (passBlocked) (if (nowMs > person.validTo) " • PASS EXPIRED — entry refused" else " • NOT YET VALID — entry refused") else "",
                     if (passBlocked) BannerTone.Error else BannerTone.Warning)
             }
-            val needsReturn = session.inside && vm.returnReasons.any { it.equals(finalReason, ignoreCase = true) }
+            if (allowed) EntryExitToggle(chosenType) { chosenType = it }
+            if (allowed && overridesPresence) StatusBanner(
+                "Presence already shows this person ${if (session.inside) "INSIDE" else "OUTSIDE"} — choose ${if (session.inside) "Exit" else "Entry"} instead, or sync with the Command Center if that looks wrong.",
+                BannerTone.Error
+            )
             if (allowed) ReasonPicker(vm.reasons, reason, { reason = it }, customReason, { customReason = it }, remarks, { remarks = it })
             if (allowed && needsReturn) ReturnDatePicker(expectedReturn) { expectedReturn = it; needDate = false }
             if (allowed && needsReturn && needDate && expectedReturn == 0L) StatusBanner("Choose the expected return date for \"$finalReason\" before recording the exit.", BannerTone.Error)
-            if (allowed) Surface(
+            if (allowed && !overridesPresence) Surface(
                 Modifier.fillMaxWidth().height(58.dp).clickable {
-                    if (session.inside && vm.returnReasons.any { it.equals(finalReason, ignoreCase = true) } && expectedReturn == 0L) needDate = true
+                    if (needsReturn && expectedReturn == 0L) needDate = true
                     else confirm = true
                 },
                 color = UiInk,
@@ -1573,15 +1582,16 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
 
     if (confirm) {
         ConfirmBottomSheet(
-            title = tr("CONFIRM") + " " + tr(if (session.inside) "EXIT" else "ENTRY"),
+            title = tr("CONFIRM") + " " + tr(if (exiting) "EXIT" else "ENTRY"),
             subtitle = "Confirmation Required",
             onDismiss = { confirm = false },
-            onConfirm = { confirm = false; vm.confirmPerson(finalReason, remarks, if (session.inside && vm.returnReasons.any { it.equals(finalReason, ignoreCase = true) }) expectedReturn else 0L) }
+            onConfirm = { confirm = false; vm.confirmPerson(finalReason, remarks, if (needsReturn) expectedReturn else 0L, chosenType) }
         ) {
             ReviewRow("Personnel", "${session.person.name} (${displayId(session.person.id)})")
+            ReviewRow("Direction", tr(if (exiting) "EXIT" else "ENTRY"), valueColor = if (overridesPresence) UiWarning else UiInk)
             ReviewRow("Reason", finalReason.ifBlank { "—" })
             if (remarks.isNotBlank()) ReviewRow("Remarks", remarks.trim())
-            if (session.inside && expectedReturn > 0 && vm.returnReasons.any { it.equals(finalReason, ignoreCase = true) })
+            if (needsReturn && expectedReturn > 0)
                 ReviewRow("Expected Back", SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(expectedReturn)), valueColor = UiWarning)
             ReviewRow("Location / Gate", "$postName • ${cfg.gateName.ifBlank { cfg.gateId }}")
             if (session.locationMismatch) ReviewRow("Location Flag", "QR: ${session.scannedLocation}", valueColor = UiWarning)
@@ -1825,6 +1835,33 @@ private fun ReasonPicker(
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(remarks, { if (it.length <= 300) onRemarks(it) }, Modifier.fillMaxWidth(), maxLines = 3,
                 placeholder = { Text("Remarks (pass no., authority, destination…)", fontFamily = Sans, fontSize = 13.sp) }, shape = RoundedCornerShape(10.dp))
+        }
+    }
+}
+
+/** Lets the operator pick which movement this scan records, defaulting to what presence expects but always overridable. */
+@Composable
+private fun EntryExitToggle(chosen: EventType, onChoose: (EventType) -> Unit) {
+    Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, UiBorder)) {
+        Column(Modifier.padding(12.dp)) {
+            Text("DIRECTION", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 1.sp, color = UiMuted)
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth().height(46.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(EventType.ENTRY to "COMING IN", EventType.EXIT to "GOING OUT").forEach { (type, label) ->
+                    val selected = chosen == type
+                    Surface(
+                        Modifier.weight(1f).fillMaxHeight().clickable { onChoose(type) },
+                        color = if (selected) UiInk else UiSurfaceSubtle,
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, if (selected) UiInk else UiBorder)
+                    ) {
+                        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(tr(type.name), fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = if (selected) UiOnInk else UiInk, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                            Text(label, fontFamily = Sans, fontSize = 9.sp, color = if (selected) UiOnInk.copy(alpha = .75f) else UiMuted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                }
+            }
         }
     }
 }

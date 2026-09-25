@@ -113,6 +113,24 @@ class GateFlowSmokeTest {
         assertTrue(compose.onAllNodesWithText("RECORD ENTRY", substring = true).fetchSemanticsNodes().isEmpty())
     }
 
+    /** The scan screen shows an explicit Entry/Exit choice; picking the direction presence disagrees with is
+     * blocked with a clear message instead of silently recording it, and switching back completes normally. */
+    @Test
+    fun entryExitToggleLetsOperatorPickDirectionAndBlocksAContradiction() {
+        scan("XVPTESTCODE01")
+        compose.onNodeWithText("RECORD ENTRY", substring = true).assertExists()
+        compose.onNodeWithText("EXIT").performScrollTo().performClick()
+        waitText("choose Entry instead")
+        assertTrue(compose.onAllNodesWithText("RECORD ENTRY", substring = true).fetchSemanticsNodes().isEmpty())
+        assertTrue(compose.onAllNodesWithText("RECORD EXIT", substring = true).fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithText("ENTRY").performScrollTo().performClick()
+        compose.onNodeWithText("RECORD ENTRY", substring = true).performScrollTo().performClick()
+        confirmAndFinish()
+
+        val events = runBlocking { AppDatabase.get(ctx).movementEventDao().latestForEntity("PERSON", "P001") }
+        assertEquals(EventType.ENTRY.name, events?.eventType)
+    }
+
     @Test
     fun nightModeHindiAndHandoverRender() {
         scenario.onActivity { UiPrefs.updateDark(true); UiPrefs.updateHindi(true) }

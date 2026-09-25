@@ -445,7 +445,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return if (lastExit?.reason?.contains("leave", ignoreCase = true) == true && reasons.any { it.equals("Rejoining from Leave", true) }) "Rejoining from Leave" else ""
     }
 
-    fun confirmPerson(reason: String = "", remarks: String = "", expectedReturn: Long = 0L) {
+    fun confirmPerson(reason: String = "", remarks: String = "", expectedReturn: Long = 0L, forcedType: EventType? = null) {
         val s = session as? ScanSession.PersonResult ?: return
         viewModelScope.launch(gateErrors) {
             when (
@@ -459,7 +459,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     s.scannedLocation,
                     reason,
                     remarks,
-                    expectedReturn
+                    expectedReturn,
+                    forcedType
                 )
             ) {
                 is OperationResult.Success -> {
@@ -483,6 +484,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun explainRejection(code: String): String = when (code) {
         "PASS_EXPIRED" -> "Entry refused: this visitor / temporary pass has expired. Direct the visitor to the issuing office."
         "PASS_NOT_YET_VALID" -> "Entry refused: this visitor / temporary pass is not valid yet."
+        "ALREADY_INSIDE" -> "This person is already recorded inside. Choose Exit instead — or sync if that looks wrong."
+        "NOT_INSIDE" -> "This person is not recorded inside. Choose Entry instead — or sync if that looks wrong."
         "PERSON_NOT_FOUND" -> "This person is no longer in the registry on this terminal. Sync with the Command Center and scan again."
         "INACTIVE_PERSON" -> "Access denied: this credential is not active."
         "PRESENCE_STATE_CHANGED", "MANIFEST_STATE_CHANGED" -> "The record changed while you were confirming (another scan or a sync). Scan again."

@@ -200,13 +200,19 @@ class EventRepository(
         scannedLocation: String = "",
         reason: String = "",
         remarks: String = "",
-        expectedReturn: Long = 0L
+        expectedReturn: Long = 0L,
+        /** The operator's explicit Entry/Exit choice; null keeps the old behaviour of following the presence state. */
+        forcedType: EventType? = null
     ): OperationResult<MovementEvent> = db.withTransaction {
         val p = persons.find(personId) ?: return@withTransaction OperationResult.Rejected("PERSON_NOT_FOUND")
         if (!p.active) return@withTransaction OperationResult.Rejected("INACTIVE_PERSON")
 
         val active = sessions.activeForPerson(personId)
-        val type = if (active == null) EventType.ENTRY else EventType.EXIT
+        val type = forcedType ?: if (active == null) EventType.ENTRY else EventType.EXIT
+        // The operator can pick Entry or Exit explicitly instead of relying on the auto-detected direction, but
+        // the choice still has to match reality: the same rule the Command Center applies to a manual record.
+        if (type == EventType.ENTRY && active != null) return@withTransaction OperationResult.Rejected("ALREADY_INSIDE")
+        if (type == EventType.EXIT && active == null) return@withTransaction OperationResult.Rejected("NOT_INSIDE")
         val now = System.currentTimeMillis()
         // Visitor passes only admit entry inside their validity window (exit is always allowed).
         if (type == EventType.ENTRY && p.validTo > 0 && now > p.validTo) return@withTransaction OperationResult.Rejected("PASS_EXPIRED")
