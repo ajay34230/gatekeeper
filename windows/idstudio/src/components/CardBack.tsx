@@ -5,7 +5,7 @@ import { SlotMark } from './Slot';
 import { HolographicSeal } from './MilitaryEmblem';
 import { GuillochePattern } from './GuillochePattern';
 import { mrz } from '../mrz';
-import { photoUrl } from '../host';
+import { usePhoto } from '../host';
 import { AlertTriangle, UserCheck, PhoneCall } from 'lucide-react';
 
 const dash = (v: string) => (v && v.trim()) || '—';
@@ -16,7 +16,7 @@ export const CardBack: React.FC<{ soldier: Soldier; design: CardDesign; classNam
   const size = cardSize(design);
   const pxPerMm = baseWidth(false) / size.w;
   const [l1, l2, l3] = mrz(soldier, design.issuingState);
-  const photo = photoUrl(soldier.id, soldier.photoVer);
+  const photo = usePhoto(soldier.id, soldier.photoVer);
   return (
     <div
       className={`xv-card relative rounded-2xl overflow-hidden border-2 ${theme.cardBorder} shadow-2xl bg-gradient-to-br ${theme.bgGradient} select-none ${className}`}

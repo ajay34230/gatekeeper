@@ -74,8 +74,6 @@ public sealed class CardStudioWindow : Window
         core.Settings.IsStatusBarEnabled = false;
         core.Settings.AreDefaultContextMenusEnabled = false;
         core.SetVirtualHostNameToFolderMapping(HostName, folder, CoreWebView2HostResourceAccessKind.Deny);
-        core.AddWebResourceRequestedFilter($"https://{HostName}/media/*", CoreWebView2WebResourceContext.All);
-        core.WebResourceRequested += (_, e) => e.Response = Media(core, e.Request.Uri);
         core.NewWindowRequested += (_, e) => e.Handled = true;
         core.NavigationStarting += (_, e) => { if (!e.Uri.StartsWith($"https://{HostName}/", StringComparison.OrdinalIgnoreCase)) e.Cancel = true; };
         core.WebMessageReceived += (_, e) =>
@@ -87,20 +85,12 @@ public sealed class CardStudioWindow : Window
         core.Navigate($"https://{HostName}/index.html");
     }
 
-    /// <summary>Serves photos and signatures from the encrypted database (never from disk).</summary>
-    CoreWebView2WebResourceResponse Media(CoreWebView2 core, string uri)
-    {
-        var path = new Uri(uri).AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries); // media/photo/{id}
-        byte[]? bytes = null; var type = "image/jpeg";
-        if (path.Length == 3)
-        {
-            var id = Uri.UnescapeDataString(path[2]);
-            if (path[1] == "photo") bytes = App.Store.PersonPhoto(id);
-            else if (path[1] == "signature") { bytes = App.Store.PersonSignature(id); type = "image/png"; }
-        }
-        if (bytes == null) return core.Environment.CreateWebResourceResponse(null, 404, "Not Found", "");
-        return core.Environment.CreateWebResourceResponse(new MemoryStream(bytes), 200, "OK", $"Content-Type: {type}\r\nCache-Control: no-store");
-    }
+    /// <summary>MIME type from the image's signature bytes (photos are JPEG, signatures PNG; older imports may differ).</summary>
+    static string ImageType(byte[] b) =>
+        b.Length > 3 && b[0] == 0x89 && b[1] == 0x50 ? "image/png" :
+        b.Length > 3 && b[0] == 0x47 && b[1] == 0x49 ? "image/gif" :
+        b.Length > 11 && b[8] == 0x57 && b[9] == 0x45 ? "image/webp" :
+        b.Length > 1 && b[0] == 0x42 && b[1] == 0x4D ? "image/bmp" : "image/jpeg";
 
     void Post(JsonObject m) { if (_web.CoreWebView2 != null) _web.CoreWebView2.PostWebMessageAsJson(m.ToJsonString()); }
     void Toast(string text, bool error = false) => Post(new JsonObject { ["t"] = error ? "error" : "saved", ["message"] = text });
@@ -229,6 +219,15 @@ public sealed class CardStudioWindow : Window
                 case "ready":
                     var design = App.Settings.CardDesignJson.Length > 2 ? JsonNode.Parse(App.Settings.CardDesignJson) : null;
                     Post(new JsonObject { ["t"] = "init", ["soldiers"] = Soldiers(), ["design"] = design, ["preselect"] = new JsonArray(_preselect.Select(i => (JsonNode)i).ToArray()) });
+                    break;
+
+                case "media":
+                    // Photo / signature for the cards, sent as a data: URL straight from the encrypted database.
+                    var mid = Store.CanonId(m["id"]?.ToString());
+                    var kind = m["kind"]?.ToString() == "signature" ? "signature" : "photo";
+                    var blob = kind == "photo" ? App.Store.PersonPhoto(mid) : App.Store.PersonSignature(mid);
+                    Post(new JsonObject { ["t"] = "media", ["kind"] = kind, ["id"] = m["id"]?.ToString() ?? "", ["ver"] = m["ver"]?.DeepClone(),
+                        ["dataUrl"] = blob == null || blob.Length == 0 ? "" : $"data:{ImageType(blob)};base64,{Convert.ToBase64String(blob)}" });
                     break;
 
                 case "saveDesign":

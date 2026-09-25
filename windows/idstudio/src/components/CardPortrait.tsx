@@ -6,7 +6,7 @@ import { GuillochePattern, MicroPrintBorder } from './GuillochePattern';
 import { CredentialQr } from './QrCode';
 import { BearerSignature } from './Signature';
 import { SlotMark } from './Slot';
-import { photoUrl, signatureUrl } from '../host';
+import { usePhoto, useSignature } from '../host';
 import { mrz } from '../mrz';
 import { ShieldAlert, Phone, AlertTriangle, UserCheck, PhoneCall } from 'lucide-react';
 
@@ -39,7 +39,8 @@ const Shell: React.FC<{ design: CardDesign; className?: string; children: React.
 };
 
 export const PortraitFront: React.FC<{ soldier: Soldier; design: CardDesign; check: string; className?: string }> = ({ soldier, design, check, className }) => {
-  const photo = photoUrl(soldier.id, soldier.photoVer);
+  const photo = usePhoto(soldier.id, soldier.photoVer);
+  const signature = useSignature(soldier.id, soldier.signatureVer);
   const m = metrics(design);
   return (
     <Shell design={design} className={className} watermark corners={<>
@@ -107,7 +108,7 @@ export const PortraitFront: React.FC<{ soldier: Soldier; design: CardDesign; che
       <div className="grid grid-cols-2 gap-2 items-center bg-black/25 rounded-lg border border-white/10 p-2 relative overflow-hidden shrink-0">
         <div className="absolute -bottom-6 -right-6 pointer-events-none opacity-20"><HolographicSeal className="w-20 h-20" /></div>
         <div className="flex justify-center"><CredentialQr code={soldier.secret} size={m.qr} /></div>
-        <BearerSignature imageUrl={signatureUrl(soldier.id, soldier.signatureVer)} name={soldier.name} signedAt={soldier.signedAt} check={check} />
+        <BearerSignature imageUrl={signature} name={soldier.name} signedAt={soldier.signedAt} check={check} />
       </div>
 
       {/* Footer */}
@@ -126,7 +127,7 @@ export const PortraitFront: React.FC<{ soldier: Soldier; design: CardDesign; che
 export const PortraitBack: React.FC<{ soldier: Soldier; design: CardDesign; className?: string }> = ({ soldier, design, className }) => {
   const [l1, l2, l3] = mrz(soldier, design.issuingState);
   const m = metrics(design);
-  const photo = photoUrl(soldier.id, soldier.photoVer);
+  const photo = usePhoto(soldier.id, soldier.photoVer);
   const box = 'bg-black/30 border border-white/10 rounded px-1.5 py-1';
   return (
     <Shell design={design} className={className}>

@@ -6,7 +6,7 @@ import { NationalCrest, CrossedSwordsBadge, SmartChip, HolographicSeal, Security
 import { GuillochePattern, MicroPrintBorder } from './GuillochePattern';
 import { CredentialQr } from './QrCode';
 import { BearerSignature } from './Signature';
-import { photoUrl, signatureUrl } from '../host';
+import { usePhoto, useSignature } from '../host';
 import { Phone, MapPin, ShieldAlert } from 'lucide-react';
 
 const dash = (v: string) => (v && v.trim()) || '—';
@@ -16,7 +16,8 @@ export const CardFront: React.FC<{ soldier: Soldier; design: CardDesign; check: 
   const theme = CARD_THEMES[design.theme] ?? CARD_THEMES.army;
   const size = cardSize(design);
   const pxPerMm = baseWidth(false) / size.w;
-  const photo = photoUrl(soldier.id, soldier.photoVer);
+  const photo = usePhoto(soldier.id, soldier.photoVer);
+  const signature = useSignature(soldier.id, soldier.signatureVer);
   return (
     <div
       className={`xv-card relative rounded-2xl overflow-hidden border-2 ${theme.cardBorder} shadow-2xl bg-gradient-to-br ${theme.bgGradient} select-none ${className}`}
@@ -131,7 +132,7 @@ export const CardFront: React.FC<{ soldier: Soldier; design: CardDesign; check: 
             <div className="absolute -bottom-6 -right-6 pointer-events-none opacity-20"><HolographicSeal className="w-20 h-20" /></div>
             <div className="w-full flex flex-col items-center"><CredentialQr code={soldier.secret} size={85} className="w-full max-w-[95px]" /></div>
             <div className="w-full mt-1">
-              <BearerSignature imageUrl={signatureUrl(soldier.id, soldier.signatureVer)} name={soldier.name} signedAt={soldier.signedAt} check={check} />
+              <BearerSignature imageUrl={signature} name={soldier.name} signedAt={soldier.signedAt} check={check} />
             </div>
           </div>
         </div>

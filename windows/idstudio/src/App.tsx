@@ -4,7 +4,7 @@ import { CARD_THEMES, DEFAULT_DESIGN, ARMY_RANKS, BLOOD_GROUPS, CARD_SIZES, card
 import { CardFace } from './components/CardFace';
 import { SignaturePad } from './components/SignaturePad';
 import { NationalCrest } from './components/MilitaryEmblem';
-import { host } from './host';
+import { host, preloadMedia } from './host';
 import { cardCheck } from './mrz';
 import { toPng } from 'html-to-image';
 import { Printer, RotateCw, FileDown, Users, Search, Sliders, User, Type, Shield, Palette, Upload, PenTool, Save, Trash2, Database, CheckSquare, Square, Download, X } from 'lucide-react';
@@ -101,6 +101,7 @@ export default function App() {
     if (printList.length === 0) return;
     let cancelled = false;
     (async () => {
+      await preloadMedia(printList);
       await new Promise(r => setTimeout(r, 300));
       const imgs = [...document.querySelectorAll<HTMLImageElement>('.print-area img')];
       await Promise.all(imgs.map(i => i.complete ? Promise.resolve() : i.decode().catch(() => undefined)));
@@ -120,6 +121,7 @@ export default function App() {
     const pageStyle = document.createElement('style');
     if (exportJob.format === 'pdf') { const sz = cardSize(design); pageStyle.textContent = `@page { size: ${sz.w}mm ${sz.h}mm; margin: 0; }`; document.head.appendChild(pageStyle); document.body.classList.add('exporting'); }
     (async () => {
+      if (exportSoldier) await preloadMedia([exportSoldier]);
       await new Promise(r => setTimeout(r, 250));
       const imgs = [...document.querySelectorAll<HTMLImageElement>('.export-area img, .export-png img')];
       await Promise.all(imgs.map(i => i.complete ? Promise.resolve() : i.decode().catch(() => undefined)));
