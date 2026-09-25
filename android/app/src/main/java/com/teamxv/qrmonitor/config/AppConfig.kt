@@ -218,8 +218,15 @@ class AppConfig(context: Context) : ConnectionProfile {
     fun hasValidOnlineToken(now: Long = System.currentTimeMillis()): Boolean =
         operatorToken.isNotBlank() && operatorTokenExpiresAt > now
 
+    /**
+     * The operator stays signed in (app restarts, no network, PC restarts) until they log out or 24 hours after
+     * signing in, whichever comes first.
+     */
     fun canContinueOffline(now: Long = System.currentTimeMillis()): Boolean =
-        operatorLoggedIn && offlineSessionUntil > now
+        operatorLoggedIn && now < sessionEndsAt
+
+    /** When the current sign-in ends (24 hours after it started). */
+    val sessionEndsAt: Long get() = if (shiftStartedAt > 0) shiftStartedAt + SESSION_MS else 0L
 
     fun clearSession() {
         secure.remove("operatorToken")
@@ -232,6 +239,7 @@ class AppConfig(context: Context) : ConnectionProfile {
 
     companion object {
         /** Used until the first contact with the Command Center. */
+        const val SESSION_MS = 24L * 60 * 60 * 1000
         val DEFAULT_REASONS = listOf("TD", "Proceeding on Leave", "Rejoining from Leave", "Posting Out", "Posting In", "Local Work")
         val DEFAULT_RETURN_REASONS = listOf("TD", "Proceeding on Leave", "Local Work")
     }

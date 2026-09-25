@@ -51,6 +51,8 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
     }
 
     private fun classifyFailure(failure: Throwable?, state: SyncStateStore): Result {
+        // The Command Center disabled this operator's account or reset the password: sign out on this terminal.
+        if (failure is HttpFailure && failure.code == 401 && failure.reason == "OPERATOR_AUTH_REQUIRED") AppConfig(applicationContext).clearSession()
         state.markError(failure?.message ?: "Synchronization failed")
         return if (failure is HttpFailure && failure.code in 400..499 && failure.code != 429) Result.failure() else Result.retry()
     }

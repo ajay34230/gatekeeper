@@ -135,4 +135,17 @@ class GateFlowSmokeTest {
         assertTrue(text.contains("diagnostics probe 4711"))
         assertTrue(text.contains("test summary"))
     }
+
+    @Test
+    fun signInSurvivesRestartAndEndsAfter24Hours() {
+        // Closing and reopening the app keeps the operator signed in.
+        scenario.close()
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("SCAN PERSON", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        // A sign-in older than 24 hours ends: the sign-in screen comes back.
+        scenario.close()
+        AppConfig(ctx).shiftStartedAt = System.currentTimeMillis() - 25L * 3_600_000
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("SIGN IN", substring = true).fetchSemanticsNodes().isNotEmpty() }
+    }
 }

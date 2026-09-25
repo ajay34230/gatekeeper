@@ -118,7 +118,7 @@ public sealed class Settings
     public string CardDesignJson { get; set; } = "";
 
     public List<string> EventTypes { get; set; } = ["Leave", "Returned from Leave", "Duty", "Course", "Medical", "Guard Duty", "Out Pass", "Temporary Duty"];
-    public int TokenHours { get; set; } = 12;
+    public int TokenHours { get; set; } = 24;
     public int OfflineGraceHours { get; set; } = 12;
     public bool StartWithWindows { get; set; } = true;
 

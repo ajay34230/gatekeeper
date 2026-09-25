@@ -198,7 +198,7 @@ public sealed class StationsWindow : DarkWindow
         returnReasons.AcceptsReturn = true; returnReasons.MinHeight = 70; returnReasons.TextWrapping = TextWrapping.Wrap;
         var reasons = Field("Entry / exit reasons offered on terminals (one per line; operators can also type a custom reason and remarks)", string.Join(Environment.NewLine, s.MovementReasons));
         reasons.AcceptsReturn = true; reasons.MinHeight = 110; reasons.TextWrapping = TextWrapping.Wrap;
-        var tokenH = Field("Operator session length (hours)", s.TokenHours.ToString(), mono: true);
+        var tokenH = Field("Operator sign-in length on terminals (hours, at least 24)", s.TokenHours.ToString(), mono: true);
         var graceH = Field("Offline grace period after session expiry (hours)", s.OfflineGraceHours.ToString(), mono: true);
 
         Body.Children.Add(Label("Data protection"));

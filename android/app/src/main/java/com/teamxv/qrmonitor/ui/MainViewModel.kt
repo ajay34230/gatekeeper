@@ -264,23 +264,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Signs the operator out only when the 24-hour sign-in has ended (a manual logout is handled by [logout]). */
     fun enforceSession() {
         if (!config.operatorLoggedIn) {
+            if (loggedIn) authMessage = "Signed out by the Command Center (account disabled or password reset). Sign in again."
             loggedIn = false
             return
         }
-        val now = System.currentTimeMillis()
-        val networkAvailable = network.isNetworkAvailable()
-        if (networkAvailable && !SessionPolicy.onlineTokenValid(config.operatorTokenExpiresAt, now)) {
+        if (!config.canContinueOffline()) {
             config.clearSession()
             api.operatorToken = ""
             loggedIn = false
-            authMessage = "Online session expired. Please sign in again."
-        } else if (!networkAvailable && !SessionPolicy.offlineSessionValid(config.offlineSessionUntil, now)) {
-            config.clearSession()
-            api.operatorToken = ""
-            loggedIn = false
-            authMessage = "Offline session expired. Please sign in again."
+            authMessage = "Your 24-hour sign-in has ended. Please sign in again."
         }
     }
 
