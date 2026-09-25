@@ -9,7 +9,7 @@ namespace XV.CommandCenter;
 
 public partial class MainWindow : Window
 {
-    string _feedFilter = "ALL", _company = "ALL";
+    string _feedFilter = "ALL", _company = "ALL", _personView = "CARDS", _personSort = "ID";
     readonly HashSet<string> _selected = [];
     readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(3) };
     bool _refreshQueued;
@@ -36,6 +36,7 @@ public partial class MainWindow : Window
     }
 
     int Columns => Math.Max(1, (int)((MainScroll.ActualWidth - 50) / 380));
+    int IconColumns => Math.Max(4, (int)((MainScroll.ActualWidth - 50) / 118));
     string Query => Search.Text.Trim();
 
     // ------------------------------------------------------------------ refresh
@@ -201,6 +202,34 @@ public partial class MainWindow : Window
 
     static readonly string[] Companies = ["Alpha", "Bravo", "Charlie", "Delta", "SP", "HQ"];
 
+    static readonly (string Key, string Label)[] PersonViews =
+    [
+        ("CARDS", "Detailed Cards"), ("COMPACT", "Compact Cards"), ("LIST", "List"), ("ICONS", "Icon Grid"), ("TABLE", "Table"),
+    ];
+    static readonly (string Key, string Label)[] PersonSorts =
+    [
+        ("ID", "ID (default)"), ("NAME", "Name"), ("RANK", "Rank (seniority)"), ("COMPANY", "Company"),
+        ("PLATOON", "Platoon"), ("SERVICE", "Service No"), ("LASTSEEN", "Last Seen"),
+    ];
+    // Highest seniority first; a rank not in this list (or blank) sorts after every known rank.
+    static readonly string[] RankSeniority =
+    [
+        "Brigadier", "Colonel", "Lieutenant Colonel", "Major", "Captain", "Lieutenant",
+        "Subedar Major", "Subedar", "Naib Subedar", "Havildar", "Naik", "Lance Naik", "Sepoy",
+    ];
+    static int RankIndex(string rank) { var i = Array.IndexOf(RankSeniority, rank); return i < 0 ? RankSeniority.Length : i; }
+
+    IEnumerable<Dictionary<string, object?>> SortPersons(IEnumerable<Dictionary<string, object?>> src) => _personSort switch
+    {
+        "NAME" => src.OrderBy(p => S(p["name"]), StringComparer.OrdinalIgnoreCase),
+        "RANK" => src.OrderBy(p => RankIndex(S(p["rank"]))).ThenBy(p => S(p["name"]), StringComparer.OrdinalIgnoreCase),
+        "COMPANY" => src.OrderBy(p => S(p["company"]), StringComparer.OrdinalIgnoreCase).ThenBy(p => S(p["name"]), StringComparer.OrdinalIgnoreCase),
+        "PLATOON" => src.OrderBy(p => S(p["platoon"]), StringComparer.OrdinalIgnoreCase).ThenBy(p => S(p["name"]), StringComparer.OrdinalIgnoreCase),
+        "SERVICE" => src.OrderBy(p => S(p["service_no"]), StringComparer.OrdinalIgnoreCase),
+        "LASTSEEN" => src.OrderByDescending(p => L(p["last_seen"])),
+        _ => src.OrderBy(p => S(p["id"]), StringComparer.OrdinalIgnoreCase),
+    };
+
     void RenderPersons()
     {
         var all = App.Store.Soldiers(Query);
@@ -223,6 +252,19 @@ public partial class MainWindow : Window
         pick.SelectedIndex = _company == "ALL" ? 0 : Array.IndexOf(Companies, _company) + 1;
         pick.SelectionChanged += (_, _) => { _company = pick.SelectedIndex <= 0 ? "ALL" : Companies[pick.SelectedIndex - 1]; RenderTab(); };
         FilterChips.Children.Add(Row(T("Select Company  ", 11.5, "#A1A1AA", bold: true), pick));
+
+        var viewPick = new ComboBox { Width = 160, Margin = new Thickness(0, 0, 10, 6), VerticalAlignment = VerticalAlignment.Center };
+        foreach (var v in PersonViews) viewPick.Items.Add(v.Label);
+        viewPick.SelectedIndex = Math.Max(0, Array.FindIndex(PersonViews, v => v.Key == _personView));
+        viewPick.SelectionChanged += (_, _) => { _personView = PersonViews[viewPick.SelectedIndex].Key; RenderTab(); };
+        FilterChips.Children.Add(Row(T("View  ", 11.5, "#A1A1AA", bold: true), viewPick));
+
+        var sortPick = new ComboBox { Width = 160, Margin = new Thickness(0, 0, 10, 6), VerticalAlignment = VerticalAlignment.Center };
+        foreach (var v in PersonSorts) sortPick.Items.Add(v.Label);
+        sortPick.SelectedIndex = Math.Max(0, Array.FindIndex(PersonSorts, v => v.Key == _personSort));
+        sortPick.SelectionChanged += (_, _) => { _personSort = PersonSorts[sortPick.SelectedIndex].Key; RenderTab(); };
+        FilterChips.Children.Add(Row(T("Sort by  ", 11.5, "#A1A1AA", bold: true), sortPick));
+
         Chip($"All ({all.Count})", _company == "ALL", () => { _company = "ALL"; RenderTab(); });
         foreach (var c in Companies)
             Chip($"{c} ({all.Count(p => string.Equals(S(p["company"]), c, StringComparison.OrdinalIgnoreCase))})", _company == c, () => { _company = c; RenderTab(); });
@@ -232,6 +274,14 @@ public partial class MainWindow : Window
             RenderTab();
         });
         if (rows.Count == 0) { ContentHost.Content = Empty(all.Count == 0 ? "The personnel registry is empty.\nAdd soldiers with '+ Add Soldier Details' or import a CSV file." : "No personnel in this company match the current filter."); return; }
+
+        // List and Table lay every match out flat, sorted by the chosen key; the others stay grouped by company.
+        if (_personView is "LIST" or "TABLE")
+        {
+            var flat = SortPersons(rows).ToList();
+            ContentHost.Content = _personView == "TABLE" ? PersonTable(flat) : PersonListPanel(flat);
+            return;
+        }
 
         var panel = new StackPanel();
         var groups = rows.GroupBy(p => Companies.FirstOrDefault(c => string.Equals(c, S(p["company"]), StringComparison.OrdinalIgnoreCase)) ?? (S(p["company"]).Length > 0 ? S(p["company"]) : "Unassigned"))
@@ -246,9 +296,19 @@ public partial class MainWindow : Window
                 Background = B(color), Child = Spread(T($"{g.Key.ToUpperInvariant()} COMPANY", 13.5, "#FFFFFF", bold: true),
                     T($"{g.Count()} personnel • {inside} inside", 11.5, "#F4F4F5", mono: true)),
             });
-            var grid = CardGrid();
-            foreach (var p in g) grid.Children.Add(PersonCard(p));
-            panel.Children.Add(grid);
+            var sortedGroup = SortPersons(g).ToList();
+            if (_personView == "ICONS")
+            {
+                var grid = new UniformGrid { Columns = IconColumns };
+                foreach (var p in sortedGroup) grid.Children.Add(PersonIcon(p));
+                panel.Children.Add(grid);
+            }
+            else
+            {
+                var grid = CardGrid();
+                foreach (var p in sortedGroup) grid.Children.Add(_personView == "COMPACT" ? PersonCompactCard(p) : PersonCard(p));
+                panel.Children.Add(grid);
+            }
         }
         ContentHost.Content = panel;
     }
@@ -280,6 +340,125 @@ public partial class MainWindow : Window
                  Btn(status == "ACTIVE" ? "Suspend" : "Activate", (_, _) => Dialogs.SetPersonStatus(this, id, status == "ACTIVE" ? "SUSPENDED" : "ACTIVE")),
                  Btn("Delete", (_, _) => Dialogs.DeletePerson(this, id, S(p["name"])), "BtnDanger")).M(0, 10));
         return Card(body, _selected.Contains(id) ? "#1C1508" : "#131316", _selected.Contains(id) ? "#B45309" : "#27272A").M(0, 0, 10, 10);
+    }
+
+    /// <summary>A smaller card: avatar, name, rank/company, presence and just the three most-used actions.</summary>
+    Border PersonCompactCard(Dictionary<string, object?> p)
+    {
+        var id = S(p["id"]);
+        var inside = L(p["inside_since"]) > 0;
+        var status = S(p["status"]);
+        var check = new CheckBox { IsChecked = _selected.Contains(id), ToolTip = "Select for export", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
+        check.Click += (_, _) => { if (check.IsChecked == true) _selected.Add(id); else _selected.Remove(id); RenderTab(); };
+        var avatar = new Border { Width = 36, Height = 36, CornerRadius = new CornerRadius(9), Background = B("#27272A"), Child = T(Initials(S(p["name"])), 12, "#E4E4E7", bold: true).Center() };
+        var body = Col(
+            Spread(Row(check, avatar, Col(T(S(p["name"]), 12.5, "#F4F4F5", bold: true),
+                         T(Parts(DisplayId(id), S(p["rank"]), S(p["company"]).Length > 0 ? S(p["company"]) + " Co" : ""), 10.5, "#A1A1AA", mono: true).M(0, 2)).M(8)),
+                   StatusPill(status)),
+            Spread(inside ? Pill("INSIDE", "#34D399", "#0D2A20", "#047857", 9.5) : Pill("OUTSIDE", "#A1A1AA", "#27272A", "#3F3F46", 9.5),
+                   T(L(p["last_seen"]) > 0 ? Time(L(p["last_seen"]), "dd MMM HH:mm") : "No activity", 10, "#71717A", mono: true)).M(0, 8),
+            Wrap(Btn("Edit", (_, _) => Dialogs.EditPerson(this, id)), Btn("ID Card", (_, _) => Dialogs.Credential(this, "PERSON", id), "BtnGold"),
+                 Btn("History", (_, _) => Dialogs.History(this, "PERSON", id))).M(0, 8));
+        return Card(body, _selected.Contains(id) ? "#1C1508" : "#131316", _selected.Contains(id) ? "#B45309" : "#27272A", pad: 11).M(0, 0, 10, 10);
+    }
+
+    /// <summary>A small round-photo tile with just the initials, name and ID — for scanning a whole company at a glance.
+    /// A tick box in the corner selects for export; clicking the rest of the tile opens the movement history.</summary>
+    Border PersonIcon(Dictionary<string, object?> p)
+    {
+        var id = S(p["id"]);
+        var inside = L(p["inside_since"]) > 0;
+        var selected = _selected.Contains(id);
+        var check = new CheckBox { IsChecked = selected, ToolTip = "Select for export", HorizontalAlignment = HorizontalAlignment.Right };
+        check.Click += (_, _) => { if (check.IsChecked == true) _selected.Add(id); else _selected.Remove(id); RenderTab(); };
+        var avatar = new Border
+        {
+            Width = 50, Height = 50, CornerRadius = new CornerRadius(25), HorizontalAlignment = HorizontalAlignment.Center,
+            Background = B(selected ? "#B45309" : "#27272A"), Child = T(Initials(S(p["name"])), 15, selected ? "#18181B" : "#E4E4E7", bold: true).Center(),
+        };
+        var name = T(S(p["name"]), 10.5, "#F4F4F5", bold: true).Wrap();
+        name.TextAlignment = TextAlignment.Center; name.HorizontalAlignment = HorizontalAlignment.Center;
+        var sub = T(DisplayId(id) + (inside ? " • IN" : ""), 9, inside ? "#34D399" : "#71717A", mono: true);
+        sub.TextAlignment = TextAlignment.Center; sub.HorizontalAlignment = HorizontalAlignment.Center;
+        var tile = new Border
+        {
+            Width = 108, Padding = new Thickness(8, 4, 8, 10), CornerRadius = new CornerRadius(10),
+            Background = B(selected ? "#1C1508" : "#131316"), BorderBrush = B(selected ? "#B45309" : "#27272A"), BorderThickness = new Thickness(1),
+            Cursor = System.Windows.Input.Cursors.Hand, ToolTip = Parts(S(p["name"]), S(p["rank"]), S(p["company"]).Length > 0 ? S(p["company"]) + " Co" : "", inside ? "Inside" : "Outside"),
+            Child = Col(check, avatar.M(0, 2, 0, 0), name.M(0, 8, 0, 2), sub),
+        };
+        tile.MouseLeftButtonUp += (_, e) => { if (e.OriginalSource is not CheckBox) Dialogs.History(this, "PERSON", id); };
+        return tile;
+    }
+
+    /// <summary>One row per person, spanning the full width — quicker to scan than cards when the list is long.</summary>
+    StackPanel PersonListPanel(List<Dictionary<string, object?>> rows)
+    {
+        var panel = new StackPanel();
+        foreach (var p in rows)
+        {
+            var id = S(p["id"]);
+            var inside = L(p["inside_since"]) > 0;
+            var status = S(p["status"]);
+            var check = new CheckBox { IsChecked = _selected.Contains(id), ToolTip = "Select for export", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) };
+            check.Click += (_, _) => { if (check.IsChecked == true) _selected.Add(id); else _selected.Remove(id); RenderTab(); };
+            var avatar = new Border { Width = 34, Height = 34, CornerRadius = new CornerRadius(9), Background = B("#27272A"), Child = T(Initials(S(p["name"])), 11.5, "#E4E4E7", bold: true).Center() };
+            var left = Row(check, avatar, Col(
+                Row(T(DisplayId(id), 11, "#FBBF24", bold: true, mono: true), T("  " + S(p["name"]), 12.5, "#F4F4F5", bold: true)),
+                T(Parts(S(p["rank"]), S(p["company"]).Length > 0 ? S(p["company"]) + " Co" : "", S(p["platoon"]), S(p["service_no"])), 10.5, "#A1A1AA", mono: true).M(0, 2)).M(10));
+            var right = Row(
+                inside ? Pill("INSIDE", "#34D399", "#0D2A20", "#047857", 9.5) : Pill("OUTSIDE", "#A1A1AA", "#27272A", "#3F3F46", 9.5),
+                StatusPill(status).M(8, 0, 0, 0),
+                Btn("Edit", (_, _) => Dialogs.EditPerson(this, id)).M(10, 0, 0, 0),
+                Btn("ID Card", (_, _) => Dialogs.Credential(this, "PERSON", id), "BtnGold"),
+                Btn("History", (_, _) => Dialogs.History(this, "PERSON", id)));
+            panel.Children.Add(Card(SpreadWrap(left, right), _selected.Contains(id) ? "#1C1508" : "#131316", _selected.Contains(id) ? "#B45309" : "#27272A", 10).M(0, 0, 0, 8));
+        }
+        return panel;
+    }
+
+    /// <summary>A dense header + row table: ID, Name, Rank, Company, Platoon, Service No, Status, Presence, then actions.</summary>
+    StackPanel PersonTable(List<Dictionary<string, object?>> rows)
+    {
+        double[] widths = [28, 62, 210, 120, 55, 50, 100, 95, 115];
+        string[] heads = ["", "ID", "Name", "Rank", "Coy", "Pl", "Service No", "Status", "Presence"];
+
+        Grid TableRow(Func<int, UIElement> cell)
+        {
+            var g = new Grid();
+            for (var i = 0; i < widths.Length; i++) g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(widths[i]) });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            for (var i = 0; i <= widths.Length; i++) { var el = cell(i); Grid.SetColumn(el, i); g.Children.Add(el); }
+            return g;
+        }
+
+        var panel = new StackPanel();
+        panel.Children.Add(new Border { Padding = new Thickness(10, 6, 10, 6), Margin = new Thickness(0, 0, 0, 4), Background = B("#111113"), CornerRadius = new CornerRadius(6),
+            Child = TableRow(i => T(i < heads.Length ? heads[i] : "Actions", 10, "#71717A", bold: true, mono: true)) });
+        foreach (var p in rows)
+        {
+            var id = S(p["id"]);
+            var inside = L(p["inside_since"]) > 0;
+            var status = S(p["status"]);
+            var check = new CheckBox { IsChecked = _selected.Contains(id), ToolTip = "Select for export", VerticalAlignment = VerticalAlignment.Center };
+            check.Click += (_, _) => { if (check.IsChecked == true) _selected.Add(id); else _selected.Remove(id); RenderTab(); };
+            UIElement Cell(int i) => i switch
+            {
+                0 => check,
+                1 => T(DisplayId(id), 11, "#FBBF24", mono: true),
+                2 => T(S(p["name"]), 11.5, "#F4F4F5", bold: true),
+                3 => T(S(p["rank"]), 11, "#D4D4D8"),
+                4 => T(S(p["company"]), 11, "#A1A1AA", mono: true),
+                5 => T(S(p["platoon"]), 11, "#A1A1AA", mono: true),
+                6 => T(S(p["service_no"]), 11, "#A1A1AA", mono: true),
+                7 => StatusPill(status),
+                8 => inside ? Pill("INSIDE", "#34D399", "#0D2A20", "#047857", 9.5) : Pill("OUTSIDE", "#A1A1AA", "#27272A", "#3F3F46", 9.5),
+                _ => Wrap(Btn("Edit", (_, _) => Dialogs.EditPerson(this, id)), Btn("ID Card", (_, _) => Dialogs.Credential(this, "PERSON", id), "BtnGold"), Btn("History", (_, _) => Dialogs.History(this, "PERSON", id))),
+            };
+            panel.Children.Add(new Border { Padding = new Thickness(10, 5, 10, 5), Margin = new Thickness(0, 0, 0, 3), CornerRadius = new CornerRadius(6),
+                Background = B(_selected.Contains(id) ? "#1C1508" : "#131316"), Child = TableRow(Cell) });
+        }
+        return panel;
     }
 
     void RenderVehicles()
