@@ -315,7 +315,7 @@ public static class Dialogs
     {
         public HistoryWindow(string type, string id) : base("Movement History • " + DisplayId(id), "Every entry and exit recorded for this credential, newest first.", 760, 640)
         {
-            var rows = App.Store.RecentEvents(1000, id, type).Where(r => S(r["entity_id"]) == id).ToList();
+            var rows = App.Store.EventsForEntity(type, id);
             if (rows.Count == 0) Body.Children.Add(Para("No gate activity has been recorded yet."));
             long? total = 0;
             foreach (var r in rows)

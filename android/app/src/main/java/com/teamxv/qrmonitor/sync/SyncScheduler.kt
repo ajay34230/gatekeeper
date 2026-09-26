@@ -6,6 +6,7 @@ import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import java.util.concurrent.TimeUnit
@@ -25,11 +26,16 @@ object SyncScheduler {
     private fun constraints() = Constraints.Builder().build()
 
     fun enqueueNow(context: Context) {
+        // Expedited: asks Android to run this now, ahead of normal battery-saving deferral, the same way a tap-to-
+        // sync or a just-completed gate scan expects to reach the Command Center right away rather than whenever
+        // the OS next feels like scheduling background work. REPLACE (not KEEP) so a fresh request -- e.g. right
+        // after a scan -- isn't left waiting behind an older one still sitting in exponential backoff.
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(constraints())
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
+            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .build()
-        WorkManager.getInstance(context).enqueueUniqueWork(UNIQUE_NOW, ExistingWorkPolicy.KEEP, request)
+        WorkManager.getInstance(context).enqueueUniqueWork(UNIQUE_NOW, ExistingWorkPolicy.REPLACE, request)
     }
 
     fun ensurePeriodic(context: Context) {

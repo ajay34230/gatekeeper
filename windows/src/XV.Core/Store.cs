@@ -776,6 +776,22 @@ public sealed partial class Store : IDisposable
         ORDER BY e.seq DESC LIMIT $1
         """, limit, type, q.Trim(), "%" + q.Trim() + "%");
 
+    /// <summary>The complete movement history for one exact person/vehicle -- every record ever made for it, newest
+    /// first, with no recency cap. Used by the "History" dossier view, which must show the total record, not just
+    /// however many of the *system's* most recent events (across everyone) happen to include this one.</summary>
+    public List<Dictionary<string, object?>> EventsForEntity(string type, string id) => Query("""
+        SELECT e.*, COALESCE(p.name, v.plate, e.entity_id) AS title,
+               CASE WHEN e.entity_type='PERSON' THEN TRIM(COALESCE(p.rank,'') || ' ' || COALESCE(p.unit,'')) ELSE COALESCE(v.type,'') END AS subtitle,
+               COALESCE(l.name, e.location_id) AS location_name, COALESCE(g.name, e.gate_id) AS gate_name, m.occupants
+        FROM events e
+        LEFT JOIN persons p ON e.entity_type='PERSON' AND p.id=e.entity_id
+        LEFT JOIN vehicles v ON e.entity_type='VEHICLE' AND v.id=e.entity_id
+        LEFT JOIN locations l ON l.id=e.location_id LEFT JOIN gates g ON g.id=e.gate_id
+        LEFT JOIN manifests m ON m.entry_event_id=e.event_id OR m.exit_event_id=e.event_id
+        WHERE e.entity_type=$1 AND e.entity_id=$2
+        ORDER BY e.seq DESC
+        """, type, id);
+
     public (long inside, long outside, long fleetIn, long fleet, long flags, long total, long entriesToday, long exitsToday) Stats()
     {
         var start = new DateTimeOffset(DateTime.Today).ToUnixTimeMilliseconds();

@@ -1,4 +1,5 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -10,6 +11,30 @@ namespace XV.CommandCenter;
 
 public partial class App : Application
 {
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool SetProcessInformation(IntPtr hProcess, int processInformationClass, ref PROCESS_POWER_THROTTLING_STATE processInformation, uint processInformationSize);
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct PROCESS_POWER_THROTTLING_STATE { public uint Version; public uint ControlMask; public uint StateMask; }
+
+    const int ProcessPowerThrottling = 4;
+    const uint ProcessPowerThrottlingExecutionSpeed = 0x1;
+
+    /// <summary>Windows silently drops a minimized app's scheduling priority ("Efficiency Mode" / process power
+    /// throttling), which can slow down background work like the embedded server answering terminal sync requests
+    /// while the Command Center window sits minimized. Opting this process out keeps it running at full speed
+    /// whether the window is visible, minimized, or in the background -- terminals must be able to sync at any
+    /// time, not only while someone is looking at the dashboard.</summary>
+    static void DisableBackgroundThrottling()
+    {
+        try
+        {
+            var state = new PROCESS_POWER_THROTTLING_STATE { Version = 1, ControlMask = ProcessPowerThrottlingExecutionSpeed, StateMask = 0 };
+            SetProcessInformation(System.Diagnostics.Process.GetCurrentProcess().Handle, ProcessPowerThrottling, ref state, (uint)Marshal.SizeOf<PROCESS_POWER_THROTTLING_STATE>());
+        }
+        catch { /* Older Windows without this API: the process simply keeps its default (unthrottled foreground-app) behaviour. */ }
+    }
+
     public static Store Store { get; private set; } = null!;
     public static ApiServer Server { get; private set; } = null!;
     public static Settings Settings => Store.Settings;
@@ -25,6 +50,7 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        DisableBackgroundThrottling();
         // Crash collector: every unexpected error goes to the diagnostic log (Stations & Settings → Diagnostics → Export).
         AppDomain.CurrentDomain.UnhandledException += (_, ex) =>
         {
