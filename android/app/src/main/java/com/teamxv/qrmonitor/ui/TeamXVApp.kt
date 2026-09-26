@@ -21,7 +21,9 @@ import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.CloudDone
@@ -332,17 +334,13 @@ private fun LoginScreen(vm: MainViewModel) {
             Text("STATION & GATE", fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 0.8.sp, color = UiMuted, modifier = Modifier.weight(1f))
             Row(
                 Modifier.clip(RoundedCornerShape(6.dp))
-                    .clickable(enabled = !vm.stationsRefreshing) { vm.refreshStations() }
+                    .clickable(enabled = vm.stationsActivity != ActivityState.IN_PROGRESS) { vm.refreshStations() }
                     .padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.Refresh, null, tint = if (vm.stationsRefreshing) UiMuted.copy(alpha = 0.5f) else UiMuted, modifier = Modifier.size(13.dp))
+                Icon(Icons.Default.Refresh, null, tint = UiMuted, modifier = Modifier.size(13.dp))
                 Spacer(Modifier.width(4.dp))
-                Text(
-                    if (vm.stationsRefreshing) "REFRESHING…" else "REFRESH FROM SERVER",
-                    fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 0.4.sp,
-                    color = if (vm.stationsRefreshing) UiMuted.copy(alpha = 0.5f) else UiMuted
-                )
+                Text("REFRESH FROM SERVER", fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 0.4.sp, color = UiMuted)
             }
         }
         Spacer(Modifier.height(6.dp))
@@ -350,10 +348,13 @@ private fun LoginScreen(vm: MainViewModel) {
             StationDropdown("Station Location", vm.locations, loc, Modifier.weight(1f)) { id, n -> loc = id; vm.selectPost(id, n, gate, vm.gates.firstOrNull { it.first == gate }?.second ?: gate) }
             StationDropdown("Active Gate", vm.gates, gate, Modifier.weight(1f)) { id, n -> gate = id; vm.selectPost(loc, vm.locations.firstOrNull { it.first == loc }?.second ?: loc, id, n) }
         }
-        if (vm.stationsMessage.isNotBlank()) {
+        if (vm.stationsActivity != ActivityState.IDLE) {
             Spacer(Modifier.height(6.dp))
-            val bad = listOf("could not", "fail", "error").any { vm.stationsMessage.contains(it, true) }
-            Text(vm.stationsMessage, fontFamily = Sans, fontSize = 10.sp, color = if (bad) UiWarning else UiSuccess)
+            ActivityStatusChip(
+                vm.stationsActivity,
+                succeededText = vm.stationsMessage.ifBlank { "Succeeded" },
+                failedText = vm.stationsMessage.ifBlank { "Failed" }
+            )
         }
 
         Spacer(Modifier.height(16.dp))
@@ -1254,7 +1255,7 @@ private fun SyncStatusScreen(vm: MainViewModel) {
                     PrimaryButton(
                         "TRIGGER BATCH UPLOAD (${vm.pending})",
                         Icons.Default.CloudUpload,
-                        connected
+                        connected && vm.syncActivity != ActivityState.IN_PROGRESS
                     ) {
                         vm.trySync()
                     }
@@ -1266,9 +1267,27 @@ private fun SyncStatusScreen(vm: MainViewModel) {
         }
 
         Spacer(Modifier.height(10.dp))
-        SecondaryButton("FORCE SYNC / DIAGNOSTIC PING", Icons.Default.Refresh) { vm.trySync() }
+        SecondaryButton("FORCE SYNC / DIAGNOSTIC PING", Icons.Default.Refresh) { if (vm.syncActivity != ActivityState.IN_PROGRESS) vm.trySync() }
+        if (vm.syncActivity != ActivityState.IDLE) {
+            Spacer(Modifier.height(6.dp))
+            ActivityStatusChip(
+                vm.syncActivity,
+                inProgressText = "Syncing…",
+                succeededText = "Synchronized with the Command Center",
+                failedText = vm.syncUi.lastError.ifBlank { "Sync failed" }
+            )
+        }
         Spacer(Modifier.height(7.dp))
-        SecondaryButton("TEST CONNECTION", Icons.Default.Wifi) { vm.testConnection() }
+        SecondaryButton("TEST CONNECTION", Icons.Default.Wifi) { if (vm.testConnectionActivity != ActivityState.IN_PROGRESS) vm.testConnection() }
+        if (vm.testConnectionActivity != ActivityState.IDLE) {
+            Spacer(Modifier.height(6.dp))
+            ActivityStatusChip(
+                vm.testConnectionActivity,
+                inProgressText = "Connecting…",
+                succeededText = vm.networkStatus.message.ifBlank { "Connected" },
+                failedText = vm.networkStatus.message.ifBlank { "Connection failed" }
+            )
+        }
 
         if (vm.syncUi.lastError.isNotBlank()) {
             Spacer(Modifier.height(9.dp))
@@ -2431,6 +2450,40 @@ private fun StatusPill(text: String, tone: StatusTone, compact: Boolean = false)
             Box(Modifier.size(if (compact) 6.dp else 7.dp).clip(CircleShape).background(dot))
             Spacer(Modifier.width(5.dp))
             Text(text, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = if (compact) 8.sp else 9.sp, color = dot)
+        }
+    }
+}
+
+/** Compact, honest progress indicator for any button that talks to the Command Center (sync, test connection,
+ * refresh stations, pairing): reflects the real ActivityState the ViewModel observed, not a fixed label -- queued/
+ * running shows a spinner, and the last outcome (succeeded/failed) stays visible until the next attempt changes it. */
+@Composable
+private fun ActivityStatusChip(state: ActivityState, idleText: String = "", inProgressText: String = "In progress…", succeededText: String = "Succeeded", failedText: String = "Failed") {
+    if (state == ActivityState.IDLE && idleText.isBlank()) return
+    val (bg, fg, border) = when (state) {
+        ActivityState.IN_PROGRESS -> Triple(UiBlueBg, UiBlue, tc(0xFFBFDBFE))
+        ActivityState.SUCCEEDED -> Triple(UiSuccessBg, UiSuccess, tc(0xFFA7F3D0))
+        ActivityState.FAILED -> Triple(UiErrorBg, UiError, tc(0xFFFBCFE8))
+        ActivityState.IDLE -> Triple(UiSurfaceSubtle, UiMuted, UiBorder)
+    }
+    Surface(color = bg, shape = RoundedCornerShape(100.dp), border = BorderStroke(1.dp, border)) {
+        Row(Modifier.padding(horizontal = 9.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+            when (state) {
+                ActivityState.IN_PROGRESS -> CircularProgressIndicator(modifier = Modifier.size(10.dp), strokeWidth = 1.5.dp, color = fg)
+                ActivityState.SUCCEEDED -> Icon(Icons.Default.CheckCircle, null, tint = fg, modifier = Modifier.size(11.dp))
+                ActivityState.FAILED -> Icon(Icons.Default.ErrorOutline, null, tint = fg, modifier = Modifier.size(11.dp))
+                ActivityState.IDLE -> Icon(Icons.Default.Circle, null, tint = fg, modifier = Modifier.size(7.dp))
+            }
+            Spacer(Modifier.width(6.dp))
+            Text(
+                when (state) {
+                    ActivityState.IN_PROGRESS -> inProgressText
+                    ActivityState.SUCCEEDED -> succeededText
+                    ActivityState.FAILED -> failedText
+                    ActivityState.IDLE -> idleText
+                },
+                fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = fg
+            )
         }
     }
 }

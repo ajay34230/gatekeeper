@@ -46,8 +46,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.Observer
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import com.teamxv.qrmonitor.config.AppConfig
 import com.teamxv.qrmonitor.data.EventRepository
 import com.teamxv.qrmonitor.data.IdentityResult
@@ -101,6 +104,11 @@ data class SyncUiState(
     val lastUploadedCount: Int = 0
 )
 
+/** Real, observed state behind any button that talks to the Command Center (sync, test connection, refresh
+ * stations, pairing): queued/in-progress/succeeded/failed, driven off the actual outcome -- WorkManager's own
+ * WorkInfo for background sync, or the coroutine's own result for a direct call -- never a guess. */
+enum class ActivityState { IDLE, IN_PROGRESS, SUCCEEDED, FAILED }
+
 data class CompletedVehicleDisplay(
     val vehicle: VehicleEntity,
     val driver: PersonEntity?,
@@ -150,6 +158,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var syncUi by mutableStateOf(SyncUiState())
         private set
+    var syncActivity by mutableStateOf(ActivityState.IDLE)
+        private set
+    var testConnectionActivity by mutableStateOf(ActivityState.IDLE)
+        private set
     var message by mutableStateOf("Ready")
         private set
     var session by mutableStateOf<ScanSession>(ScanSession.Closed)
@@ -174,7 +186,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var gates by mutableStateOf(config.cachedGates)
         private set
-    var stationsRefreshing by mutableStateOf(false)
+    var stationsActivity by mutableStateOf(ActivityState.IDLE)
         private set
     var stationsMessage by mutableStateOf("")
         private set
@@ -197,6 +209,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var completedVehicle by mutableStateOf<CompletedVehicleDisplay?>(null)
         private set
 
+    /** Live, observed status of the "sync now" work item -- the actual source of truth for the sync/force-sync
+     * buttons' progress indicator, not a fire-and-forget guess. */
+    private val syncWorkLiveData = WorkManager.getInstance(app).getWorkInfosForUniqueWorkLiveData(SyncScheduler.UNIQUE_NOW)
+    private val syncWorkObserver = Observer<List<WorkInfo>> { infos ->
+        val info = infos.maxByOrNull { it.generation }
+        val finished = info?.state?.isFinished == true
+        syncActivity = when (info?.state) {
+            WorkInfo.State.RUNNING, WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> ActivityState.IN_PROGRESS
+            WorkInfo.State.SUCCEEDED -> ActivityState.SUCCEEDED
+            WorkInfo.State.FAILED, WorkInfo.State.CANCELLED -> ActivityState.FAILED
+            else -> ActivityState.IDLE
+        }
+        if (finished) syncStateRefresh()
+    }
+
     init {
         api.operatorToken = config.operatorToken
         loggedIn = config.operatorLoggedIn && config.canContinueOffline()
@@ -204,6 +231,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
         syncStateRefresh()
         SyncScheduler.ensurePeriodic(app)
+        syncWorkLiveData.observeForever(syncWorkObserver)
 
         viewModelScope.launch(appErrors) { repo.observePersonnel().collectLatest { personnel = it } }
         viewModelScope.launch(appErrors) { repo.observeVehicles().collectLatest { vehicles = it } }
@@ -685,6 +713,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun testConnection() {
+        testConnectionActivity = ActivityState.IN_PROGRESS
         viewModelScope.launch(Dispatchers.IO + appErrors) {
             val (transport, localIp) = network.current()
             if (transport == "Disconnected") {
@@ -694,6 +723,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     localIp = localIp,
                     message = "No network available"
                 )
+                testConnectionActivity = ActivityState.FAILED
                 return@launch
             }
             val start = System.currentTimeMillis()
@@ -703,11 +733,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 if (config.hasValidOnlineToken()) api.heartbeat(config.baseUrl, config.deviceId, config.locationId, config.gateId, config.operatorId, pending)
                 if (pending > 0 && config.hasValidOnlineToken()) SyncScheduler.enqueueNow(getApplication())
                 refreshCommsInfo()
+                testConnectionActivity = ActivityState.SUCCEEDED
                 NetworkStatus(
                     transport, true, true, true,
                     api.lastRoute, localIp, latency, "Encrypted link verified with ${result.getOrNull()?.serverName ?: "Command Center"}"
                 )
             } else {
+                testConnectionActivity = ActivityState.FAILED
                 NetworkStatus(
                     transport, true, false, false,
                     "${config.serverHost}:${config.serverPort}", localIp, latency,
@@ -819,7 +851,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * (before or without ever signing in) so a stale or empty station list can be refreshed on the spot, over the
      * LAN or the internet, whichever reaches the Command Center. */
     fun refreshStations() {
-        stationsRefreshing = true
+        stationsActivity = ActivityState.IN_PROGRESS
         viewModelScope.launch(Dispatchers.IO + appErrors) {
             api.stations()
                 .onSuccess { (locs, gts) ->
@@ -828,9 +860,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     config.cachedLocations = locs; config.cachedGates = gts
                     locations = locs; gates = gts
                     stationsMessage = "Locations & gates updated (${locs.size} location(s), ${gts.size} gate(s))"
+                    stationsActivity = ActivityState.SUCCEEDED
                 }
-                .onFailure { stationsMessage = if (it is HttpFailure) (it.message ?: "Could not reach the Command Center") else (it.message ?: "Could not reach the Command Center") }
-            stationsRefreshing = false
+                .onFailure {
+                    stationsMessage = it.message ?: "Could not reach the Command Center"
+                    stationsActivity = ActivityState.FAILED
+                }
         }
     }
 
@@ -925,6 +960,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun formatDuration(ms: Long): String {
         val sec = ms.coerceAtLeast(0L) / 1000L
         return "${sec / 3600}h ${(sec % 3600) / 60}m ${sec % 60}s"
+    }
+
+    override fun onCleared() {
+        syncWorkLiveData.removeObserver(syncWorkObserver)
+        super.onCleared()
     }
 }
 
