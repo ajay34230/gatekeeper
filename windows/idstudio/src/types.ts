@@ -30,6 +30,11 @@ export interface Soldier {
 
 export type ThemeId = 'army' | 'tactical' | 'navy' | 'airforce' | 'desert';
 
+/** A small "detail box" (label + one soldier field) that can be shown on the card's front and/or back grid. */
+export type DetailFieldKey =
+  | 'unit' | 'company' | 'platoon' | 'section' | 'appointment' | 'bloodGroup' | 'mobile' | 'expiry'
+  | 'dob' | 'enrolDate' | 'cardSerial';
+
 export interface CardThemeConfig {
   id: ThemeId;
   name: string;
@@ -72,6 +77,16 @@ export interface CardDesign {
   customShort: number;
   /** Mark where to punch the lanyard / clip slot. */
   showSlot: boolean;
+  /** Which small "detail boxes" appear on the front identity grid and the back record grid, and in what order.
+   * Adding or removing one re-flows the rest of the grid automatically — nothing else needs to move. */
+  frontFields: DetailFieldKey[];
+  backFields: DetailFieldKey[];
+  showIdMark: boolean;
+  showNok: boolean;
+  /** Multiplies the small label/value text in the detail boxes (1 = standard size). */
+  detailFontScale: number;
+  /** Hex colour for detail box values; '' keeps each theme's own colour. */
+  detailFontColor: string;
 }
 
 export type SizeId = 'cr80' | 'cr100' | 'badge34' | 'a7' | 'custom';

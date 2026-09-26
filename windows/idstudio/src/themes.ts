@@ -46,6 +46,12 @@ export const DEFAULT_DESIGN: CardDesign = {
   customLong: 85.6,
   customShort: 53.98,
   showSlot: true,
+  frontFields: ['unit', 'company', 'platoon', 'section'],
+  backFields: ['dob', 'enrolDate', 'bloodGroup', 'expiry'],
+  showIdMark: true,
+  showNok: true,
+  detailFontScale: 1.2,
+  detailFontColor: '',
 };
 
 /** Card sizes as long side × short side in millimetres. */

@@ -7,6 +7,7 @@ import { GuillochePattern, MicroPrintBorder } from './GuillochePattern';
 import { CredentialQr } from './QrCode';
 import { BearerSignature } from './Signature';
 import { usePhoto, useSignature } from '../host';
+import { detailColor, detailField, detailPx, detailScaleVar } from '../detailFields';
 import { Phone, MapPin, ShieldAlert } from 'lucide-react';
 
 const dash = (v: string) => (v && v.trim()) || '—';
@@ -21,7 +22,7 @@ export const CardFront: React.FC<{ soldier: Soldier; design: CardDesign; check: 
   return (
     <div
       className={`xv-card relative rounded-2xl overflow-hidden border-2 ${theme.cardBorder} shadow-2xl bg-gradient-to-br ${theme.bgGradient} select-none ${className}`}
-      style={{ width: 700, height: 700 * size.h / size.w, boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.15)' }}
+      style={{ width: 700, height: 700 * size.h / size.w, boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.15)', ...detailScaleVar(design) }}
     >
       <GuillochePattern opacity={0.12} strokeColor="#94a3b8" />
       <SecurityWatermark className="top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 text-slate-100" />
@@ -75,12 +76,12 @@ export const CardFront: React.FC<{ soldier: Soldier; design: CardDesign; check: 
             </div>
             <div className="w-full mt-1.5 space-y-1">
               <div className="flex items-center justify-between bg-red-950/60 border border-red-500/40 rounded px-1.5 py-0.5">
-                <span className="text-[6.5px] font-mono font-medium text-red-300 flex items-center gap-0.5"><ShieldAlert className="w-2.5 h-2.5 text-red-400" />BLOOD GP</span>
-                <span className="text-[8px] font-bold text-red-100 font-mono">{dash(soldier.bloodGroup)}</span>
+                <span style={detailPx(6.5)} className="font-mono font-medium text-red-300 flex items-center gap-0.5"><ShieldAlert className="w-2.5 h-2.5 text-red-400" />BLOOD GP</span>
+                <span style={{ ...detailPx(8), ...detailColor(design, '#fecaca') }} className="font-bold font-mono">{dash(soldier.bloodGroup)}</span>
               </div>
-              <div className="flex items-center justify-between text-[6.5px] font-mono text-slate-300 bg-black/30 border border-white/10 rounded px-1.5 py-0.5">
-                <span className="text-slate-400">EXPIRY:</span>
-                <span className="font-bold text-amber-300">{dash(soldier.expiryDate)}</span>
+              <div className="flex items-center justify-between text-slate-300 bg-black/30 border border-white/10 rounded px-1.5 py-0.5">
+                <span style={detailPx(6.5)} className="font-mono text-slate-400">EXPIRY:</span>
+                <span style={{ ...detailPx(6.5), ...detailColor(design, '#fcd34d') }} className="font-mono font-bold">{dash(soldier.expiryDate)}</span>
               </div>
             </div>
           </div>
@@ -103,25 +104,28 @@ export const CardFront: React.FC<{ soldier: Soldier; design: CardDesign; check: 
                 <span className="text-[9.5px] font-bold text-cyan-300 uppercase tracking-wide">{dash(soldier.appointment)}</span>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-1 py-1 text-[7.5px] font-mono">
-              {([['UNIT', soldier.unit], ['COMPANY (COY)', soldier.company], ['PLATOON', soldier.platoon], ['SECTION (SEC)', soldier.section]] as const).map(([k, v]) => (
-                <div key={k} className="bg-black/30 border border-white/10 rounded px-1.5 py-0.5">
-                  <span className="text-slate-400 block text-[6px]">{k}</span>
-                  <span className="font-bold text-white uppercase truncate block">{dash(v)}</span>
-                </div>
-              ))}
+            <div className="grid grid-cols-2 gap-1 py-1 font-mono">
+              {design.frontFields.map(k => {
+                const f = detailField(k);
+                return (
+                  <div key={k} className="bg-black/30 border border-white/10 rounded px-1.5 py-0.5">
+                    <span style={detailPx(6)} className="text-slate-400 block">{f.label}</span>
+                    <span style={{ ...detailPx(7.5), ...detailColor(design, '#ffffff') }} className="font-bold uppercase truncate block">{dash(f.get(soldier))}</span>
+                  </div>
+                );
+              })}
             </div>
-            <div className="space-y-0.5 text-[7.5px] pt-0.5">
+            <div className="space-y-0.5 pt-0.5">
               {design.showMobile && (
                 <div className="flex items-center gap-1 font-mono">
-                  <Phone className="w-2.5 h-2.5 text-amber-400 shrink-0" /><span className="text-slate-400">MOB:</span>
-                  <span className="font-bold text-slate-100">{dash(soldier.mobile)}</span>
+                  <Phone className="w-2.5 h-2.5 text-amber-400 shrink-0" /><span style={detailPx(7.5)} className="text-slate-400">MOB:</span>
+                  <span style={{ ...detailPx(7.5), ...detailColor(design, '#f1f5f9') }} className="font-bold">{dash(soldier.mobile)}</span>
                 </div>
               )}
               {design.showAddress && (
                 <div className="flex items-start gap-1 font-mono leading-tight">
-                  <MapPin className="w-2.5 h-2.5 text-amber-400 shrink-0 mt-0.5" /><span className="text-slate-400 shrink-0">ADDR:</span>
-                  <span className="text-slate-300 line-clamp-2">{dash(soldier.address)}</span>
+                  <MapPin className="w-2.5 h-2.5 text-amber-400 shrink-0 mt-0.5" /><span style={detailPx(7.5)} className="text-slate-400 shrink-0">ADDR:</span>
+                  <span style={{ ...detailPx(7.5), ...detailColor(design, '#cbd5e1') }} className="line-clamp-2">{dash(soldier.address)}</span>
                 </div>
               )}
             </div>

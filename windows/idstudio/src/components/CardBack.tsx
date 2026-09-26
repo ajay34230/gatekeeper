@@ -6,6 +6,7 @@ import { HolographicSeal } from './MilitaryEmblem';
 import { GuillochePattern } from './GuillochePattern';
 import { mrz } from '../mrz';
 import { usePhoto } from '../host';
+import { detailColor, detailField, detailPx, detailScaleVar } from '../detailFields';
 import { AlertTriangle, UserCheck, PhoneCall } from 'lucide-react';
 
 const dash = (v: string) => (v && v.trim()) || '—';
@@ -20,7 +21,7 @@ export const CardBack: React.FC<{ soldier: Soldier; design: CardDesign; classNam
   return (
     <div
       className={`xv-card relative rounded-2xl overflow-hidden border-2 ${theme.cardBorder} shadow-2xl bg-gradient-to-br ${theme.bgGradient} select-none ${className}`}
-      style={{ width: 700, height: 700 * size.h / size.w, boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.15)' }}
+      style={{ width: 700, height: 700 * size.h / size.w, boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.15)', ...detailScaleVar(design) }}
     >
       <GuillochePattern opacity={0.1} strokeColor="#94a3b8" />
       {design.showSlot && <SlotMark pxPerMm={pxPerMm} />}
@@ -45,23 +46,28 @@ export const CardBack: React.FC<{ soldier: Soldier; design: CardDesign; classNam
                 <div className="text-[7px] font-mono text-slate-300 truncate">ARMY NO {dash(soldier.armyNo)} • BLOOD GP {dash(soldier.bloodGroup)}</div>
               </div>
             </div>
-            <div className="text-[7.5px] font-mono font-bold text-amber-300 uppercase flex items-center gap-1"><UserCheck className="w-3 h-3 text-amber-400" />IDENTIFICATION &amp; MEDICAL RECORD</div>
-            <div className="grid grid-cols-3 gap-1 text-[7px] font-mono">
-              <div className="bg-black/30 border border-white/10 rounded p-1"><span className="text-slate-400 block text-[6px]">DATE OF BIRTH</span><span className="font-bold text-white">{dash(soldier.dob)}</span></div>
-              <div className="bg-black/30 border border-white/10 rounded p-1"><span className="text-slate-400 block text-[6px]">DATE OF ENROLMENT</span><span className="font-bold text-white">{dash(soldier.enrolDate)}</span></div>
-              <div className="bg-black/30 border border-white/10 rounded p-1"><span className="text-slate-400 block text-[6px]">VALID TILL</span><span className="font-bold text-amber-300">{dash(soldier.expiryDate)}</span></div>
+            <div style={detailPx(7.5)} className="font-mono font-bold text-amber-300 uppercase flex items-center gap-1"><UserCheck className="w-3 h-3 text-amber-400" />IDENTIFICATION &amp; MEDICAL RECORD</div>
+            <div className="grid grid-cols-2 gap-1 font-mono">
+              {design.backFields.map(k => {
+                const f = detailField(k);
+                return <div key={k} className="bg-black/30 border border-white/10 rounded p-1"><span style={detailPx(6)} className="text-slate-400 block">{f.label}</span><span style={{ ...detailPx(7), ...detailColor(design, '#ffffff') }} className="font-bold">{dash(f.get(soldier))}</span></div>;
+              })}
             </div>
-            <div className="bg-black/30 border border-white/10 rounded p-1 text-[6.5px] font-mono">
-              <span className="text-slate-400 block text-[6px]">VISIBLE IDENTIFICATION MARKS:</span>
-              <span className="text-amber-200 font-medium">{dash(soldier.idMark)}</span>
-            </div>
-            <div className="bg-black/30 border border-white/10 rounded p-1 text-[6.5px] font-mono">
-              <span className="text-slate-400 text-[6px] flex items-center gap-1"><PhoneCall className="w-2.5 h-2.5 text-amber-400" />NEXT OF KIN (EMERGENCY CONTACT):</span>
-              <div className="flex items-center justify-between text-white font-bold pt-0.5 gap-2">
-                <span>{dash(soldier.nokName)}{soldier.nokRelation ? ` (${soldier.nokRelation})` : ''}</span>
-                <span className="text-amber-300">{soldier.nokPhone}</span>
+            {design.showIdMark && (
+              <div className="bg-black/30 border border-white/10 rounded p-1 font-mono">
+                <span style={detailPx(6)} className="text-slate-400 block">VISIBLE IDENTIFICATION MARKS:</span>
+                <span style={{ ...detailPx(6.5), ...detailColor(design, '#fde68a') }} className="font-medium">{dash(soldier.idMark)}</span>
               </div>
-            </div>
+            )}
+            {design.showNok && (
+              <div className="bg-black/30 border border-white/10 rounded p-1 font-mono">
+                <span style={detailPx(6)} className="text-slate-400 flex items-center gap-1"><PhoneCall className="w-2.5 h-2.5 text-amber-400" />NEXT OF KIN (EMERGENCY CONTACT):</span>
+                <div style={{ ...detailPx(6.5), ...detailColor(design, '#ffffff') }} className="flex items-center justify-between font-bold pt-0.5 gap-2">
+                  <span>{dash(soldier.nokName)}{soldier.nokRelation ? ` (${soldier.nokRelation})` : ''}</span>
+                  <span className="text-amber-300">{soldier.nokPhone}</span>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="col-span-6 flex flex-col justify-center gap-3 pl-1">

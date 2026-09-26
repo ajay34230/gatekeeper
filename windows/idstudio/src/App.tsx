@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { CardDesign, Soldier, ThemeId } from './types';
+import { CardDesign, DetailFieldKey, Soldier, ThemeId } from './types';
 import { CARD_THEMES, DEFAULT_DESIGN, ARMY_RANKS, BLOOD_GROUPS, CARD_SIZES, cardSize, baseWidth } from './themes';
+import { DETAIL_FIELD_CATALOG, DETAIL_FONT_SCALES, DETAIL_COLOR_PRESETS } from './detailFields';
 import { CardFace } from './components/CardFace';
 import { SignaturePad } from './components/SignaturePad';
 import { NationalCrest } from './components/MilitaryEmblem';
@@ -374,8 +375,41 @@ export default function App() {
                 <div className="flex flex-wrap gap-5 text-sm">
                   <Check label="Show mobile number" v={design.showMobile} on={v => setD({ showMobile: v })} />
                   <Check label="Show address" v={design.showAddress} on={v => setD({ showAddress: v })} />
+                  <Check label="Show identification marks" v={design.showIdMark} on={v => setD({ showIdMark: v })} />
+                  <Check label="Show next of kin" v={design.showNok} on={v => setD({ showNok: v })} />
                   <Check label="Show gold chip graphic" v={design.showChip} on={v => setD({ showChip: v })} />
                   <Check label="Show machine-readable zone" v={design.showMrz} on={v => setD({ showMrz: v })} />
+                </div>
+
+                <div className="rounded-xl border border-slate-800 p-4 space-y-4">
+                  <div className="text-xs font-mono font-bold text-amber-400 uppercase">Detail box text</div>
+                  <div className="grid grid-cols-2 gap-4 max-w-xl">
+                    <label className="block">
+                      <span className="block text-[11px] font-mono font-bold text-slate-400 uppercase mb-1">Text size</span>
+                      <select value={design.detailFontScale} onChange={e => setD({ detailFontScale: parseFloat(e.target.value) })} className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-sm">
+                        {DETAIL_FONT_SCALES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="block text-[11px] font-mono font-bold text-slate-400 uppercase mb-1">Text colour</span>
+                      <div className="flex gap-2">
+                        <select value={DETAIL_COLOR_PRESETS.some(c => c.value === design.detailFontColor) ? design.detailFontColor : 'custom'}
+                          onChange={e => e.target.value !== 'custom' && setD({ detailFontColor: e.target.value })}
+                          className="flex-1 px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-sm">
+                          {DETAIL_COLOR_PRESETS.map(c => <option key={c.label} value={c.value}>{c.label}</option>)}
+                          <option value="custom">Custom…</option>
+                        </select>
+                        <input type="color" value={design.detailFontColor || '#ffffff'} onChange={e => setD({ detailFontColor: e.target.value })}
+                          className="w-10 h-10 rounded-lg bg-slate-950 border border-slate-700 cursor-pointer" title="Custom colour" />
+                      </div>
+                    </label>
+                  </div>
+                  <p className="text-xs text-slate-500">Applies to the small label/value boxes below — army number, name and headings keep their own size.</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <DetailBoxPicker label="Front detail boxes" fields={design.frontFields} onChange={v => setD({ frontFields: v })} />
+                  <DetailBoxPicker label="Back detail boxes" fields={design.backFields} onChange={v => setD({ backFields: v })} />
                 </div>
               </div>
             )}
@@ -467,6 +501,26 @@ const Select: React.FC<{ label: string; value: string; options: string[]; onChan
 
 const Check: React.FC<{ label: string; v: boolean; on: (v: boolean) => void }> = ({ label, v, on }) => (
   <label className="flex items-center gap-2 cursor-pointer text-slate-300"><input type="checkbox" checked={v} onChange={e => on(e.target.checked)} className="accent-amber-500 w-4 h-4" />{label}</label>
+);
+
+/** Ticks which of the catalogue's fields appear as detail boxes (front grid or back grid); the grid re-flows on its
+ * own as boxes are added or removed, so nothing else needs adjusting. */
+const DetailBoxPicker: React.FC<{ label: string; fields: DetailFieldKey[]; onChange: (v: DetailFieldKey[]) => void }> = ({ label, fields, onChange }) => (
+  <div className="rounded-xl border border-slate-800 p-4 space-y-2">
+    <div className="text-xs font-mono font-bold text-amber-400 uppercase">{label} ({fields.length})</div>
+    <p className="text-xs text-slate-500">Tick the fields to show on the card; the rest of the boxes re-flow to fill the space.</p>
+    <div className="grid grid-cols-2 gap-1.5">
+      {DETAIL_FIELD_CATALOG.map(f => {
+        const on = fields.includes(f.key);
+        return (
+          <label key={f.key} className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+            <input type="checkbox" checked={on} onChange={() => onChange(on ? fields.filter(k => k !== f.key) : [...fields, f.key])} className="accent-amber-500 w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">{f.label}</span>
+          </label>
+        );
+      })}
+    </div>
+  </div>
 );
 
 const ImagePick: React.FC<{ label: string; mode: string; image: string; options: [string, string][]; onMode: (m: string) => void; onImage: (url: string) => void; read: (f: File, cb: (u: string) => void) => void }> =

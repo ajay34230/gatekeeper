@@ -8,6 +8,7 @@ import { BearerSignature } from './Signature';
 import { SlotMark } from './Slot';
 import { usePhoto, useSignature } from '../host';
 import { mrz } from '../mrz';
+import { detailColor, detailField, detailPx, detailScaleVar } from '../detailFields';
 import { ShieldAlert, Phone, AlertTriangle, UserCheck, PhoneCall } from 'lucide-react';
 
 const dash = (v: string) => (v && v.trim()) || '—';
@@ -27,7 +28,7 @@ const Shell: React.FC<{ design: CardDesign; className?: string; children: React.
   const W = baseWidth(true), H = W * size.h / size.w, pxPerMm = W / size.w;
   return (
     <div className={`xv-card relative rounded-2xl overflow-hidden border-2 ${theme.cardBorder} shadow-2xl bg-gradient-to-br ${theme.bgGradient} select-none ${className}`}
-      style={{ width: W, height: H, boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.15)' }}>
+      style={{ width: W, height: H, boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.15)', ...detailScaleVar(design) }}>
       <GuillochePattern opacity={0.12} strokeColor="#94a3b8" />
       {watermark && <SecurityWatermark className="top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 text-slate-100" />}
       <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-bl from-amber-300/10 via-cyan-400/5 to-transparent pointer-events-none"></div>
@@ -83,24 +84,28 @@ export const PortraitFront: React.FC<{ soldier: Soldier; design: CardDesign; che
             <span className="text-[15px] font-mono font-extrabold tracking-widest text-white bg-black/40 px-2 rounded border border-amber-500/30">{dash(soldier.armyNo)}</span>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-1 w-full text-[7.5px] font-mono shrink-0">
-          {([['UNIT', soldier.unit], ['COMPANY (COY)', soldier.company], ['PLATOON', soldier.platoon], ['SECTION (SEC)', soldier.section]] as const).map(([k, v]) => (
-            <div key={k} className="bg-black/30 border border-white/10 rounded px-1.5 py-0.5">
-              <span className="text-slate-400 block text-[6px]">{k}</span><span className="font-bold text-white uppercase truncate block">{dash(v)}</span>
-            </div>
-          ))}
+        <div className="grid grid-cols-2 gap-1 w-full font-mono shrink-0">
+          {design.frontFields.map(k => {
+            const f = detailField(k);
+            return (
+              <div key={k} className="bg-black/30 border border-white/10 rounded px-1.5 py-0.5">
+                <span style={detailPx(6)} className="text-slate-400 block">{f.label}</span>
+                <span style={{ ...detailPx(7.5), ...detailColor(design, '#ffffff') }} className="font-bold uppercase truncate block">{dash(f.get(soldier))}</span>
+              </div>
+            );
+          })}
         </div>
         <div className="grid grid-cols-2 gap-1 w-full shrink-0">
           <div className="flex items-center justify-between bg-red-950/60 border border-red-500/40 rounded px-1.5 py-0.5">
-            <span className="text-[6.5px] font-mono text-red-300 flex items-center gap-0.5"><ShieldAlert className="w-2.5 h-2.5 text-red-400" />BLOOD GP</span>
-            <span className="text-[8px] font-bold text-red-100 font-mono">{dash(soldier.bloodGroup)}</span>
+            <span style={detailPx(6.5)} className="font-mono text-red-300 flex items-center gap-0.5"><ShieldAlert className="w-2.5 h-2.5 text-red-400" />BLOOD GP</span>
+            <span style={{ ...detailPx(8), ...detailColor(design, '#fecaca') }} className="font-bold font-mono">{dash(soldier.bloodGroup)}</span>
           </div>
-          <div className="flex items-center justify-between text-[6.5px] font-mono bg-black/30 border border-white/10 rounded px-1.5 py-0.5">
-            <span className="text-slate-400">EXPIRY:</span><span className="font-bold text-amber-300">{dash(soldier.expiryDate)}</span>
+          <div className="flex items-center justify-between font-mono bg-black/30 border border-white/10 rounded px-1.5 py-0.5">
+            <span style={detailPx(6.5)} className="text-slate-400">EXPIRY:</span><span style={{ ...detailPx(6.5), ...detailColor(design, '#fcd34d') }} className="font-bold">{dash(soldier.expiryDate)}</span>
           </div>
         </div>
         {design.showMobile && soldier.mobile && m.roomy && (
-          <div className="flex items-center gap-1 font-mono text-[7.5px] self-start shrink-0"><Phone className="w-2.5 h-2.5 text-amber-400" /><span className="text-slate-400">MOB:</span><span className="font-bold">{soldier.mobile}</span></div>
+          <div className="flex items-center gap-1 font-mono self-start shrink-0"><Phone className="w-2.5 h-2.5 text-amber-400" /><span style={detailPx(7.5)} className="text-slate-400">MOB:</span><span style={{ ...detailPx(7.5), ...detailColor(design, '#f1f5f9') }} className="font-bold">{soldier.mobile}</span></div>
         )}
       </div>
 
@@ -151,20 +156,24 @@ export const PortraitBack: React.FC<{ soldier: Soldier; design: CardDesign; clas
         </div>
 
         <div className="space-y-1">
-          <div className="text-[8px] font-mono font-bold text-amber-300 uppercase flex items-center gap-1"><UserCheck className="w-3 h-3 text-amber-400" />IDENTIFICATION &amp; MEDICAL RECORD</div>
-          <div className="grid grid-cols-2 gap-1 text-[7.5px] font-mono">
-            <div className={box}><span className="text-slate-400 block text-[6px]">DATE OF BIRTH</span><span className="font-bold text-white">{dash(soldier.dob)}</span></div>
-            <div className={box}><span className="text-slate-400 block text-[6px]">DATE OF ENROLMENT</span><span className="font-bold text-white">{dash(soldier.enrolDate)}</span></div>
-            <div className={box}><span className="text-slate-400 block text-[6px]">BLOOD GROUP</span><span className="font-bold text-red-200">{dash(soldier.bloodGroup)}</span></div>
-            <div className={box}><span className="text-slate-400 block text-[6px]">VALID TILL</span><span className="font-bold text-amber-300">{dash(soldier.expiryDate)}</span></div>
+          <div style={detailPx(8)} className="font-mono font-bold text-amber-300 uppercase flex items-center gap-1"><UserCheck className="w-3 h-3 text-amber-400" />IDENTIFICATION &amp; MEDICAL RECORD</div>
+          <div className="grid grid-cols-2 gap-1 font-mono">
+            {design.backFields.map(k => {
+              const f = detailField(k);
+              return <div key={k} className={box}><span style={detailPx(6)} className="text-slate-400 block">{f.label}</span><span style={{ ...detailPx(7.5), ...detailColor(design, '#ffffff') }} className="font-bold">{dash(f.get(soldier))}</span></div>;
+            })}
           </div>
-          <div className={`${box} text-[7px] font-mono`}><span className="text-slate-400 block text-[6px]">VISIBLE IDENTIFICATION MARKS</span><span className="text-amber-200">{dash(soldier.idMark)}</span></div>
-          <div className={`${box} text-[7px] font-mono`}>
-            <span className="text-slate-400 text-[6px] flex items-center gap-1"><PhoneCall className="w-2.5 h-2.5 text-amber-400" />NEXT OF KIN (EMERGENCY CONTACT)</span>
-            <div className="flex items-center justify-between font-bold pt-0.5 gap-2"><span className="truncate">{dash(soldier.nokName)}{soldier.nokRelation ? ` (${soldier.nokRelation})` : ''}</span><span className="text-amber-300 shrink-0">{soldier.nokPhone}</span></div>
-          </div>
+          {design.showIdMark && (
+            <div className={`${box} font-mono`}><span style={detailPx(6)} className="text-slate-400 block">VISIBLE IDENTIFICATION MARKS</span><span style={{ ...detailPx(7), ...detailColor(design, '#fde68a') }}>{dash(soldier.idMark)}</span></div>
+          )}
+          {design.showNok && (
+            <div className={`${box} font-mono`}>
+              <span style={detailPx(6)} className="text-slate-400 flex items-center gap-1"><PhoneCall className="w-2.5 h-2.5 text-amber-400" />NEXT OF KIN (EMERGENCY CONTACT)</span>
+              <div style={detailPx(7)} className="flex items-center justify-between font-bold pt-0.5 gap-2"><span className="truncate">{dash(soldier.nokName)}{soldier.nokRelation ? ` (${soldier.nokRelation})` : ''}</span><span className="text-amber-300 shrink-0">{soldier.nokPhone}</span></div>
+            </div>
+          )}
           {design.showAddress && (
-            <div className={`${box} text-[7px] font-mono`}><span className="text-slate-400 block text-[6px]">PERMANENT ADDRESS</span><span className="text-slate-200 line-clamp-2">{dash(soldier.address)}</span></div>
+            <div className={`${box} font-mono`}><span style={detailPx(6)} className="text-slate-400 block">PERMANENT ADDRESS</span><span style={{ ...detailPx(7), ...detailColor(design, '#e2e8f0') }} className="line-clamp-2">{dash(soldier.address)}</span></div>
           )}
         </div>
 
