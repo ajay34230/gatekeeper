@@ -77,6 +77,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -360,6 +361,54 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 .onFailure { handoverError = "Handover summary could not be queued." + (it.message?.let { m -> " $m" } ?: "") }
         }
     }
+
+    // ------------------------------------------------------------------ phone-to-phone handover (Bluetooth / Wi-Fi)
+
+    private val handoverService = com.teamxv.qrmonitor.handover.NearbyHandoverService(app)
+
+    var handoverPhase by mutableStateOf<com.teamxv.qrmonitor.handover.HandoverPhase>(com.teamxv.qrmonitor.handover.HandoverPhase.Idle)
+        private set
+
+    init {
+        viewModelScope.launch { handoverService.phase.collectLatest { handoverPhase = it } }
+    }
+
+    /** How this operator identifies themself to the other phone during the code-confirmation step. */
+    private fun handoverLabel(): String {
+        val who = config.operatorName.ifBlank { config.operatorId }
+        val post = listOf(config.locationName.ifBlank { config.locationId }, config.gateName.ifBlank { config.gateId }).filter { it.isNotBlank() }.joinToString("/")
+        return listOf(who, post).filter { it.isNotBlank() }.joinToString(" • ")
+    }
+
+    /** Outgoing operator: builds a fresh snapshot (registry, who is inside, anything not yet confirmed synced) and
+     * starts advertising this phone so the next operator's phone can find it -- no server or internet involved. */
+    fun startHandoverSend() {
+        viewModelScope.launch(appErrors) {
+            val payload = withContext(Dispatchers.IO) {
+                com.teamxv.qrmonitor.handover.HandoverPayload.build(config, AppDatabase.get(getApplication()))
+            }
+            handoverService.startSending(payload, handoverLabel())
+        }
+    }
+
+    /** Incoming operator: searches for the outgoing operator's phone and, once the code is confirmed and the data
+     * arrives, merges it straight into this terminal's own local database. */
+    fun startHandoverReceive() {
+        handoverService.startReceiving(handoverLabel()) { payload ->
+            try {
+                val summary = withContext(Dispatchers.IO) { payload.applyTo(config, AppDatabase.get(getApplication())) }
+                locations = config.cachedLocations; gates = config.cachedGates
+                handoverService.markReceiveApplied(summary)
+            } catch (e: Exception) {
+                handoverService.markReceiveFailed(e.message ?: "Could not apply the received data (${e.javaClass.simpleName}).")
+            }
+        }
+    }
+
+    /** Called once both operators have visually compared the code shown on both screens. */
+    fun confirmHandoverCode(endpointId: String) = handoverService.confirmCode(endpointId)
+    fun rejectHandoverCode(endpointId: String) = handoverService.rejectCode(endpointId)
+    fun cancelHandoverTransfer() = handoverService.cancel()
 
     fun openPersonScanner() {
         showSuccess = false
@@ -964,6 +1013,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         syncWorkLiveData.removeObserver(syncWorkObserver)
+        handoverService.dispose()
         super.onCleared()
     }
 }

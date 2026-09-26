@@ -11,6 +11,11 @@ interface MovementEventDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(event: MovementEventEntity)
 
+    /** Merges a handover snapshot from another terminal -- eventId is a globally unique UUID, so this only ever
+     * overwrites an event this same handover already delivered once (re-sending is safe/idempotent). */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(items: List<MovementEventEntity>)
+
     @Query("SELECT * FROM movement_events ORDER BY createdAt DESC, eventId DESC")
     fun observeAll(): Flow<List<MovementEventEntity>>
 

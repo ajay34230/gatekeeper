@@ -2,6 +2,7 @@ package com.teamxv.qrmonitor.data.local
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 
@@ -9,6 +10,11 @@ import kotlinx.coroutines.flow.Flow
 interface PresenceSessionDao {
     @Insert
     suspend fun insert(session: PresenceSessionEntity)
+
+    /** Merges a handover snapshot from another terminal -- sessionId is a globally unique UUID, so this only ever
+     * overwrites a session this same handover already delivered once (re-sending is safe/idempotent). */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(items: List<PresenceSessionEntity>)
 
     @Query("SELECT * FROM presence_sessions WHERE personId=:personId AND status='ACTIVE' ORDER BY entryAt DESC LIMIT 1")
     suspend fun activeForPerson(personId: String): PresenceSessionEntity?

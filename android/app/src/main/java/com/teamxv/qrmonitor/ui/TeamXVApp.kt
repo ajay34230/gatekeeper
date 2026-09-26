@@ -1,7 +1,14 @@
 package com.teamxv.qrmonitor.ui
 
+import android.Manifest
 import android.app.Activity
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.core.content.ContextCompat
+import com.teamxv.qrmonitor.handover.HandoverPhase
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -51,6 +58,7 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.VolumeOff
@@ -1414,6 +1422,11 @@ private fun OperatorScreen(vm: MainViewModel, onOpenSettings: () -> Unit) {
         Spacer(Modifier.height(10.dp))
         SecondaryButton("CHANGE POST & CONNECTION", Icons.Default.Settings, onOpenSettings)
 
+        Spacer(Modifier.height(10.dp))
+        var showDeviceHandover by remember { mutableStateOf(false) }
+        SecondaryButton("TRANSFER DATA TO NEXT PHONE (Bluetooth / Wi-Fi)", Icons.Default.Wifi) { showDeviceHandover = true }
+        if (showDeviceHandover) DeviceHandoverSheet(vm) { showDeviceHandover = false }
+
         Spacer(Modifier.height(12.dp))
         var handover by remember { mutableStateOf<HandoverReport?>(null) }
         DangerButton("HANDOVER SHIFT / LOG OUT", Icons.Default.Logout) { handover = vm.handoverReport() }
@@ -1795,6 +1808,117 @@ private fun HandoverStat(label: String, value: Int, tint: Color, modifier: Modif
             Text(label, fontFamily = Sans, fontSize = 10.sp, color = UiMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
+}
+
+private fun handoverPermissions(): Array<String> {
+    val perms = mutableListOf(Manifest.permission.ACCESS_FINE_LOCATION)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        perms += Manifest.permission.BLUETOOTH_ADVERTISE
+        perms += Manifest.permission.BLUETOOTH_CONNECT
+        perms += Manifest.permission.BLUETOOTH_SCAN
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        perms += Manifest.permission.NEARBY_WIFI_DEVICES
+    }
+    return perms.toTypedArray()
+}
+
+/** Sends this terminal's entire local snapshot (registry, who is inside, anything not yet confirmed synced)
+ * straight to the next operator's phone over Bluetooth or a local Wi-Fi hotspot -- no server or internet needed.
+ * Both operators confirm a short code shown on both screens before anything is exchanged. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DeviceHandoverSheet(vm: MainViewModel, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var pendingRole by remember { mutableIntStateOf(0) } // 1 = send, 2 = receive
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
+        if (results.values.all { it }) {
+            if (pendingRole == 1) vm.startHandoverSend() else if (pendingRole == 2) vm.startHandoverReceive()
+        }
+        pendingRole = 0
+    }
+    fun beginRole(role: Int) {
+        val missing = handoverPermissions().filter { ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED }
+        if (missing.isEmpty()) {
+            if (role == 1) vm.startHandoverSend() else vm.startHandoverReceive()
+        } else {
+            pendingRole = role
+            permissionLauncher.launch(missing.toTypedArray())
+        }
+    }
+
+    ModalBottomSheet(onDismissRequest = { vm.cancelHandoverTransfer(); onDismiss() }, containerColor = UiSurface) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+            Text("Phone-to-Phone Handover", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = UiInk)
+            Text(
+                "Send this terminal's registry, who is currently inside, and any record not yet confirmed synced, straight to the next operator's phone over Bluetooth or Wi-Fi -- no server needed.",
+                fontFamily = Sans, fontSize = 12.sp, color = UiMuted
+            )
+            Spacer(Modifier.height(16.dp))
+
+            when (val phase = vm.handoverPhase) {
+                is HandoverPhase.Idle -> {
+                    PrimaryButton("SEND MY DATA TO NEXT PHONE", Icons.Default.CloudUpload) { beginRole(1) }
+                    Spacer(Modifier.height(10.dp))
+                    SecondaryButton("RECEIVE FROM PREVIOUS OPERATOR", Icons.Default.CloudDownload) { beginRole(2) }
+                }
+                is HandoverPhase.Advertising -> HandoverProgress(
+                    "Waiting for the next operator's phone…",
+                    "Open this same screen on the other phone and tap RECEIVE FROM PREVIOUS OPERATOR."
+                )
+                is HandoverPhase.Searching -> HandoverProgress(
+                    "Searching for the outgoing operator's phone…",
+                    "Make sure the other phone has this screen open with SEND MY DATA TO NEXT PHONE tapped."
+                )
+                is HandoverPhase.ConfirmCode -> {
+                    Text("CONFIRM ON BOTH PHONES", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = 1.sp, color = UiMuted)
+                    Spacer(Modifier.height(8.dp))
+                    Text(phase.code, fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 40.sp, color = UiInk)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Connecting with ${phase.remoteName}. Confirm this exact code is shown on both screens before continuing.",
+                        fontFamily = Sans, fontSize = 12.sp, color = UiMuted
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    PrimaryButton("CODES MATCH — CONTINUE", Icons.Default.Check) { vm.confirmHandoverCode(phase.endpointId) }
+                    Spacer(Modifier.height(8.dp))
+                    DangerButton("DOES NOT MATCH — CANCEL", Icons.Default.Close) { vm.rejectHandoverCode(phase.endpointId) }
+                }
+                is HandoverPhase.Connecting -> HandoverProgress("Connecting…", "")
+                is HandoverPhase.Transferring -> HandoverProgress(
+                    "Transferring…",
+                    if (phase.totalBytes > 0) "${phase.sentBytes / 1024} KB of ${phase.totalBytes / 1024} KB" else "Preparing the data package…"
+                )
+                is HandoverPhase.Succeeded -> {
+                    ActivityStatusChip(ActivityState.SUCCEEDED, succeededText = phase.summary)
+                    Spacer(Modifier.height(16.dp))
+                    PrimaryButton("DONE", Icons.Default.Check) { vm.cancelHandoverTransfer(); onDismiss() }
+                }
+                is HandoverPhase.Failed -> {
+                    ActivityStatusChip(ActivityState.FAILED, failedText = phase.reason)
+                    Spacer(Modifier.height(16.dp))
+                    PrimaryButton("TRY AGAIN", Icons.Default.Refresh) { vm.cancelHandoverTransfer() }
+                    Spacer(Modifier.height(8.dp))
+                    SecondaryButton("CLOSE", Icons.Default.Close) { vm.cancelHandoverTransfer(); onDismiss() }
+                }
+            }
+
+            if (vm.handoverPhase !is HandoverPhase.Idle && vm.handoverPhase !is HandoverPhase.Succeeded && vm.handoverPhase !is HandoverPhase.Failed) {
+                Spacer(Modifier.height(14.dp))
+                SecondaryTextButton("CANCEL") { vm.cancelHandoverTransfer() }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HandoverProgress(title: String, subtitle: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = UiBlue)
+        Spacer(Modifier.width(10.dp))
+        Text(title, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = UiInk)
+    }
+    if (subtitle.isNotBlank()) { Spacer(Modifier.height(6.dp)); Text(subtitle, fontFamily = Sans, fontSize = 11.sp, color = UiMuted) }
 }
 
 /** Expected return date for leave / TD exits (end of the chosen day), required for the reasons set on the PC. */

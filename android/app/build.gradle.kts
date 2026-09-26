@@ -111,6 +111,10 @@ dependencies {
 
     implementation("androidx.work:work-runtime-ktx:2.11.2")
 
+    // Device-to-device shift handover: transfers the local registry/presence/pending-queue snapshot straight to
+    // the next operator's phone over Bluetooth or a local Wi-Fi hotspot, with no server involved.
+    implementation("com.google.android.gms:play-services-nearby:19.3.0")
+
     implementation("androidx.camera:camera-core:1.4.2")
     implementation("androidx.camera:camera-camera2:1.4.2")
     implementation("androidx.camera:camera-lifecycle:1.4.2")
