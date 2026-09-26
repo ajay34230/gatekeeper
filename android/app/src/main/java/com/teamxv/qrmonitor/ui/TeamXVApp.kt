@@ -328,9 +328,32 @@ private fun LoginScreen(vm: MainViewModel) {
         }
 
         Spacer(Modifier.height(14.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("STATION & GATE", fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 0.8.sp, color = UiMuted, modifier = Modifier.weight(1f))
+            Row(
+                Modifier.clip(RoundedCornerShape(6.dp))
+                    .clickable(enabled = !vm.stationsRefreshing) { vm.refreshStations() }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Refresh, null, tint = if (vm.stationsRefreshing) UiMuted.copy(alpha = 0.5f) else UiMuted, modifier = Modifier.size(13.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    if (vm.stationsRefreshing) "REFRESHING…" else "REFRESH FROM SERVER",
+                    fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 0.4.sp,
+                    color = if (vm.stationsRefreshing) UiMuted.copy(alpha = 0.5f) else UiMuted
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             StationDropdown("Station Location", vm.locations, loc, Modifier.weight(1f)) { id, n -> loc = id; vm.selectPost(id, n, gate, vm.gates.firstOrNull { it.first == gate }?.second ?: gate) }
             StationDropdown("Active Gate", vm.gates, gate, Modifier.weight(1f)) { id, n -> gate = id; vm.selectPost(loc, vm.locations.firstOrNull { it.first == loc }?.second ?: loc, id, n) }
+        }
+        if (vm.stationsMessage.isNotBlank()) {
+            Spacer(Modifier.height(6.dp))
+            val bad = listOf("could not", "fail", "error").any { vm.stationsMessage.contains(it, true) }
+            Text(vm.stationsMessage, fontFamily = Sans, fontSize = 10.sp, color = if (bad) UiWarning else UiSuccess)
         }
 
         Spacer(Modifier.height(16.dp))

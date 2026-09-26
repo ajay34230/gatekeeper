@@ -174,6 +174,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var gates by mutableStateOf(config.cachedGates)
         private set
+    var stationsRefreshing by mutableStateOf(false)
+        private set
+    var stationsMessage by mutableStateOf("")
+        private set
     var vehicles by mutableStateOf(listOf<VehicleEntity>())
         private set
     var vehiclesInside by mutableStateOf(setOf<String>())
@@ -811,15 +815,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO + appErrors) { com.teamxv.qrmonitor.comms.CommsEngine.markSeen(getApplication()) }
     }
 
-    /** Locations and gates configured on the PC (public list, no sign-in needed). */
+    /** Locations and gates configured on the PC (public list, no sign-in needed) -- callable from the login screen
+     * (before or without ever signing in) so a stale or empty station list can be refreshed on the spot, over the
+     * LAN or the internet, whichever reaches the Command Center. */
     fun refreshStations() {
+        stationsRefreshing = true
         viewModelScope.launch(Dispatchers.IO + appErrors) {
-            api.stations().onSuccess { (locs, gts) ->
-                api.reasonsFromServer?.let { config.movementReasons = it; reasons = it }
-                api.returnReasonsFromServer?.let { config.returnReasons = it; returnReasons = it }
-                config.cachedLocations = locs; config.cachedGates = gts
-                locations = locs; gates = gts
-            }
+            api.stations()
+                .onSuccess { (locs, gts) ->
+                    api.reasonsFromServer?.let { config.movementReasons = it; reasons = it }
+                    api.returnReasonsFromServer?.let { config.returnReasons = it; returnReasons = it }
+                    config.cachedLocations = locs; config.cachedGates = gts
+                    locations = locs; gates = gts
+                    stationsMessage = "Locations & gates updated (${locs.size} location(s), ${gts.size} gate(s))"
+                }
+                .onFailure { stationsMessage = if (it is HttpFailure) (it.message ?: "Could not reach the Command Center") else (it.message ?: "Could not reach the Command Center") }
+            stationsRefreshing = false
         }
     }
 

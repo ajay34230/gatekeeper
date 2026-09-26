@@ -9,15 +9,24 @@ import com.teamxv.qrmonitor.data.EventRepository
 import com.teamxv.qrmonitor.data.local.AppDatabase
 import com.teamxv.qrmonitor.network.ApiClient
 import com.teamxv.qrmonitor.network.HttpFailure
+import com.teamxv.qrmonitor.network.NetworkMonitor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** Background synchronization: pull registry, push queued gate records, report terminal status. */
+/** Background synchronization: pull registry, push queued gate records, report terminal status. No network
+ * constraint gates this job (see SyncScheduler) -- it runs on a purely local connection to the Command Center just
+ * as well as an internet one; NetworkMonitor treats a local-only link as connected, unlike WorkManager's own
+ * NetworkType.CONNECTED check. Internet is only actually required when the PC can only be reached at its
+ * cloud/internet address, which shows up as an ordinary connection failure below, not a constraint. */
 class SyncWorker(appContext: Context, workerParams: WorkerParameters) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val config = AppConfig(applicationContext)
         val state = SyncStateStore(applicationContext)
         if (!config.paired) return@withContext Result.success()
+        if (!NetworkMonitor(applicationContext).isNetworkAvailable()) {
+            state.markError("No network connection")
+            return@withContext Result.retry()
+        }
         if (!config.hasValidOnlineToken()) {
             state.markError("Operator sign-in required to synchronize")
             return@withContext Result.success()
