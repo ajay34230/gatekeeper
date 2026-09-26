@@ -115,10 +115,10 @@ export const HolographicSeal: React.FC<{ className?: string; label?: string }> =
   );
 };
 
-export const SecurityWatermark: React.FC<{ className?: string }> = ({ className = 'w-48 h-48' }) => {
+export const SecurityWatermark: React.FC<{ className?: string; mode?: 'dark' | 'light' }> = ({ className = 'w-48 h-48', mode = 'dark' }) => {
   return (
     <div className={`absolute pointer-events-none select-none flex items-center justify-center opacity-7 ${className}`}>
-      <NationalCrest className="w-full h-full text-white" />
+      <NationalCrest className={`w-full h-full ${mode === 'light' ? 'text-slate-900' : 'text-white'}`} />
     </div>
   );
 };

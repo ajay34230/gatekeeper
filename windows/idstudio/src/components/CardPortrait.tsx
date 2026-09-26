@@ -9,6 +9,7 @@ import { SlotMark } from './Slot';
 import { usePhoto, useSignature } from '../host';
 import { mrz } from '../mrz';
 import { detailColor, detailField, detailPx, detailScaleVar } from '../detailFields';
+import { Watermark } from './Watermark';
 import { ShieldAlert, Phone, AlertTriangle, UserCheck, PhoneCall } from 'lucide-react';
 
 const dash = (v: string) => (v && v.trim()) || '—';
@@ -22,16 +23,19 @@ function metrics(design: CardDesign) {
 }
 
 /** Shared portrait card shell (neck / lanyard ID): same theme, security pattern and border as the landscape card. */
-const Shell: React.FC<{ design: CardDesign; className?: string; children: React.ReactNode; watermark?: boolean; corners?: React.ReactNode }> = ({ design, className = '', children, watermark, corners }) => {
+const Shell: React.FC<{ design: CardDesign; className?: string; children: React.ReactNode; side: 'front' | 'back'; corners?: React.ReactNode }> = ({ design, className = '', children, side, corners }) => {
   const theme = CARD_THEMES[design.theme] ?? CARD_THEMES.army;
   const size = cardSize(design);
   const W = baseWidth(true), H = W * size.h / size.w, pxPerMm = W / size.w;
   return (
-    <div className={`xv-card relative rounded-2xl overflow-hidden border-2 ${theme.cardBorder} shadow-2xl bg-gradient-to-br ${theme.bgGradient} select-none ${className}`}
+    <div data-mode={theme.mode} className={`xv-card relative rounded-2xl overflow-hidden border-2 ${theme.cardBorder} shadow-2xl bg-gradient-to-br ${theme.bgGradient} select-none ${className}`}
       style={{ width: W, height: H, boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.15)', ...detailScaleVar(design) }}>
-      <GuillochePattern opacity={0.12} strokeColor="#94a3b8" />
-      {watermark && <SecurityWatermark className="top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 text-slate-100" />}
-      <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-bl from-amber-300/10 via-cyan-400/5 to-transparent pointer-events-none"></div>
+      {design.showBackgroundArt && <>
+        <GuillochePattern opacity={0.12} strokeColor={theme.mode === 'light' ? '#334155' : '#94a3b8'} />
+        {side === 'front' && <SecurityWatermark className="top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 text-slate-100" mode={theme.mode} />}
+        <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-bl from-amber-300/10 via-cyan-400/5 to-transparent pointer-events-none"></div>
+      </>}
+      <Watermark image={side === 'front' ? design.watermarkFront : design.watermarkBack} opacity={side === 'front' ? design.watermarkFrontOpacity : design.watermarkBackOpacity} sizePct={side === 'front' ? design.watermarkFrontSize : design.watermarkBackSize} />
       {design.showSlot && <SlotMark pxPerMm={pxPerMm} />}
       {corners && <div className="absolute z-20 left-3.5 right-3.5 top-3 flex items-center justify-between">{corners}</div>}
       <div className="relative z-10 w-full h-full flex flex-col p-3.5 text-slate-100" style={{ paddingTop: design.showSlot ? 7 * pxPerMm : corners ? 40 : undefined }}>{children}</div>
@@ -44,7 +48,7 @@ export const PortraitFront: React.FC<{ soldier: Soldier; design: CardDesign; che
   const signature = useSignature(soldier.id, soldier.signatureVer);
   const m = metrics(design);
   return (
-    <Shell design={design} className={className} watermark corners={<>
+    <Shell design={design} className={className} side="front" corners={<>
       {design.showChip ? <SmartChip className="w-9 h-7" /> : <span />}
       {design.badge !== 'none'
         ? <div className="w-9 h-9 rounded-full bg-black/40 border border-white/20 p-1 flex items-center justify-center text-amber-400 overflow-hidden">
@@ -135,7 +139,7 @@ export const PortraitBack: React.FC<{ soldier: Soldier; design: CardDesign; clas
   const photo = usePhoto(soldier.id, soldier.photoVer);
   const box = 'bg-black/30 border border-white/10 rounded px-1.5 py-1';
   return (
-    <Shell design={design} className={className}>
+    <Shell design={design} className={className} side="back">
       <div className="w-full bg-slate-900 border-y border-white/15 py-1 px-2 flex items-center justify-between rounded gap-2">
         <span className="flex items-center gap-1.5 min-w-0"><span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
           <span className="text-[6px] font-mono tracking-wider text-slate-300 uppercase truncate">{design.stripeText}</span></span>

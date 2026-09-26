@@ -379,6 +379,7 @@ export default function App() {
                   <Check label="Show next of kin" v={design.showNok} on={v => setD({ showNok: v })} />
                   <Check label="Show gold chip graphic" v={design.showChip} on={v => setD({ showChip: v })} />
                   <Check label="Show machine-readable zone" v={design.showMrz} on={v => setD({ showMrz: v })} />
+                  <Check label="Show background security print (guilloche pattern, ghost crest, corner glow)" v={design.showBackgroundArt} on={v => setD({ showBackgroundArt: v })} />
                 </div>
 
                 <div className="rounded-xl border border-slate-800 p-4 space-y-4">
@@ -410,6 +411,13 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-4">
                   <DetailBoxPicker label="Front detail boxes" fields={design.frontFields} onChange={v => setD({ frontFields: v })} />
                   <DetailBoxPicker label="Back detail boxes" fields={design.backFields} onChange={v => setD({ backFields: v })} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <WatermarkPicker label="Front watermark" image={design.watermarkFront} opacity={design.watermarkFrontOpacity} sizePct={design.watermarkFrontSize}
+                    onImage={u => setD({ watermarkFront: u })} onOpacity={v => setD({ watermarkFrontOpacity: v })} onSize={v => setD({ watermarkFrontSize: v })} read={readFile} />
+                  <WatermarkPicker label="Back watermark" image={design.watermarkBack} opacity={design.watermarkBackOpacity} sizePct={design.watermarkBackSize}
+                    onImage={u => setD({ watermarkBack: u })} onOpacity={v => setD({ watermarkBackOpacity: v })} onSize={v => setD({ watermarkBackSize: v })} read={readFile} />
                 </div>
               </div>
             )}
@@ -520,6 +528,37 @@ const DetailBoxPicker: React.FC<{ label: string; fields: DetailFieldKey[]; onCha
         );
       })}
     </div>
+  </div>
+);
+
+/** An optional watermark image for one side of the card, with its own transparency and size — independent of the
+ * other side, so the front and back can each carry a different mark (or none). */
+const WatermarkPicker: React.FC<{
+  label: string; image: string; opacity: number; sizePct: number;
+  onImage: (u: string) => void; onOpacity: (v: number) => void; onSize: (v: number) => void;
+  read: (f: File, cb: (u: string) => void) => void;
+}> = ({ label, image, opacity, sizePct, onImage, onOpacity, onSize, read }) => (
+  <div className="rounded-xl border border-slate-800 p-4 space-y-3">
+    <div className="text-xs font-mono font-bold text-amber-400 uppercase">{label}</div>
+    <div className="flex flex-wrap items-center gap-2">
+      <label className="px-3 py-1.5 rounded-lg text-xs border border-slate-700 text-slate-300 cursor-pointer hover:bg-slate-800">Upload image…
+        <input type="file" accept="image/png,image/jpeg,image/svg+xml" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) read(f, onImage); e.target.value = ''; }} />
+      </label>
+      {image && <button onClick={() => onImage('')} className="px-3 py-1.5 rounded-lg text-xs border border-rose-800 text-rose-300">Remove</button>}
+      {image && <img src={image} alt="" className="h-10 object-contain rounded border border-slate-800 bg-slate-950 px-1" />}
+    </div>
+    {image && (
+      <div className="grid grid-cols-2 gap-4">
+        <label className="block">
+          <span className="flex justify-between text-[11px] font-mono font-bold text-slate-400 uppercase mb-1"><span>Transparency</span><span>{Math.round((1 - opacity) * 100)}% see-through</span></span>
+          <input type="range" min={2} max={60} value={Math.round(opacity * 100)} onChange={e => onOpacity(Number(e.target.value) / 100)} className="w-full accent-amber-500" />
+        </label>
+        <label className="block">
+          <span className="flex justify-between text-[11px] font-mono font-bold text-slate-400 uppercase mb-1"><span>Size</span><span>{sizePct}% of card</span></span>
+          <input type="range" min={15} max={100} value={sizePct} onChange={e => onSize(Number(e.target.value))} className="w-full accent-amber-500" />
+        </label>
+      </div>
+    )}
   </div>
 );
 

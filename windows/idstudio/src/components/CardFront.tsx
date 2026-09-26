@@ -8,6 +8,7 @@ import { CredentialQr } from './QrCode';
 import { BearerSignature } from './Signature';
 import { usePhoto, useSignature } from '../host';
 import { detailColor, detailField, detailPx, detailScaleVar } from '../detailFields';
+import { Watermark } from './Watermark';
 import { Phone, MapPin, ShieldAlert } from 'lucide-react';
 
 const dash = (v: string) => (v && v.trim()) || '—';
@@ -21,12 +22,16 @@ export const CardFront: React.FC<{ soldier: Soldier; design: CardDesign; check: 
   const signature = useSignature(soldier.id, soldier.signatureVer);
   return (
     <div
+      data-mode={theme.mode}
       className={`xv-card relative rounded-2xl overflow-hidden border-2 ${theme.cardBorder} shadow-2xl bg-gradient-to-br ${theme.bgGradient} select-none ${className}`}
       style={{ width: 700, height: 700 * size.h / size.w, boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.15)', ...detailScaleVar(design) }}
     >
-      <GuillochePattern opacity={0.12} strokeColor="#94a3b8" />
-      <SecurityWatermark className="top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 text-slate-100" />
-      <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-bl from-amber-300/10 via-cyan-400/5 to-transparent pointer-events-none"></div>
+      {design.showBackgroundArt && <>
+        <GuillochePattern opacity={0.12} strokeColor={theme.mode === 'light' ? '#334155' : '#94a3b8'} />
+        <SecurityWatermark className="top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 text-slate-100" mode={theme.mode} />
+        <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-bl from-amber-300/10 via-cyan-400/5 to-transparent pointer-events-none"></div>
+      </>}
+      <Watermark image={design.watermarkFront} opacity={design.watermarkFrontOpacity} sizePct={design.watermarkFrontSize} />
 
       {design.showSlot && <SlotMark pxPerMm={pxPerMm} />}
       <div className="relative z-10 w-full h-full flex flex-col justify-between p-3.5 text-slate-100" style={design.showSlot ? { paddingTop: 7.5 * pxPerMm } : undefined}>

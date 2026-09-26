@@ -1,11 +1,14 @@
 import { CardDesign, CardThemeConfig, SizeId, ThemeId } from './types';
 
 export const CARD_THEMES: Record<ThemeId, CardThemeConfig> = {
-  army: { id: 'army', name: 'Olive & Gold', bgGradient: 'from-[#0d160e] via-[#142316] to-[#0a120b]', cardBorder: 'border-amber-600/40' },
-  tactical: { id: 'tactical', name: 'Tactical Steel', bgGradient: 'from-[#0b0e14] via-[#111722] to-[#080b10]', cardBorder: 'border-cyan-500/40' },
-  navy: { id: 'navy', name: 'Deep Blue', bgGradient: 'from-[#07111e] via-[#0d1f35] to-[#050c17]', cardBorder: 'border-blue-400/40' },
-  airforce: { id: 'airforce', name: 'Aero Slate', bgGradient: 'from-[#0c1524] via-[#162238] to-[#0a101b]', cardBorder: 'border-sky-500/40' },
-  desert: { id: 'desert', name: 'Khaki & Bronze', bgGradient: 'from-[#17130c] via-[#241e14] to-[#120f0a]', cardBorder: 'border-amber-700/50' },
+  army: { id: 'army', name: 'Olive & Gold', bgGradient: 'from-[#0d160e] via-[#142316] to-[#0a120b]', cardBorder: 'border-amber-600/40', mode: 'dark' },
+  tactical: { id: 'tactical', name: 'Tactical Steel', bgGradient: 'from-[#0b0e14] via-[#111722] to-[#080b10]', cardBorder: 'border-cyan-500/40', mode: 'dark' },
+  navy: { id: 'navy', name: 'Deep Blue', bgGradient: 'from-[#07111e] via-[#0d1f35] to-[#050c17]', cardBorder: 'border-blue-400/40', mode: 'dark' },
+  airforce: { id: 'airforce', name: 'Aero Slate', bgGradient: 'from-[#0c1524] via-[#162238] to-[#0a101b]', cardBorder: 'border-sky-500/40', mode: 'dark' },
+  desert: { id: 'desert', name: 'Khaki & Bronze', bgGradient: 'from-[#17130c] via-[#241e14] to-[#120f0a]', cardBorder: 'border-amber-700/50', mode: 'dark' },
+  parade: { id: 'parade', name: 'Parade White & Gold', bgGradient: 'from-[#fefdfa] via-[#faf6ea] to-[#f3ecd6]', cardBorder: 'border-amber-600/60', mode: 'light' },
+  ceremonial: { id: 'ceremonial', name: 'Ceremonial Silver', bgGradient: 'from-[#fbfcfe] via-[#eef2f7] to-[#e2e8f0]', cardBorder: 'border-slate-400/70', mode: 'light' },
+  ivory: { id: 'ivory', name: 'Ivory & Crimson', bgGradient: 'from-[#fffaf2] via-[#fbf0e0] to-[#f6e4c8]', cardBorder: 'border-red-700/50', mode: 'light' },
 };
 
 /** Starting wording (same as the reference design); every line can be changed in the Studio. */
@@ -52,6 +55,13 @@ export const DEFAULT_DESIGN: CardDesign = {
   showNok: true,
   detailFontScale: 1.2,
   detailFontColor: '',
+  showBackgroundArt: true,
+  watermarkFront: '',
+  watermarkFrontOpacity: 0.12,
+  watermarkFrontSize: 55,
+  watermarkBack: '',
+  watermarkBackOpacity: 0.12,
+  watermarkBackSize: 55,
 };
 
 /** Card sizes as long side × short side in millimetres. */

@@ -7,6 +7,7 @@ import { GuillochePattern } from './GuillochePattern';
 import { mrz } from '../mrz';
 import { usePhoto } from '../host';
 import { detailColor, detailField, detailPx, detailScaleVar } from '../detailFields';
+import { Watermark } from './Watermark';
 import { AlertTriangle, UserCheck, PhoneCall } from 'lucide-react';
 
 const dash = (v: string) => (v && v.trim()) || '—';
@@ -20,10 +21,12 @@ export const CardBack: React.FC<{ soldier: Soldier; design: CardDesign; classNam
   const photo = usePhoto(soldier.id, soldier.photoVer);
   return (
     <div
+      data-mode={theme.mode}
       className={`xv-card relative rounded-2xl overflow-hidden border-2 ${theme.cardBorder} shadow-2xl bg-gradient-to-br ${theme.bgGradient} select-none ${className}`}
       style={{ width: 700, height: 700 * size.h / size.w, boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.15)', ...detailScaleVar(design) }}
     >
-      <GuillochePattern opacity={0.1} strokeColor="#94a3b8" />
+      {design.showBackgroundArt && <GuillochePattern opacity={0.1} strokeColor={theme.mode === 'light' ? '#334155' : '#94a3b8'} />}
+      <Watermark image={design.watermarkBack} opacity={design.watermarkBackOpacity} sizePct={design.watermarkBackSize} />
       {design.showSlot && <SlotMark pxPerMm={pxPerMm} />}
       <div className="relative z-10 w-full h-full flex flex-col justify-between p-3.5 text-slate-100" style={design.showSlot ? { paddingTop: 7.5 * pxPerMm } : undefined}>
         <div className="w-full bg-slate-900 border-y border-white/15 py-1 px-3 flex items-center justify-between rounded">

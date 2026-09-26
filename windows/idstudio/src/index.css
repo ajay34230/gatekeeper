@@ -29,3 +29,28 @@
 /* Drop-down lists: the open list uses the system colours, so give options explicit readable colours. */
 select { color-scheme: dark; }
 select option, select optgroup { background-color: #0f172a; color: #f1f5f9; }
+
+/* ID card light themes ("Parade White & Gold", "Ceremonial Silver", "Ivory & Crimson"): every card component still
+ * writes the same dark-card classes (text-white, bg-black/30, border-white/10, …) — plain rules here, outside any
+ * Tailwind @layer, win over Tailwind's own layered utilities without needing extra specificity, so a card marked
+ * data-mode="light" gets readable dark ink and light panels without touching the component markup. */
+.xv-card[data-mode="light"] { color: #1e293b; }
+.xv-card[data-mode="light"] .text-white,
+.xv-card[data-mode="light"] .text-slate-100 { color: #1e293b; }
+.xv-card[data-mode="light"] .text-slate-300 { color: #334155; }
+.xv-card[data-mode="light"] .text-slate-400,
+.xv-card[data-mode="light"] .text-slate-400\/40 { color: #64748b; }
+.xv-card[data-mode="light"] .text-slate-500 { color: #94a3b8; }
+.xv-card[data-mode="light"] .bg-black\/25,
+.xv-card[data-mode="light"] .bg-black\/30,
+.xv-card[data-mode="light"] .bg-black\/40,
+.xv-card[data-mode="light"] .bg-black\/50 { background-color: rgba(15, 23, 42, 0.06); }
+.xv-card[data-mode="light"] .bg-black\/60,
+.xv-card[data-mode="light"] .bg-black\/70 { background-color: rgba(15, 23, 42, 0.85); color: #f8fafc; }
+.xv-card[data-mode="light"] .bg-red-950\/60 { background-color: rgba(220, 38, 38, 0.08); }
+.xv-card[data-mode="light"] .border-white\/5,
+.xv-card[data-mode="light"] .border-white\/10,
+.xv-card[data-mode="light"] .border-white\/15,
+.xv-card[data-mode="light"] .border-white\/20,
+.xv-card[data-mode="light"] .border-white\/25 { border-color: rgba(15, 23, 42, 0.14); }
+.xv-card[data-mode="light"] .bg-slate-900 { background-color: #1e293b; }

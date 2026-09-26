@@ -28,7 +28,7 @@ export interface Soldier {
   signedAt: string;      // DD-MM-YYYY the bearer signature was captured
 }
 
-export type ThemeId = 'army' | 'tactical' | 'navy' | 'airforce' | 'desert';
+export type ThemeId = 'army' | 'tactical' | 'navy' | 'airforce' | 'desert' | 'parade' | 'ceremonial' | 'ivory';
 
 /** A small "detail box" (label + one soldier field) that can be shown on the card's front and/or back grid. */
 export type DetailFieldKey =
@@ -40,6 +40,8 @@ export interface CardThemeConfig {
   name: string;
   bgGradient: string;
   cardBorder: string;
+  /** 'light' themes swap the card's ink/panel colours (still built with dark: variants) for readable dark text. */
+  mode: 'dark' | 'light';
 }
 
 /** Card layout and wording chosen by the administrator (saved on the PC, applies to every card). */
@@ -87,6 +89,15 @@ export interface CardDesign {
   detailFontScale: number;
   /** Hex colour for detail box values; '' keeps each theme's own colour. */
   detailFontColor: string;
+  /** Guilloche security pattern + ghost crest + corner glow behind the card content. Off = a plain themed card. */
+  showBackgroundArt: boolean;
+  /** A user-supplied watermark image behind the card content, independent front and back. */
+  watermarkFront: string;    // data URL, '' = none
+  watermarkFrontOpacity: number; // 0–1
+  watermarkFrontSize: number;    // % of card width, 15–100
+  watermarkBack: string;
+  watermarkBackOpacity: number;
+  watermarkBackSize: number;
 }
 
 export type SizeId = 'cr80' | 'cr100' | 'badge34' | 'a7' | 'custom';
