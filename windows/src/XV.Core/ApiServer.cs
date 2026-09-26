@@ -61,6 +61,14 @@ public sealed class ApiServer : IAsyncDisposable
         builder.Services.AddRateLimiter(o =>
         {
             o.RejectionStatusCode = 429;
+            // A repeated 429 from an internet address is worth the admin's attention — a LAN terminal hitting its
+            // own burst limit is normal traffic and stays quiet, but pairing/RPC attempts probing from outside
+            // are exactly the "hacked online" signal this exists to surface.
+            o.OnRejected = (ctx, _) =>
+            {
+                if (!IsLocal(ctx.HttpContext)) Log?.Invoke($"⚠ Rate limit hit from {Ip(ctx.HttpContext)} on {ctx.HttpContext.Request.Path} — possible probing from the internet");
+                return ValueTask.CompletedTask;
+            };
             // Per source address: generous for terminals syncing many records, tight for pairing attempts.
             o.GlobalLimiter = System.Threading.RateLimiting.PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
                 ctx.Request.Path.StartsWithSegments("/api/v1/pair")
@@ -73,11 +81,27 @@ public sealed class ApiServer : IAsyncDisposable
 
         app.Use(async (ctx, next) =>
         {
-            if (!_store.Settings.InternetEnabled && !IsLocal(ctx))
+            var local = IsLocal(ctx);
+            if (!_store.Settings.InternetEnabled && !local)
             {
                 ctx.Response.StatusCode = 403;
                 await ctx.Response.WriteAsync("Internet access is disabled on this Command Center");
                 return;
+            }
+            // Optional extra layer for internet-mode connections: only known networks get through at all, even
+            // with a valid pairing code or device key -- shrinks the internet-facing attack surface to whoever the
+            // admin actually expects to connect from outside.
+            var allow = _store.Settings.AllowedInternetCidrs;
+            if (!local && allow.Count > 0)
+            {
+                var addr = ctx.Connection.RemoteIpAddress?.MapToIPv4();
+                if (addr == null || !allow.Any(c => NetUtil.InCidr(addr, c)))
+                {
+                    Log?.Invoke($"⚠ Blocked a connection from {Ip(ctx)} — not on the allowed internet address list");
+                    ctx.Response.StatusCode = 403;
+                    await ctx.Response.WriteAsync("This address is not on the allowed list");
+                    return;
+                }
             }
             await next();
         });

@@ -83,10 +83,17 @@ public sealed class CloudLinkWindow : DarkWindow
             "VPN" => "VPN (recommended, simplest and most private): install Tailscale or ZeroTier on this PC and on each phone, sign in to the same network, then enter this PC's VPN address (e.g. 100.x.y.z) as the public host. No router changes needed.",
             "TUNNEL" => "Tunnel (e.g. Cloudflare Tunnel / ngrok): run the tunnel on this PC pointing to https://localhost:" + s.Port + " (with 'no TLS verify' for the origin) and paste the public https URL it gives you. Tick 'uses a public certificate'.",
             "RELAY" => "Hosted relay / cloud server: a cloud VM forwards TCP " + s.Port + " to this PC (e.g. SSH reverse tunnel or WireGuard). Enter the relay's public hostname and port. Data stays encrypted end-to-end.",
-            _ => "Port forwarding: on your router forward TCP " + s.PublicPort + " → this PC's LAN address port " + s.Port + ". Use a static public IP or a free DDNS name (e.g. DuckDNS) as the public host.",
+            _ => "Port forwarding: on your router forward TCP " + s.PublicPort + " → this PC's LAN address port " + s.Port + ". Use a static public IP or a free DDNS name (e.g. DuckDNS) as the public host.\n\n⚠ Least private option — this opens a port directly to the whole internet (still TLS + AES-256-GCM protected, but scannable and reachable by anyone). VPN or Tunnel expose nothing at all to the open internet and are safer where they're an option.",
         };
         mode.SelectionChanged += (_, _) => Explain(); Explain();
         Body.Children.Add(help);
+
+        Body.Children.Add(Label("Restrict internet connections to known networks (optional)"));
+        var cidrs = Field("Allowed internet address ranges, one per line — e.g. 203.0.113.0/24 (blank = allow any address)",
+            string.Join(Environment.NewLine, s.AllowedInternetCidrs));
+        cidrs.AcceptsReturn = true; cidrs.MinHeight = 60; cidrs.TextWrapping = TextWrapping.Wrap;
+        Body.Children.Add(cidrs);
+        Body.Children.Add(Para("Only affects connections from outside the local network / VPN — LAN terminals are never blocked by this. Leave blank unless you know the exact networks your remote terminals connect from.", "#71717A"));
 
         var host = Field("Public host (DDNS name, public IP or VPN IP)", s.PublicHost, mono: true);
         var port = Field("Public port", s.PublicPort.ToString(), mono: true);
@@ -138,6 +145,7 @@ public sealed class CloudLinkWindow : DarkWindow
             s.CommsPublicPort = cp; s.CommsCloudUrl = cleanCommsUrl;
             s.InternetEnabled = enabled.IsChecked == true; s.CloudMode = mode.SelectedItem as string ?? mode.Text; s.PublicHost = host.Text.Trim(); s.PublicPort = pp;
             s.CloudUrl = cleanUrl; s.CloudUsesPublicCertificate = pubCert.IsChecked == true;
+            s.AllowedInternetCidrs = cidrs.Text.Split('\n', '\r', ',').Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             s.Save();
             Refresh();
             await App.StartServerAsync();

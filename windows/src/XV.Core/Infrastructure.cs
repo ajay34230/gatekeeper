@@ -63,6 +63,11 @@ public sealed class Settings
     public string CloudUrl { get; set; } = "";              // full https URL when a tunnel/relay provides one
     public bool CloudUsesPublicCertificate { get; set; }    // tunnel terminates TLS with a CA certificate
 
+    /// <summary>When not empty, an internet-origin connection is accepted only from one of these CIDR ranges (e.g.
+    /// "203.0.113.0/24" for a known office, or a single address as "203.0.113.7"). Empty = allow any address, same
+    /// as before. LAN/VPN-private addresses are never affected by this list.</summary>
+    public List<string> AllowedInternetCidrs { get; set; } = [];
+
     public bool RequireApproval { get; set; } = true;
 
     // Comms engine (messages, alerts, calls) — separate encrypted listener
@@ -223,5 +228,22 @@ public static class NetUtil
         var b = ip.GetAddressBytes();
         return b[0] == 10 || (b[0] == 172 && b[1] >= 16 && b[1] <= 31) || (b[0] == 192 && b[1] == 168)
             || (b[0] == 169 && b[1] == 254) || (b[0] == 100 && b[1] >= 64 && b[1] <= 127); // CGNAT range used by Tailscale
+    }
+
+    /// <summary>True if <paramref name="ip"/> falls inside <paramref name="cidr"/> (e.g. "203.0.113.0/24"); a bare
+    /// address with no "/" is treated as a single host. Used to optionally restrict internet-mode connections to
+    /// known networks. Malformed entries never match (fail closed, not open).</summary>
+    public static bool InCidr(IPAddress ip, string cidr)
+    {
+        var parts = cidr.Trim().Split('/');
+        if (!IPAddress.TryParse(parts[0], out var baseIp) || baseIp.AddressFamily != ip.AddressFamily) return false;
+        var maxBits = ip.AddressFamily == AddressFamily.InterNetwork ? 32 : 128;
+        var prefix = parts.Length > 1 && int.TryParse(parts[1], out var p) && p is >= 0 && p <= maxBits ? p : maxBits;
+        var ipBytes = ip.GetAddressBytes(); var baseBytes = baseIp.GetAddressBytes();
+        var fullBytes = prefix / 8; var remBits = prefix % 8;
+        for (var i = 0; i < fullBytes; i++) if (ipBytes[i] != baseBytes[i]) return false;
+        if (remBits == 0) return true;
+        var mask = (byte)(0xFF << (8 - remBits));
+        return (ipBytes[fullBytes] & mask) == (baseBytes[fullBytes] & mask);
     }
 }
