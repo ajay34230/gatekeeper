@@ -8,7 +8,7 @@ import { NationalCrest } from './components/MilitaryEmblem';
 import { host, preloadMedia } from './host';
 import { cardCheck } from './mrz';
 import { toPng } from 'html-to-image';
-import { Printer, RotateCw, FileDown, Users, Search, Sliders, User, Type, Shield, Palette, Upload, PenTool, Save, Trash2, Database, CheckSquare, Square, Download, X } from 'lucide-react';
+import { Printer, RotateCw, FileDown, Users, Search, Sliders, User, Type, Shield, Palette, Upload, PenTool, Save, Trash2, Database, CheckSquare, Square, Download, X, ClipboardList } from 'lucide-react';
 
 type Mode = 'INDIVIDUAL' | 'MULTIPLE' | 'COMPANY' | 'PLATOON' | 'SECTION' | 'ALL';
 const MODES: [Mode, string][] = [['INDIVIDUAL', 'Individual'], ['MULTIPLE', 'Multiple'], ['COMPANY', 'Company'], ['PLATOON', 'Platoon'], ['SECTION', 'Section'], ['ALL', 'Entire']];
@@ -170,6 +170,7 @@ export default function App() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button onClick={() => host.send({ t: 'openCardRegister' })} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-200 text-sm font-semibold hover:bg-slate-800" title="Every card's issue / re-issue / print history, exportable company-wise"><ClipboardList className="w-4 h-4" />Card Issue Log</button>
             <button onClick={() => host.send({ t: 'exportData', ids })} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-200 text-sm font-semibold hover:bg-slate-800"><Database className="w-4 h-4" />Export data</button>
             <button disabled={!selected.length} onClick={() => setExportOpen(true)} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-700/60 bg-emerald-950/40 text-emerald-300 text-sm font-semibold hover:bg-emerald-900/40 disabled:opacity-40"><Download className="w-4 h-4" />Export cards ({selected.length})</button>
             <button disabled={!selected.length} onClick={() => host.send({ t: 'pdf', ids })} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-cyan-700/60 bg-cyan-950/40 text-cyan-300 text-sm font-semibold hover:bg-cyan-900/40 disabled:opacity-40"><FileDown className="w-4 h-4" />Save PDF ({selected.length})</button>

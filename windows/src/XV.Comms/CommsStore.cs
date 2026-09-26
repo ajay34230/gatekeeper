@@ -40,6 +40,10 @@ public sealed class CommsStore : IDisposable
     /// <summary>Encrypted copy of the Comms database for a backup.</summary>
     public void ExportEncrypted(string path, string passphrase) { lock (_lock) Backup.ExportDatabase(_db, path, passphrase); }
 
+    /// <summary>Folds the write-ahead log into the main database file, so a plain file copy of it (for an automatic
+    /// backup snapshot) is complete on its own.</summary>
+    public void Checkpoint() { lock (_lock) Exec("PRAGMA wal_checkpoint(TRUNCATE);"); }
+
     int Exec(string sql, params object?[] args)
     {
         lock (_lock)

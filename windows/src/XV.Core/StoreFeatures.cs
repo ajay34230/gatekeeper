@@ -123,14 +123,17 @@ public sealed partial class Store
     public List<Dictionary<string, object?>> CardHistory(string personId) =>
         Query("SELECT * FROM card_events WHERE person_id=$1 ORDER BY id DESC", CanonId(personId));
 
-    /// <summary>One row per person: card number (issues so far), first issue, last print/export, lost reports.</summary>
+    /// <summary>One row per person: card number (issues so far), first issue, last print/export, lost reports, and
+    /// the remarks entered with the most recent issue or re-issue (the operator's own note, e.g. why it was
+    /// re-issued) — used for the ID Card Register's company-wise export.</summary>
     public List<Dictionary<string, object?>> CardRegister() => Query("""
         SELECT p.id, p.name, p.rank, p.service_no, p.company, p.platoon, p.section, p.status, p.card_serial, p.created_at,
                (SELECT COUNT(*) FROM card_events c WHERE c.person_id=p.id AND c.event IN ('ISSUED','REISSUED')) AS issues,
                (SELECT MIN(created_at) FROM card_events c WHERE c.person_id=p.id AND c.event='ISSUED') AS issued_at,
                (SELECT MAX(created_at) FROM card_events c WHERE c.person_id=p.id AND c.event='REISSUED') AS reissued_at,
                (SELECT MAX(created_at) FROM card_events c WHERE c.person_id=p.id AND c.event IN ('PRINTED','EXPORTED')) AS printed_at,
-               (SELECT COUNT(*) FROM card_events c WHERE c.person_id=p.id AND c.event='LOST') AS lost
+               (SELECT COUNT(*) FROM card_events c WHERE c.person_id=p.id AND c.event='LOST') AS lost,
+               (SELECT detail FROM card_events c WHERE c.person_id=p.id AND c.event IN ('ISSUED','REISSUED') ORDER BY created_at DESC, id DESC LIMIT 1) AS remarks
         FROM persons p WHERE p.id LIKE 'P%' ORDER BY p.id
         """);
 

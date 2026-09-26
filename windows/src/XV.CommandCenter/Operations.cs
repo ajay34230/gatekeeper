@@ -396,7 +396,28 @@ public sealed class CardRegisterWindow : DarkWindow
         Body.Children.Add(_list);
         _search.TextChanged += (_, _) => Fill();
         AddButton("Close", Close);
+        AddButton("Export company-wise…", Export, "BtnEmerald");
         Fill();
+    }
+
+    void Export()
+    {
+        if (!AdminGate.Require(this, "Export the ID Card Register")) return;
+        var dlg = new SaveFileDialog { FileName = $"XV-ID-Card-Register-{DateTime.Now:yyyyMMdd-HHmm}.csv", Filter = "CSV (Excel)|*.csv" };
+        if (dlg.ShowDialog() != true) return;
+        var companies = XV.Core.Reports.Companies;
+        var rows = App.Store.CardRegister()
+            .OrderBy(r => Array.IndexOf(companies, S(r["company"])) is var i && i >= 0 ? i : 99)
+            .ThenBy(r => S(r["name"]))
+            .Select(r => new Dictionary<string, object?>(r)
+            {
+                ["issued"] = L(r["issued_at"]) > 0 ? Time(L(r["issued_at"]), "yyyy-MM-dd") : "",
+                ["reissued"] = L(r["reissued_at"]) > 0 ? Time(L(r["reissued_at"]), "yyyy-MM-dd") : "",
+            });
+        File.WriteAllText(dlg.FileName, Csv.Build(rows, ("Army Number", "service_no"), ("Rank", "rank"), ("Name", "name"), ("Company", "company"),
+            ("Date of ID Card Issue", "issued"), ("Reissue", "reissued"), ("Remarks", "remarks")), new System.Text.UTF8Encoding(true));
+        App.Store.AdminAudit("CARD_REGISTER_EXPORTED", Path.GetFileName(dlg.FileName));
+        MessageBox.Show(this, "ID Card Register saved:\n" + dlg.FileName, "ID Card Register");
     }
 
     void Fill()

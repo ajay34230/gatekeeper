@@ -45,6 +45,10 @@ public sealed partial class Store : IDisposable
 
     public void Dispose() => _db.Dispose();
 
+    /// <summary>Folds the write-ahead log into the main database file, so a plain file copy of it (for an automatic
+    /// backup snapshot) is complete on its own -- nothing is left behind in a separate -wal file.</summary>
+    public void Checkpoint() { lock (_lock) Exec("PRAGMA wal_checkpoint(TRUNCATE);"); }
+
     void CreateSchema() => Exec("""
         CREATE TABLE IF NOT EXISTS persons(id TEXT PRIMARY KEY, secret_code TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
           rank TEXT NOT NULL DEFAULT '', service_no TEXT NOT NULL DEFAULT '', unit TEXT NOT NULL DEFAULT '', company TEXT NOT NULL DEFAULT '',

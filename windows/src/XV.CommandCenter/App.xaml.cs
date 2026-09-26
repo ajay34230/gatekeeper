@@ -20,6 +20,7 @@ public partial class App : Application
     public static Action<StackPanel, string, bool>? ExtendCommsHeader;
     static DiscoveryResponder? _discovery;
     static Mutex? _single;
+    static readonly System.Windows.Threading.DispatcherTimer _autoBackupTimer = new() { Interval = TimeSpan.FromHours(24) };
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -53,14 +54,33 @@ public partial class App : Application
             if (!first) { MessageBox.Show("XV Command Center is already running.", "XV Command Center"); Shutdown(); return; }
         }
 
+        string? recovered = null;
         try
         {
             if (screenshotDir == null) DataFolderSecurity.Apply();
+            recovered = AutoBackup.RestoreIfMissing();
+            if (recovered != null) Diag.Info($"Data folder had no database on start -- restored automatic backup {recovered}");
             var settings = Settings.Load();
-            Store = new Store(settings);
+            try { Store = new Store(settings); }
+            catch (Exception ex)
+            {
+                // The database file was there but would not open (corruption). Move it aside and try the newest
+                // automatic backup once before giving up -- this is the "server corrupted" recovery path.
+                Diag.Error("Database failed to open; attempting automatic recovery", ex);
+                AutoBackup.Quarantine();
+                recovered = AutoBackup.ForceRestoreLatest();
+                if (recovered == null) throw;
+                settings = Settings.Load();
+                Store = new Store(settings);
+                Diag.Info($"Recovered from a corrupted database using automatic backup {recovered}");
+            }
             var cert = CertManager.LoadOrCreate(settings);
             Server = new ApiServer(Store, cert);
             Comms = new CommsEngine(settings, cert, Store.DeviceKey);
+            Comms.Store.Checkpoint();
+            AutoBackup.Snapshot(Store);
+            _autoBackupTimer.Tick += (_, _) => { Comms.Store.Checkpoint(); AutoBackup.Snapshot(Store); };
+            _autoBackupTimer.Start();
             Comms.MessageReceived += m =>
             {
                 if (m.Kind == "ALERT") Current.Dispatcher.BeginInvoke(() => { if (Current.MainWindow is Window w && screenshotDir == null) CommsWindow.ShowIncomingAlert(w, m); });
@@ -88,6 +108,14 @@ public partial class App : Application
         {
             Store.AdminAudit("RESTORED_FROM_BACKUP");
             MessageBox.Show(main, "The backup was restored. Paired terminals keep working (same server identity and certificate).", "Restore finished");
+        }
+        if (recovered != null)
+        {
+            Store.AdminAudit("AUTO_RECOVERED", recovered);
+            var when = DateTime.TryParseExact(recovered, "yyyyMMdd-HHmmss", null, System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out var t)
+                ? t.ToLocalTime().ToString("dd MMM yyyy HH:mm") : recovered;
+            MessageBox.Show(main, $"The database was not found (or would not open) at startup and was automatically recovered from the backup taken {when}.\n\nAny record added after that backup was made is lost. Check Stations & Settings → Diagnostics for details.",
+                "Data recovered automatically", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         OverdueMonitor.Start();
         DueSoonMonitor.Start();

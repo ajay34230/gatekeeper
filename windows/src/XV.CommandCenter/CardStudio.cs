@@ -287,6 +287,10 @@ public sealed class CardStudioWindow : Window
                     SoldierRegister.Export(this, (m["ids"] as JsonArray)?.Select(x => x!.ToString()).ToList());
                     break;
 
+                case "openCardRegister":
+                    CardRegisterWindow.ShowWindow(this);
+                    break;
+
                 case "print":
                 case "pdf":
                     var ids = (m["ids"] as JsonArray)?.Select(x => x!.ToString()).ToList() ?? [];

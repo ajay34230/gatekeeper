@@ -266,8 +266,9 @@ public static class Dialogs
             Body.Children.Add(card);
             AddButton("Re-issue QR", () =>
             {
-                if (MessageBox.Show("Issue a new secret code? The old printed card stops working after terminals sync.", "Re-issue QR", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
-                App.Store.RotateSecret(person ? "persons" : "vehicles", id);
+                var d = new ReissueDialog(person ? $"{S(r["rank"])} {S(r["name"])}".Trim() : S(r["plate"])) { Owner = this };
+                if (d.ShowDialog() != true) return;
+                App.Store.RotateSecret(person ? "persons" : "vehicles", id, d.Remarks.Length > 0 ? d.Remarks : "Re-issued");
                 App.Comms.RequestSyncAll("QR re-issued");
                 Close(); Credential(Owner, type, id);
             }, "BtnDanger");
@@ -284,6 +285,18 @@ public static class Dialogs
                 if (person) App.Store.CardEvent(id, "EXPORTED", "Credential PNG", "PC-ADMIN");
             });
             AddButton("Print", () => { if (!AdminGate.Require(this, $"Print credential {DisplayId(id)}")) return; var pd = new PrintDialog(); if (pd.ShowDialog() == true) { pd.PrintVisual(card, "XV credential " + id); if (person) App.Store.CardEvent(id, "PRINTED", "Credential window", "PC-ADMIN"); } }, "BtnAmber");
+        }
+    }
+
+    sealed class ReissueDialog : DarkWindow
+    {
+        public string Remarks => _box.Text.Trim();
+        readonly TextBox _box;
+        public ReissueDialog(string who) : base("Re-issue QR", $"A new secret code is issued for {who}. The old printed card stops working at every gate once terminals sync. Recorded in the ID Card Register.", 520, 340)
+        {
+            _box = Field("Remarks (reason for re-issue — optional)");
+            AddButton("Cancel", Close);
+            AddButton("Re-issue", () => DialogResult = true, "BtnDanger");
         }
     }
 
