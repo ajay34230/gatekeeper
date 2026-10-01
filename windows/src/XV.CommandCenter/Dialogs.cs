@@ -18,13 +18,13 @@ public class DarkWindow : Window
 
     public DarkWindow(string title, string subtitle, double width = 620, double height = 720)
     {
-        Title = title; Width = width; Height = Math.Min(height, SystemParameters.WorkArea.Height - 20); Background = B("#101012");
+        Title = title; Width = width; Height = Math.Min(height, SystemParameters.WorkArea.Height - 20); Background = B("#FFFFFF");
         WindowStartupLocation = WindowStartupLocation.CenterOwner; ResizeMode = ResizeMode.CanResizeWithGrip;
         Icon = new BitmapImage(new Uri("pack://application:,,,/Assets/app.ico"));
         var dock = new DockPanel();
-        var head = new Border { Padding = new Thickness(22, 16, 22, 14), BorderBrush = B("#27272A"), BorderThickness = new Thickness(0, 0, 0, 1), Child = Col(T(title, 16, "#F4F4F5", bold: true), new TextBlock { Text = subtitle, Foreground = B("#A1A1AA"), FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0) }) };
+        var head = new Border { Padding = new Thickness(22, 16, 22, 14), BorderBrush = B("#E2E8F0"), BorderThickness = new Thickness(0, 0, 0, 1), Child = Col(T(title, 16, "#0F172A", bold: true), new TextBlock { Text = subtitle, Foreground = B("#64748B"), FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0) }) };
         DockPanel.SetDock(head, Dock.Top); dock.Children.Add(head);
-        var foot = new Border { Padding = new Thickness(22, 12, 22, 12), BorderBrush = B("#27272A"), BorderThickness = new Thickness(0, 1, 0, 0), Child = Footer };
+        var foot = new Border { Padding = new Thickness(22, 12, 22, 12), BorderBrush = B("#E2E8F0"), BorderThickness = new Thickness(0, 1, 0, 0), Child = Footer };
         DockPanel.SetDock(foot, Dock.Bottom); dock.Children.Add(foot);
         dock.Children.Add(new ScrollViewer { Content = Body, Padding = new Thickness(22, 16, 22, 16) });
         Content = dock;
@@ -38,8 +38,8 @@ public class DarkWindow : Window
         return b;
     }
 
-    protected static TextBlock Label(string text) => new() { Text = text.ToUpperInvariant(), Foreground = B("#A1A1AA"), FontSize = 10.5, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 10, 0, 5) };
-    protected static TextBlock Para(string text, string color = "#A1A1AA") => new() { Text = text, Foreground = B(color), FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 4), LineHeight = 18 };
+    protected static TextBlock Label(string text) => new() { Text = text.ToUpperInvariant(), Foreground = B("#64748B"), FontSize = 10.5, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 10, 0, 5) };
+    protected static TextBlock Para(string text, string color = "#64748B") => new() { Text = text, Foreground = B(color), FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 4), LineHeight = 18 };
 
     protected TextBox Field(string label, string value = "", bool readOnly = false, bool mono = false)
     {
@@ -107,7 +107,7 @@ public static class Dialogs
             byte[]? photo = id == null ? null : App.Store.PersonPhoto(id);
             var photoChanged = false;
             var img = new Image { Width = 96, Height = 120, Stretch = System.Windows.Media.Stretch.UniformToFill, Source = Photo.Image(photo) };
-            var photoBox = new Border { Width = 100, Height = 124, BorderBrush = B("#D97706"), BorderThickness = new Thickness(2), CornerRadius = new CornerRadius(6), Child = img, Background = B("#0C0C0E") };
+            var photoBox = new Border { Width = 100, Height = 124, BorderBrush = B("#D97706"), BorderThickness = new Thickness(2), CornerRadius = new CornerRadius(6), Child = img, Background = B("#FFFFFF") };
             Body.Children.Add(Row(photoBox,
                 Btn("Choose photo…", (_, _) =>
                 {
@@ -253,15 +253,15 @@ public static class Dialogs
             RenderOptions.SetBitmapScalingMode(qr, BitmapScalingMode.NearestNeighbor);
             var card = new Border
             {
-                Width = 380, Background = B("#FFFFFF"), CornerRadius = new CornerRadius(14), BorderBrush = B("#D4D4D8"), BorderThickness = new Thickness(1), HorizontalAlignment = HorizontalAlignment.Center,
+                Width = 380, Background = B("#FFFFFF"), CornerRadius = new CornerRadius(14), BorderBrush = B("#334155"), BorderThickness = new Thickness(1), HorizontalAlignment = HorizontalAlignment.Center,
                 Child = Col(
-                    new Border { Background = B("#18181B"), CornerRadius = new CornerRadius(13, 13, 0, 0), Padding = new Thickness(16, 12, 16, 12), Child = Spread(Col(T("XV DIGITAL ACCESS CONTROL", 12, "#FFFFFF", bold: true), T(person ? "MILITARY IDENTITY CREDENTIAL" : "VEHICLE ACCESS CREDENTIAL", 9.5, "#34D399", bold: true, mono: true)), T(DisplayId(id), 14, "#FBBF24", bold: true, mono: true)) },
+                    new Border { Background = B("#0F172A"), CornerRadius = new CornerRadius(13, 13, 0, 0), Padding = new Thickness(16, 12, 16, 12), Child = Spread(Col(T("XV DIGITAL ACCESS CONTROL", 12, "#FFFFFF", bold: true), T(person ? "MILITARY IDENTITY CREDENTIAL" : "VEHICLE ACCESS CREDENTIAL", 9.5, "#34D399", bold: true, mono: true)), T(DisplayId(id), 14, "#FBBF24", bold: true, mono: true)) },
                     new Border { Padding = new Thickness(18), Child = Col(
-                        T(person ? S(r["name"]) : S(r["plate"]), 18, "#18181B", bold: true).Center(),
-                        T(person ? string.Join(" • ", new[] { S(r["rank"]), S(r["company"]) is { Length: > 0 } c ? c + " Co" : "", S(r["unit"]) }.Where(x => x.Length > 0)) : string.Join(" • ", new[] { S(r["type"]), S(r["model"]), S(r["company"]) }.Where(x => x.Length > 0)), 11.5, "#52525B").Center().M(0, 4),
+                        T(person ? S(r["name"]) : S(r["plate"]), 18, "#0F172A", bold: true).Center(),
+                        T(person ? string.Join(" • ", new[] { S(r["rank"]), S(r["company"]) is { Length: > 0 } c ? c + " Co" : "", S(r["unit"]) }.Where(x => x.Length > 0)) : string.Join(" • ", new[] { S(r["type"]), S(r["model"]), S(r["company"]) }.Where(x => x.Length > 0)), 11.5, "#64748B").Center().M(0, 4),
                         qr,
-                        T(person ? $"Service No: {S(r["service_no"])}   I-Card: {S(r["id_card"])}" : $"Mil Reg: {S(r["mil_reg"])}", 10.5, "#3F3F46", mono: true).Center(),
-                        T("Present this code at any XV gate terminal", 9.5, "#A1A1AA").Center().M(0, 8)) }),
+                        T(person ? $"Service No: {S(r["service_no"])}   I-Card: {S(r["id_card"])}" : $"Mil Reg: {S(r["mil_reg"])}", 10.5, "#CBD5E1", mono: true).Center(),
+                        T("Present this code at any XV gate terminal", 9.5, "#64748B").Center().M(0, 8)) }),
             };
             Body.Children.Add(card);
             AddButton("Re-issue QR", () =>
@@ -323,13 +323,13 @@ public static class Dialogs
                 var entry = S(r["event_type"]) == "ENTRY";
                 total += L(r["stay_ms"]);
                 Body.Children.Add(Card(Spread(
-                    Row(Pill(S(r["event_type"]), entry ? "#34D399" : "#FBBF24", entry ? "#0D2A20" : "#2A1F08", entry ? "#047857" : "#92400E"),
-                        T("  " + Time(L(r["event_ts"]), "ddd dd MMM yyyy  HH:mm:ss"), 12, "#F4F4F5", mono: true),
-                        T($"   {S(r["location_name"])} • {S(r["gate_name"])}", 11.5, "#A1A1AA")),
-                    Row(L(r["loc_mismatch"]) == 1 ? T("⚠ LOC FLAG  ", 10.5, "#FCD34D", bold: true, mono: true) : new TextBlock(),
-                        T(Note(r, "  •  ") + (L(r["stay_ms"]) > 0 ? "Stayed " + Duration(L(r["stay_ms"])) : "Op " + S(r["operator_id"])), 11, "#D4D4D8", mono: true))), "#131316", pad: 10).M(0, 0, 0, 6));
+                    Row(Pill(S(r["event_type"]), entry ? "#059669" : "#B45309", entry ? "#ECFDF5" : "#FFFBEB", entry ? "#047857" : "#92400E"),
+                        T("  " + Time(L(r["event_ts"]), "ddd dd MMM yyyy  HH:mm:ss"), 12, "#0F172A", mono: true),
+                        T($"   {S(r["location_name"])} • {S(r["gate_name"])}", 11.5, "#64748B")),
+                    Row(L(r["loc_mismatch"]) == 1 ? T("⚠ LOC FLAG  ", 10.5, "#B45309", bold: true, mono: true) : new TextBlock(),
+                        T(Note(r, "  •  ") + (L(r["stay_ms"]) > 0 ? "Stayed " + Duration(L(r["stay_ms"])) : "Op " + S(r["operator_id"])), 11, "#334155", mono: true))), "#FFFFFF", pad: 10).M(0, 0, 0, 6));
             }
-            if (rows.Count > 0) Body.Children.Insert(0, Para($"{rows.Count} records • total recorded time on site: {Duration(total ?? 0)}", "#FBBF24"));
+            if (rows.Count > 0) Body.Children.Insert(0, Para($"{rows.Count} records • total recorded time on site: {Duration(total ?? 0)}", "#B45309"));
             if (type == "PERSON")
             {
                 AddButton("+ Add Record", () => { Close(); AddRecord(Owner, id); History(Owner, type, id); }, "BtnBlue");
@@ -347,7 +347,7 @@ public static class Dialogs
             "ENTRY / EXIT update who is inside, exactly like a gate scan. Other types (Leave, Duty, Course…) are dated history entries. Types are configured in Stations & Settings.", 560, 640)
         {
             var person = App.Store.Persons().First(x => S(x["id"]) == personId);
-            Body.Children.Add(Para($"{S(person["name"])} • {S(person["rank"])} • {S(person["company"])} Co • currently {(L(person["inside_since"]) > 0 ? "INSIDE" : "OUTSIDE")}", "#FBBF24"));
+            Body.Children.Add(Para($"{S(person["name"])} • {S(person["rank"])} • {S(person["company"])} Co • currently {(L(person["inside_since"]) > 0 ? "INSIDE" : "OUTSIDE")}", "#B45309"));
             var type = Choice("Record type", new[] { "ENTRY", "EXIT" }.Concat(App.Settings.EventTypes), L(person["inside_since"]) > 0 ? "EXIT" : "ENTRY");
             Body.Children.Add(Label("Date"));
             var date = new DatePicker { SelectedDate = DateTime.Today, DisplayDateEnd = DateTime.Today };
@@ -382,7 +382,7 @@ public static class Dialogs
             "Excel: summary sheet plus one colour-coded sheet per company (roster + records). PDF: printable A4 report. CSV: plain records for any software.", 600, 620)
         {
             var scope = personIds.Count > 0 ? $"{personIds.Count} selected: " + string.Join(", ", personIds.Take(8).Select(DisplayId)) + (personIds.Count > 8 ? "…" : "") : "";
-            if (scope.Length > 0) Body.Children.Add(Para(scope, "#FBBF24"));
+            if (scope.Length > 0) Body.Children.Add(Para(scope, "#B45309"));
             var comp = Choice("Company", new[] { "All Companies" }.Concat(Companies.Select(c => c + " Company")), company == "ALL" || personIds.Count > 0 ? "All Companies" : company + " Company");
             comp.IsEnabled = personIds.Count == 0;
             Body.Children.Add(Label("From"));

@@ -12,7 +12,7 @@ public static class Ui
     public static Brush Res(string key) => (Brush)Application.Current.Resources[key];
     public static FontFamily Mono => (FontFamily)Application.Current.Resources["Mono"];
 
-    public static TextBlock T(string text, double size = 12, string color = "#F4F4F5", bool bold = false, bool mono = false, FontWeight? weight = null)
+    public static TextBlock T(string text, double size = 12, string color = "#0F172A", bool bold = false, bool mono = false, FontWeight? weight = null)
     {
         var t = new TextBlock { Text = text, FontSize = size, Foreground = B(color), TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
         if (bold) t.FontWeight = FontWeights.Bold;
@@ -21,7 +21,7 @@ public static class Ui
         return t;
     }
 
-    public static TextBlock Icon(string glyph, string color = "#A1A1AA", double size = 13) =>
+    public static TextBlock Icon(string glyph, string color = "#64748B", double size = 13) =>
         new() { Text = glyph, FontFamily = new FontFamily("Segoe MDL2 Assets"), FontSize = size, Foreground = B(color), VerticalAlignment = VerticalAlignment.Center };
 
     public static Border Pill(string text, string fg, string bg, string border, double size = 10)
@@ -30,7 +30,7 @@ public static class Ui
         return new Border { Child = tb, Background = B(bg), BorderBrush = B(border), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6), Padding = new Thickness(6, 1, 6, 1), VerticalAlignment = VerticalAlignment.Center };
     }
 
-    public static Border Card(UIElement child, string bg = "#141417", string border = "#27272A", double pad = 14) =>
+    public static Border Card(UIElement child, string bg = "#F1F5F9", string border = "#E2E8F0", double pad = 14) =>
         new() { Child = child, Background = B(bg), BorderBrush = B(border), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(12), Padding = new Thickness(pad) };
 
     public static StackPanel Row(params UIElement[] items)
@@ -85,7 +85,7 @@ public static class Ui
         return b;
     }
 
-    public static Border Divider() => new() { Height = 1, Background = B("#27272A"), Margin = new Thickness(0, 10, 0, 8) };
+    public static Border Divider() => new() { Height = 1, Background = B("#E2E8F0"), Margin = new Thickness(0, 10, 0, 8) };
 
     public static string S(object? o) => o?.ToString() ?? "";
     public static long L(object? o) => o == null ? 0 : Convert.ToInt64(o, CultureInfo.InvariantCulture);
@@ -128,5 +128,5 @@ public static class Ui
 
     public static string DisplayId(string id) => id.Length > 1 && char.IsLetter(id[0]) && char.IsDigit(id[1]) ? id[0] + "-" + id[1..] : id;
 
-    public static TextBlock Empty(string text) => new() { Text = text, Foreground = B("#71717A"), FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 60, 0, 60), TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center };
+    public static TextBlock Empty(string text) => new() { Text = text, Foreground = B("#94A3B8"), FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 60, 0, 60), TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center };
 }

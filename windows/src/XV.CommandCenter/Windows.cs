@@ -12,8 +12,8 @@ namespace XV.CommandCenter;
 public sealed class PairWindow : DarkWindow
 {
     readonly Image _qr = new() { Width = 300, Height = 300, Margin = new Thickness(0, 6, 0, 6) };
-    readonly TextBlock _code = T("", 22, "#FBBF24", bold: true, mono: true);
-    readonly TextBlock _expires = T("", 11, "#A1A1AA", mono: true);
+    readonly TextBlock _code = T("", 22, "#B45309", bold: true, mono: true);
+    readonly TextBlock _expires = T("", 11, "#64748B", mono: true);
     readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
     DateTime _expiry;
     string _payload = "";
@@ -24,15 +24,15 @@ public sealed class PairWindow : DarkWindow
         RenderOptions.SetBitmapScalingMode(_qr, BitmapScalingMode.NearestNeighbor);
         var s = App.Settings;
         Body.Children.Add(new Border { Background = B("#FFFFFF"), CornerRadius = new CornerRadius(14), Padding = new Thickness(10), HorizontalAlignment = HorizontalAlignment.Center, Child = _qr });
-        Body.Children.Add(Row(T("Pairing code  ", 12, "#A1A1AA"), _code).M(0, 10, 0, 0));
+        Body.Children.Add(Row(T("Pairing code  ", 12, "#64748B"), _code).M(0, 10, 0, 0));
         Body.Children.Add(_expires);
         Body.Children.Add(Label("This PC's addresses on the local network"));
         var lan = NetUtil.LanAddresses();
-        Body.Children.Add(Para(lan.Count == 0 ? "No network adapter is connected. Connect this PC to the same Wi-Fi/router as the terminals." : string.Join("\n", lan.Select(a => $"https://{a}:{s.Port}")), "#34D399"));
+        Body.Children.Add(Para(lan.Count == 0 ? "No network adapter is connected. Connect this PC to the same Wi-Fi/router as the terminals." : string.Join("\n", lan.Select(a => $"https://{a}:{s.Port}")), "#059669"));
         Body.Children.Add(Label("Internet address included in the QR"));
-        Body.Children.Add(Para(s.InternetEnabled && s.PublicUrl.Length > 0 ? s.PublicUrl : "Not configured — terminals will connect on the local network only. Set it up in Cloud Link.", s.InternetEnabled ? "#93C5FD" : "#71717A"));
+        Body.Children.Add(Para(s.InternetEnabled && s.PublicUrl.Length > 0 ? s.PublicUrl : "Not configured — terminals will connect on the local network only. Set it up in Cloud Link.", s.InternetEnabled ? "#1D4ED8" : "#94A3B8"));
         Body.Children.Add(Label("Certificate fingerprint the phone pins (SHA-256)"));
-        Body.Children.Add(Para(App.Server.Fingerprint, "#D4D4D8"));
+        Body.Children.Add(Para(App.Server.Fingerprint, "#334155"));
         Body.Children.Add(Label("If the phone cannot connect"));
         Body.Children.Add(Para($"• Both devices must be on the same network (guest Wi-Fi often blocks devices from seeing each other).\n• Windows Firewall must allow TCP {s.Port} and UDP {s.DiscoveryPort} — the installer adds these rules.\n• Check the phone's Sync Hub → 'Test Connection'."));
         AddButton("Copy pairing text", () =>
@@ -72,9 +72,9 @@ public sealed class CloudLinkWindow : DarkWindow
         "Terminals always try the local network first and fall back to the internet address below. Every request stays end-to-end encrypted (AES-256-GCM with each terminal's own key) even when a tunnel or relay handles TLS.", 720, 900)
     {
         var s = App.Settings;
-        var enabled = new CheckBox { Content = "Allow terminals to connect over the internet", IsChecked = s.InternetEnabled, Margin = new Thickness(0, 6, 0, 2), Foreground = B("#F4F4F5"), FontWeight = FontWeights.SemiBold };
+        var enabled = new CheckBox { Content = "Allow terminals to connect over the internet", IsChecked = s.InternetEnabled, Margin = new Thickness(0, 6, 0, 2), Foreground = B("#0F172A"), FontWeight = FontWeights.SemiBold };
         Body.Children.Add(enabled);
-        Body.Children.Add(Para("When off, this PC refuses every connection that does not come from a private (LAN / VPN) address.", "#71717A"));
+        Body.Children.Add(Para("When off, this PC refuses every connection that does not come from a private (LAN / VPN) address.", "#94A3B8"));
 
         var mode = Choice("Connection method", ["PORT_FORWARD", "VPN", "TUNNEL", "RELAY"], s.CloudMode);
         var help = Para("");
@@ -93,7 +93,7 @@ public sealed class CloudLinkWindow : DarkWindow
             string.Join(Environment.NewLine, s.AllowedInternetCidrs));
         cidrs.AcceptsReturn = true; cidrs.MinHeight = 60; cidrs.TextWrapping = TextWrapping.Wrap;
         Body.Children.Add(cidrs);
-        Body.Children.Add(Para("Only affects connections from outside the local network / VPN — LAN terminals are never blocked by this. Leave blank unless you know the exact networks your remote terminals connect from.", "#71717A"));
+        Body.Children.Add(Para("Only affects connections from outside the local network / VPN — LAN terminals are never blocked by this. Leave blank unless you know the exact networks your remote terminals connect from.", "#94A3B8"));
 
         var host = Field("Public host (DDNS name, public IP or VPN IP)", s.PublicHost, mono: true);
         var port = Field("Public port", s.PublicPort.ToString(), mono: true);
@@ -212,19 +212,19 @@ public sealed class StationsWindow : DarkWindow
         Body.Children.Add(showMonths);
 
         Body.Children.Add(Label("Data protection"));
-        Body.Children.Add(Para("Terminals only ever receive data when they ask for it. Choose how much of the registry they are given. Gate records always flow from the terminals to this PC.", "#71717A"));
+        Body.Children.Add(Para("Terminals only ever receive data when they ask for it. Choose how much of the registry they are given. Gate records always flow from the terminals to this PC.", "#94A3B8"));
         string[] modes = ["FULL", "MINIMAL", "RECEIVE_ONLY"];
         var sharing = Choice("Data sharing with terminals", ["Full — names, ranks and units are copied to terminals (works fully offline)", "Minimal — terminals get IDs, secret-code hashes and status only; details shown after an online check (recommended)", "Receive-only — terminals hold nothing; every scan is verified online against this PC"], "");
         sharing.SelectedIndex = Math.Max(0, Array.IndexOf(modes, s.DataSharing));
         var lockMin = Field("Lock the Command Center after this many idle minutes (0 = never; needs the administrator password)", s.AutoLockMinutes.ToString(), mono: true);
         var block = new CheckBox { Content = "Block this program from opening connections to the internet (Windows Firewall, needs administrator approval)", IsChecked = s.BlockOutbound, Margin = new Thickness(0, 10, 0, 0) };
         Body.Children.Add(block);
-        Body.Children.Add(Para("Incoming connections from paired terminals, the local network and VPN addresses keep working. The Command Center itself never uploads data anywhere.", "#71717A"));
+        Body.Children.Add(Para("Incoming connections from paired terminals, the local network and VPN addresses keep working. The Command Center itself never uploads data anywhere.", "#94A3B8"));
         Body.Children.Add(Row(Btn(s.HasAdminPassword ? "Change administrator password" : "Set administrator password", (_, _) => AdminGate.ChangePassword(this), "BtnGold")).M(0, 6));
 
         Body.Children.Add(Label("Diagnostics"));
-        Body.Children.Add(Para("Errors and crashes of this Command Center are written to a diagnostic log (technical messages only — no registry data or passwords). Export it and send the file to support when something goes wrong.", "#71717A"));
-        var diagInfo = T($"Log size: {Diag.SizeBytes() / 1024.0:0.#} KB", 11, "#A1A1AA", mono: true);
+        Body.Children.Add(Para("Errors and crashes of this Command Center are written to a diagnostic log (technical messages only — no registry data or passwords). Export it and send the file to support when something goes wrong.", "#94A3B8"));
+        var diagInfo = T($"Log size: {Diag.SizeBytes() / 1024.0:0.#} KB", 11, "#64748B", mono: true);
         Body.Children.Add(Row(
             Btn("Export diagnostic logs…", (_, _) =>
             {
@@ -303,9 +303,9 @@ public sealed class StationsWindow : DarkWindow
     void Fill()
     {
         _locs.Children.Clear(); _gates.Children.Clear();
-        foreach (var l in App.Store.Locations()) { var id = S(l["id"]); _locs.Children.Add(Spread(T($"{id}   {S(l["name"])}", 12, "#E4E4E7", mono: true), Btn("Remove", (_, _) => { App.Store.DeleteLocation(id); Fill(); }, "BtnDanger")).M(0, 2, 0, 2)); }
-        foreach (var g in App.Store.Gates()) { var id = S(g["id"]); _gates.Children.Add(Spread(T($"{id}   {S(g["name"])}", 12, "#E4E4E7", mono: true), Btn("Remove", (_, _) => { App.Store.DeleteGate(id); Fill(); }, "BtnDanger")).M(0, 2, 0, 2)); }
-        if (_locs.Children.Count == 0) _locs.Children.Add(Para("No locations yet.", "#71717A"));
-        if (_gates.Children.Count == 0) _gates.Children.Add(Para("No gates yet.", "#71717A"));
+        foreach (var l in App.Store.Locations()) { var id = S(l["id"]); _locs.Children.Add(Spread(T($"{id}   {S(l["name"])}", 12, "#1E293B", mono: true), Btn("Remove", (_, _) => { App.Store.DeleteLocation(id); Fill(); }, "BtnDanger")).M(0, 2, 0, 2)); }
+        foreach (var g in App.Store.Gates()) { var id = S(g["id"]); _gates.Children.Add(Spread(T($"{id}   {S(g["name"])}", 12, "#1E293B", mono: true), Btn("Remove", (_, _) => { App.Store.DeleteGate(id); Fill(); }, "BtnDanger")).M(0, 2, 0, 2)); }
+        if (_locs.Children.Count == 0) _locs.Children.Add(Para("No locations yet.", "#94A3B8"));
+        if (_gates.Children.Count == 0) _gates.Children.Add(Para("No gates yet.", "#94A3B8"));
     }
 }
