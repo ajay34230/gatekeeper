@@ -11,6 +11,17 @@ namespace XV.CommandCenter;
 
 public partial class App : Application
 {
+    /// <summary>Every tooltip in the app (buttons, icons, settings cards) waits 2 seconds of hovering before it
+    /// appears, instead of WPF's default ~0.4s -- a deliberate "hold to learn what this does" delay rather than
+    /// tooltips popping up on every brief mouse pass. This is a dependency-property metadata override, the one
+    /// mechanism that applies polymorphically to every FrameworkElement-derived control app-wide; an XAML style
+    /// cannot do this since implicit styles only match the exact declared type, not every subclass.</summary>
+    static App()
+    {
+        System.Windows.Controls.ToolTipService.InitialShowDelayProperty.OverrideMetadata(
+            typeof(FrameworkElement), new FrameworkPropertyMetadata(2000));
+    }
+
     [DllImport("kernel32.dll", SetLastError = true)]
     static extern bool SetProcessInformation(IntPtr hProcess, int processInformationClass, ref PROCESS_POWER_THROTTLING_STATE processInformation, uint processInformationSize);
 

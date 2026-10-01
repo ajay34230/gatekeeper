@@ -136,6 +136,7 @@ public partial class MainWindow : Window
         else if (TabPersons.IsChecked == true) RenderPersons();
         else if (TabVehicles.IsChecked == true) RenderVehicles();
         else if (TabAccounts.IsChecked == true) RenderAccounts();
+        else if (TabSettings.IsChecked == true) RenderSettings();
         else RenderAudit();
     }
 
@@ -538,6 +539,53 @@ public partial class MainWindow : Window
         ContentHost.Content = panel;
     }
 
+    /// <summary>Settings used to be scattered across header buttons that each opened their own dialog -- this tab
+    /// gives them one place with a quick-status summary up top and a clearly labelled card per area below.</summary>
+    void RenderSettings()
+    {
+        var s = App.Settings;
+        Header("COMMAND CENTER SETTINGS", "", "Station setup, data protection, connectivity and maintenance for this Command Center.");
+
+        Border SettingsCard(string title, string desc, string actionLabel, RoutedEventHandler onClick, string style = "BtnAmber") =>
+            Card(Col(
+                T(title, 13.5, "#F4F4F5", bold: true).M(0, 0, 0, 6),
+                T(desc, 11.5, "#A1A1AA").Wrap().M(0, 0, 0, 12),
+                Btn(actionLabel, onClick, style)
+            ), "#141417").M(0, 0, 12, 12);
+
+        var quick = Card(Col(
+            T("QUICK STATUS", 11, "#A1A1AA", bold: true).M(0, 0, 0, 10),
+            Kv("Data sharing with terminals", s.DataSharing),
+            Kv("Internet access", s.InternetEnabled ? "Enabled" : "Disabled (LAN only)"),
+            Kv("Auto-lock", s.AutoLockMinutes > 0 ? $"{s.AutoLockMinutes} minute(s) idle" : "Off"),
+            Kv("Outbound internet block", s.BlockOutbound ? "ON" : "OFF"),
+            Kv("Self-registration approval", s.RequireApproval ? "Required" : "Auto-approved"),
+            Kv("Administrator password", s.HasAdminPassword ? "Set" : "Not set")
+        ), "#111113").M(0, 0, 0, 16);
+
+        var grid = CardGrid();
+        grid.Children.Add(SettingsCard("Station & General",
+            "Locations, gates, server name, custom fields, movement reasons, data protection, diagnostics and maintenance.",
+            "Open Station & General Settings", (_, _) => new StationsWindow { Owner = this }.ShowDialog()));
+        grid.Children.Add(SettingsCard("Cloud Link",
+            "Internet connection method, allowed address ranges, and the public URL terminals use away from base.",
+            "Open Cloud Link", (_, _) => new CloudLinkWindow { Owner = this }.ShowDialog(), "BtnBlue"));
+        grid.Children.Add(SettingsCard("Local Wi-Fi & Pair Device",
+            "Pair a new terminal to this Command Center over the local network with a one-time QR code.",
+            "Scan / Show Pairing QR", Pair_Click, "BtnGold"));
+        grid.Children.Add(SettingsCard("Administrator Password",
+            s.HasAdminPassword ? "A password is set and protects sensitive actions (data protection changes, wipes, auto-lock)." : "No administrator password is set yet -- sensitive actions are currently unprotected.",
+            s.HasAdminPassword ? "Change Password" : "Set Password", (_, _) => AdminGate.ChangePassword(this), "BtnGold"));
+        grid.Children.Add(SettingsCard("Comms Center",
+            "Messages, alerts and voice/video calls with paired terminals.",
+            "Open Comms Center", Comms_Click, "BtnDanger"));
+        grid.Children.Add(SettingsCard("Lock Now",
+            "Lock this Command Center immediately. The administrator password is required to unlock it again.",
+            "Lock Command Center", Lock_Click, "BtnDanger"));
+
+        ContentHost.Content = Col(quick, grid);
+    }
+
     void RenderAudit()
     {
         var rows = App.Store.AuditLog(500).Where(r => Query.Length == 0 || string.Join(" ", r.Values).Contains(Query, StringComparison.OrdinalIgnoreCase)).ToList();
@@ -617,8 +665,6 @@ public partial class MainWindow : Window
         CommsBadgeText.Text = n > 99 ? "99+" : n.ToString();
     }
 
-    void Cloud_Click(object s, RoutedEventArgs e) => new CloudLinkWindow { Owner = this }.ShowDialog();
-    void Stations_Click(object s, RoutedEventArgs e) => new StationsWindow { Owner = this }.ShowDialog();
     void Refresh_Click(object s, RoutedEventArgs e) => Refresh();
     void StatInside_Click(object s, System.Windows.Input.MouseButtonEventArgs e) => TabPersons.IsChecked = true;
     void StatFleet_Click(object s, System.Windows.Input.MouseButtonEventArgs e) => TabVehicles.IsChecked = true;
@@ -631,6 +677,7 @@ public partial class MainWindow : Window
         yield return (() => { TabVehicles.IsChecked = true; Refresh(); }, "03-vehicles");
         yield return (() => { TabAccounts.IsChecked = true; Refresh(); }, "04-accounts-devices");
         yield return (() => { TabAudit.IsChecked = true; Refresh(); }, "05-audit");
+        yield return (() => { TabSettings.IsChecked = true; Refresh(); }, "06-settings");
     }
 }
 
