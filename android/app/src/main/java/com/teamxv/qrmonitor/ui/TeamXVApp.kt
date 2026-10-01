@@ -1125,6 +1125,7 @@ private fun ActivityDetailSheet(event: MovementEvent, stayMs: Long? = null, onDi
                     ReviewRow("Recorded Time", formatLongTime(event.eventTimestamp))
                     if (stayMs != null && stayMs > 0) ReviewRow("Stay Duration (Entry → Exit)", formatDuration(stayMs), valueColor = UiWarning)
                     ReviewRow("Location / Gate", "${event.locationId} • ${event.gateId}")
+                    if (event.comingFrom.isNotBlank()) ReviewRow("Coming From", event.comingFrom)
                     if (event.reason.isNotBlank()) ReviewRow("Reason", event.reason)
                     if (event.remarks.isNotBlank()) ReviewRow("Remarks", event.remarks)
                     if (event.expectedReturn > 0) ReviewRow("Expected Back", SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(event.expectedReturn)), valueColor = if (event.expectedReturn < System.currentTimeMillis()) UiError else UiWarning)
@@ -1504,6 +1505,7 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
     var needDate by remember { mutableStateOf(false) }
     var customReason by rememberSaveable(session.person.id) { mutableStateOf("") }
     var remarks by rememberSaveable(session.person.id) { mutableStateOf("") }
+    var comingFrom by rememberSaveable(session.person.id) { mutableStateOf("") }
     val finalReason = if (reason == REASON_CUSTOM) customReason.trim() else reason
     val cfg = vm.currentConfig()
     val entryAt = remember(vm.events, session.person.id) {
@@ -1607,13 +1609,16 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
             }
             if (allowed) EntryExitToggle(chosenType) { chosenType = it }
             if (allowed && overridesPresence) StatusBanner(
-                "Presence already shows this person ${if (session.inside) "INSIDE" else "OUTSIDE"} — choose ${if (session.inside) "Exit" else "Entry"} instead, or sync with the Command Center if that looks wrong.",
-                BannerTone.Error
+                "Presence tracking on this terminal shows this person ${if (session.inside) "INSIDE" else "OUTSIDE"} — your choice of ${if (exiting) "Exit" else "Entry"} will still be recorded; the guard's decision is final. Sync with the Command Center if this looks like a genuine mismatch.",
+                BannerTone.Warning
             )
-            if (allowed) ReasonPicker(vm.reasons, reason, { reason = it }, customReason, { customReason = it }, remarks, { remarks = it })
+            if (allowed) ReasonPicker(
+                vm.reasons, reason, { reason = it }, customReason, { customReason = it }, remarks, { remarks = it },
+                comingFrom = comingFrom, onComingFrom = if (!exiting) { { comingFrom = it } } else null
+            )
             if (allowed && needsReturn) ReturnDatePicker(expectedReturn) { expectedReturn = it; needDate = false }
             if (allowed && needsReturn && needDate && expectedReturn == 0L) StatusBanner("Choose the expected return date for \"$finalReason\" before recording the exit.", BannerTone.Error)
-            if (allowed && !overridesPresence) Surface(
+            if (allowed) Surface(
                 Modifier.fillMaxWidth().height(58.dp).clickable {
                     if (needsReturn && expectedReturn == 0L) needDate = true
                     else confirm = true
@@ -1646,10 +1651,11 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
             title = tr("CONFIRM") + " " + tr(if (exiting) "EXIT" else "ENTRY"),
             subtitle = "Confirmation Required",
             onDismiss = { confirm = false },
-            onConfirm = { confirm = false; vm.confirmPerson(finalReason, remarks, if (needsReturn) expectedReturn else 0L, chosenType) }
+            onConfirm = { confirm = false; vm.confirmPerson(finalReason, remarks, if (needsReturn) expectedReturn else 0L, chosenType, comingFrom) }
         ) {
             ReviewRow("Personnel", "${session.person.name} (${displayId(session.person.id)})")
             ReviewRow("Direction", tr(if (exiting) "EXIT" else "ENTRY"), valueColor = if (overridesPresence) UiWarning else UiInk)
+            if (!exiting && comingFrom.isNotBlank()) ReviewRow("Coming From", comingFrom.trim())
             ReviewRow("Reason", finalReason.ifBlank { "—" })
             if (remarks.isNotBlank()) ReviewRow("Remarks", remarks.trim())
             if (needsReturn && expectedReturn > 0)
@@ -1990,11 +1996,19 @@ private fun SosButton(vm: MainViewModel, modifier: Modifier = Modifier) {
 @Composable
 private fun ReasonPicker(
     reasons: List<String>, reason: String, onReason: (String) -> Unit,
-    custom: String, onCustom: (String) -> Unit, remarks: String, onRemarks: (String) -> Unit
+    custom: String, onCustom: (String) -> Unit, remarks: String, onRemarks: (String) -> Unit,
+    comingFrom: String = "", onComingFrom: ((String) -> Unit)? = null
 ) {
     var open by remember { mutableStateOf(false) }
     Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, UiBorder)) {
         Column(Modifier.padding(12.dp)) {
+            if (onComingFrom != null) {
+                Text("COMING FROM (CURRENT LOCATION)", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 1.sp, color = UiMuted)
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(comingFrom, { if (it.length <= 80) onComingFrom(it) }, Modifier.fillMaxWidth(), singleLine = true,
+                    placeholder = { Text("e.g. Battalion HQ, Leave, Hospital, another post…", fontFamily = Sans, fontSize = 13.sp) }, shape = RoundedCornerShape(10.dp))
+                Spacer(Modifier.height(10.dp))
+            }
             Text("REASON", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 1.sp, color = UiMuted)
             Spacer(Modifier.height(6.dp))
             Box {
@@ -2062,6 +2076,7 @@ private fun PersonDetailCell(label: String, value: String, modifier: Modifier = 
 private fun VehicleScanScreen(vm: MainViewModel, session: ScanSession.VehicleScan) {
     val vehicle = vm.scannedVehicle ?: VehicleEntity(session.vehicleId, "", "Vehicle", true)
     val entry = !session.inside
+    var confirmExit by rememberSaveable(session.vehicleId) { mutableStateOf(false) }
     Column(
         Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 14.dp),
@@ -2083,10 +2098,29 @@ private fun VehicleScanScreen(vm: MainViewModel, session: ScanSession.VehicleSca
             }
         }
         Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            PrimaryButton(if (entry) "BUILD VEHICLE MANIFEST" else "CONFIRM VEHICLE EXIT", if (entry) Icons.Default.ArrowForward else Icons.Default.Shield, true) {
-                vm.startVehicleDriverScan()
+            // Entry builds a full manifest (driver/co-driver/occupants) with its own review step before committing.
+            // Exit is a single irreversible action with no occupants to re-scan, so it gets an explicit review
+            // sheet here instead -- the guard must see and confirm it before anything is recorded, same as a
+            // person exit, rather than one tap silently closing out the vehicle.
+            PrimaryButton(if (entry) "BUILD VEHICLE MANIFEST" else "REVIEW & CONFIRM EXIT", if (entry) Icons.Default.ArrowForward else Icons.Default.Shield, true) {
+                if (entry) vm.startVehicleDriverScan() else confirmExit = true
             }
             SecondaryTextButton("CANCEL & RETURN HOME", vm::returnToHome)
+        }
+    }
+    if (confirmExit) {
+        ConfirmBottomSheet(
+            title = "CONFIRM VEHICLE EXIT",
+            subtitle = "Confirmation Required",
+            onDismiss = { confirmExit = false },
+            onConfirm = { confirmExit = false; vm.confirmVehicleExit() }
+        ) {
+            ReviewRow("Vehicle", "${vehicle.registration.ifBlank { vehicle.id }} (${displayId(vehicle.id)})")
+            ReviewRow("Type", vehicle.type.ifBlank { "—" })
+            ReviewRow("Direction", "EXIT", valueColor = UiWarning)
+            ReviewRow("Location / Gate", "${vm.currentConfig().locationName.ifBlank { vm.currentConfig().locationId }} • ${vm.currentConfig().gateName.ifBlank { vm.currentConfig().gateId }}")
+            if (vm.vehicleMismatch.isNotBlank()) ReviewRow("Location Flag", "QR: ${vm.vehicleMismatch}", valueColor = UiWarning)
+            ReviewRow("Timestamp", formatLongTime(System.currentTimeMillis()))
         }
     }
 }

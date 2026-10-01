@@ -115,12 +115,14 @@ public static class Ui
     }
 
     /// <summary>Display form of canonical IDs: P001 → P-001.</summary>
-    /// <summary>"Reason — remarks" of a record followed by the separator, or empty.</summary>
+    /// <summary>"Reason — remarks (From: X)" of a record followed by the separator, or empty.</summary>
     public static string Note(Dictionary<string, object?> r, string sep)
     {
         var reason = r.TryGetValue("reason", out var x) ? S(x) : "";
         var remarks = r.TryGetValue("remarks", out var y) ? S(y) : "";
+        var comingFrom = r.TryGetValue("coming_from", out var z) ? S(z) : "";
         var text = reason.Length > 0 && remarks.Length > 0 ? $"{reason} — {remarks}" : reason + remarks;
+        if (comingFrom.Length > 0) text = (text.Length > 0 ? text + "  " : "") + $"(From: {comingFrom})";
         return text.Length > 0 ? text + sep : "";
     }
 

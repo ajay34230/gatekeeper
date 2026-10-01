@@ -95,6 +95,9 @@ public sealed partial class Store : IDisposable
         Ensure("events", "remarks", "TEXT NOT NULL DEFAULT ''");
         Ensure("events", "source", "TEXT NOT NULL DEFAULT 'TERMINAL'");
         Ensure("events", "reason", "TEXT NOT NULL DEFAULT ''");
+        // Where the person is coming from, set by the guard on ENTRY only -- shown on the gate record so the
+        // Command Center knows which post/unit/location the person arrived from, not just that they arrived.
+        Ensure("events", "coming_from", "TEXT NOT NULL DEFAULT ''");
         foreach (var (_, col) in ExtraPersonFields) Ensure("persons", col, "TEXT NOT NULL DEFAULT ''");
         MigrateFeatures(Ensure);
         Exec("CREATE TABLE IF NOT EXISTS person_media(person_id TEXT PRIMARY KEY, photo BLOB, signature BLOB, updated_at INTEGER NOT NULL)");
@@ -585,11 +588,12 @@ public sealed partial class Store : IDisposable
     void InsertEvent(JsonObject e, string entity, string id, string type, long seq, string hash, long? stay) =>
         Exec("""
             INSERT INTO events(event_id,entity_type,entity_id,event_type,location_id,gate_id,device_id,operator_id,event_ts,created_at,received_at,seq,
-              source_type,source_id,loc_mismatch,scanned_loc,stay_ms,payload_hash,reason,remarks,expected_return) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+              source_type,source_id,loc_mismatch,scanned_loc,stay_ms,payload_hash,reason,remarks,expected_return,coming_from) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
             """, T(e, "eventId"), entity, id, type, Upper(T(e, "locationId")), Upper(T(e, "gateId")), T(e, "deviceId"), Upper(T(e, "operatorId")),
             (long)e["eventTimestamp"]!, (long)e["createdAt"]!, NowMs, seq, Upper(T(e, "sourceType")) is { Length: > 0 } s ? s : "DIRECT",
             e["sourceId"]?.ToString(), e["locationMismatch"]?.GetValue<bool>() == true ? 1 : 0, T(e, "scannedLocation"), stay, hash, Clip(T(e, "reason"), 60), Clip(T(e, "remarks"), 300),
-            type == "EXIT" && e["expectedReturn"] is JsonValue er && er.TryGetValue<long>(out var ret) && ret > 0 ? ret : 0L);
+            type == "EXIT" && e["expectedReturn"] is JsonValue er && er.TryGetValue<long>(out var ret) && ret > 0 ? ret : 0L,
+            type == "ENTRY" ? Clip(T(e, "comingFrom"), 80) : "");
 
     static string Clip(string v, int max) => v.Length <= max ? v : v[..max];
 

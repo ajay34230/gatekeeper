@@ -202,17 +202,24 @@ class EventRepository(
         remarks: String = "",
         expectedReturn: Long = 0L,
         /** The operator's explicit Entry/Exit choice; null keeps the old behaviour of following the presence state. */
-        forcedType: EventType? = null
+        forcedType: EventType? = null,
+        /** Where the person is coming from -- entered by the guard on ENTRY only, ignored on EXIT. */
+        comingFrom: String = ""
     ): OperationResult<MovementEvent> = db.withTransaction {
         val p = persons.find(personId) ?: return@withTransaction OperationResult.Rejected("PERSON_NOT_FOUND")
         if (!p.active) return@withTransaction OperationResult.Rejected("INACTIVE_PERSON")
 
         val active = sessions.activeForPerson(personId)
         val type = forcedType ?: if (active == null) EventType.ENTRY else EventType.EXIT
-        // The operator can pick Entry or Exit explicitly instead of relying on the auto-detected direction, but
-        // the choice still has to match reality: the same rule the Command Center applies to a manual record.
-        if (type == EventType.ENTRY && active != null) return@withTransaction OperationResult.Rejected("ALREADY_INSIDE")
-        if (type == EventType.EXIT && active == null) return@withTransaction OperationResult.Rejected("NOT_INSIDE")
+        // The gate guard's explicit Entry/Exit choice is final: this terminal's own presence tracking can be stale
+        // (e.g. the matching exit/entry happened on another device that hasn't synced here yet), and the guard's
+        // physical decision at the gate takes priority over that local bookkeeping -- the mismatch is corrected
+        // below rather than blocking the record. Only credential validity (active/expired) still blocks; an
+        // auto-detected direction (no explicit choice) still follows the presence state as before.
+        if (forcedType == null) {
+            if (type == EventType.ENTRY && active != null) return@withTransaction OperationResult.Rejected("ALREADY_INSIDE")
+            if (type == EventType.EXIT && active == null) return@withTransaction OperationResult.Rejected("NOT_INSIDE")
+        }
         val now = System.currentTimeMillis()
         // Visitor passes only admit entry inside their validity window (exit is always allowed).
         if (type == EventType.ENTRY && p.validTo > 0 && now > p.validTo) return@withTransaction OperationResult.Rejected("PASS_EXPIRED")
@@ -227,11 +234,15 @@ class EventRepository(
             scannedLocation = scannedLocation,
             reason = reason.trim().take(60),
             remarks = remarks.trim().take(300),
-            expectedReturn = if (type == EventType.EXIT) expectedReturn else 0L
+            expectedReturn = if (type == EventType.EXIT) expectedReturn else 0L,
+            comingFrom = if (type == EventType.ENTRY) comingFrom.trim().take(80) else ""
         )
-        // Presence first: if it changed meanwhile, nothing is written (the record is only stored when it applies).
-        if (type == EventType.EXIT && sessions.close(active!!.sessionId, eventId, now) != 1)
+        if (type == EventType.EXIT && active != null && sessions.close(active.sessionId, eventId, now) != 1)
             return@withTransaction OperationResult.Rejected("PRESENCE_STATE_CHANGED")
+        if (type == EventType.ENTRY && active != null) {
+            // Correct a stale "already inside" session before opening the one the guard is recording right now.
+            sessions.close(active.sessionId, eventId, now)
+        }
         events.insert(toEntity(event))
         if (type == EventType.ENTRY) {
             sessions.insert(PresenceSessionEntity(
@@ -395,7 +406,7 @@ class EventRepository(
         e.eventId, e.entityType.name, e.entityId, e.eventType.name,
         e.locationId, e.gateId, e.deviceId, e.operatorId, e.eventTimestamp,
         e.createdAt, e.syncStatus.name, 0, null, e.createdAt,
-        e.sourceType.name, e.sourceId, e.locationMismatch, e.scannedLocation, e.reason, e.remarks, e.expectedReturn
+        e.sourceType.name, e.sourceId, e.locationMismatch, e.scannedLocation, e.reason, e.remarks, e.expectedReturn, e.comingFrom
     )
 
     private fun toModel(e: MovementEventEntity) = MovementEvent(
@@ -403,7 +414,7 @@ class EventRepository(
         EventType.valueOf(e.eventType), e.locationId, e.gateId,
         e.deviceId, e.operatorId, e.eventTimestamp, e.createdAt,
         SyncStatus.valueOf(e.syncStatus), PresenceSource.valueOf(e.sourceType), e.sourceId,
-        e.locationMismatch, e.scannedLocation, e.reason, e.remarks, e.expectedReturn
+        e.locationMismatch, e.scannedLocation, e.reason, e.remarks, e.expectedReturn, e.comingFrom
     )
 
     private fun newEventId() = "EVT-" + UUID.randomUUID().toString().replace("-", "").take(12).uppercase()

@@ -37,7 +37,9 @@ data class MovementEvent(
     val scannedLocation: String = "",
     val reason: String = "",
     val remarks: String = "",
-    val expectedReturn: Long = 0L
+    val expectedReturn: Long = 0L,
+    /** Where the person is coming from, entered by the guard on ENTRY only -- shown on the gate record. */
+    val comingFrom: String = ""
 )
 
 data class NetworkStatus(

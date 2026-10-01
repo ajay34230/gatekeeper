@@ -48,7 +48,7 @@ class HttpFailure(val code: Int, val bodyText: String) : Exception(
     val locationId: String, val gateId: String, val deviceId: String, val operatorId: String,
     val eventTimestamp: Long, val createdAt: Long, val sourceType: String = "DIRECT", val sourceId: String? = null,
     val locationMismatch: Boolean = false, val scannedLocation: String = "",
-    val reason: String = "", val remarks: String = "", val expectedReturn: Long = 0L
+    val reason: String = "", val remarks: String = "", val expectedReturn: Long = 0L, val comingFrom: String = ""
 )
 @Serializable data class VehicleManifestPayload(
     val manifestId: String, val vehicleId: String, val entryEventId: String, val locationId: String,
@@ -199,7 +199,7 @@ class ApiClient(private val profile: ConnectionProfile? = null) {
             event.eventId, event.entityType.name, event.entityId, event.eventType.name,
             event.locationId, event.gateId, event.deviceId, event.operatorId,
             event.eventTimestamp, event.createdAt, event.sourceType.name, event.sourceId,
-            event.locationMismatch, event.scannedLocation, event.reason, event.remarks, event.expectedReturn
+            event.locationMismatch, event.scannedLocation, event.reason, event.remarks, event.expectedReturn, event.comingFrom
         ))).toString()
     }
 

@@ -526,7 +526,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return if (lastExit?.reason?.contains("leave", ignoreCase = true) == true && reasons.any { it.equals("Rejoining from Leave", true) }) "Rejoining from Leave" else ""
     }
 
-    fun confirmPerson(reason: String = "", remarks: String = "", expectedReturn: Long = 0L, forcedType: EventType? = null) {
+    fun confirmPerson(reason: String = "", remarks: String = "", expectedReturn: Long = 0L, forcedType: EventType? = null, comingFrom: String = "") {
         val s = session as? ScanSession.PersonResult ?: return
         viewModelScope.launch(gateErrors) {
             when (
@@ -541,7 +541,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     reason,
                     remarks,
                     expectedReturn,
-                    forcedType
+                    forcedType,
+                    comingFrom
                 )
             ) {
                 is OperationResult.Success -> {
