@@ -155,6 +155,7 @@
                                 <RadioButton x:Name="TabVehicles" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked"/>
                                 <RadioButton x:Name="TabAccounts" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked"/>
                                 <RadioButton x:Name="TabAudit" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked" Content="Audit Trail"/>
+                                <RadioButton x:Name="TabExport" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked" Content="Export"/>
                                 <RadioButton x:Name="TabSettings" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked" Content="Settings"/>
                             </StackPanel>
                         </Border>

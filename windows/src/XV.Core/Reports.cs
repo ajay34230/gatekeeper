@@ -10,7 +10,7 @@ using PdfSharp.Fonts;
 namespace XV.Core;
 
 /// <summary>What to include in an export. Empty PersonIds = everyone matching Company.</summary>
-public sealed record ReportRequest(string Company, IReadOnlyCollection<string> PersonIds, DateTime From, DateTime To, bool IncludeRecords = true)
+public sealed record ReportRequest(string Company, IReadOnlyCollection<string> PersonIds, DateTime From, DateTime To, bool IncludeRecords = true, string? Heading = null)
 {
     public long FromMs => new DateTimeOffset(From.Date).ToUnixTimeMilliseconds();
     public long ToMs => new DateTimeOffset(To.Date.AddDays(1)).ToUnixTimeMilliseconds() - 1;
@@ -65,6 +65,12 @@ public static class Reports
             .ToList();
     }
 
+    /// <summary>Fills in {Scope} in the administrator's export heading template (Settings.ExportHeadingTemplate)
+    /// with what this export actually covers -- a person's rank and name, or a platoon/section/company/unit
+    /// label -- so the printed heading reads "Movement History of Capt John Doe" / "...of Alpha Company" etc.</summary>
+    public static string BuildHeading(Settings s, string scopeLabel) =>
+        s.ExportHeadingTemplate.Replace("{Scope}", scopeLabel, StringComparison.OrdinalIgnoreCase);
+
     static string Scope(ReportRequest req) =>
         (req.PersonIds.Count > 0 ? $"{req.PersonIds.Count} selected person(s)" : req.Company is "" or "ALL" ? "All companies" : req.Company + " Company")
         + $" • {req.From:dd MMM yyyy} – {req.To:dd MMM yyyy}";
@@ -84,7 +90,7 @@ public static class Reports
         // Summary sheet
         var sum = wb.Worksheets.Add("Summary");
         sum.TabColor = XLColor.FromHtml(Amber);
-        Title(sum, 1, 8, "XV DIGITAL ACCESS CONTROL — PERSONNEL & GATE RECORDS", Ink);
+        Title(sum, 1, 8, req.Heading ?? "XV DIGITAL ACCESS CONTROL — PERSONNEL & GATE RECORDS", Ink);
         sum.Cell(2, 1).Value = $"{Scope(req)}   •   Generated {DateTime.Now:dd MMM yyyy HH:mm}   •   {store.Settings.ServerName}";
         sum.Range(2, 1, 2, 8).Merge().Style.Font.SetFontColor(XLColor.FromHtml("#52525B")).Font.SetItalic();
         string[] sh = ["Company", "Personnel", "Inside now", "Entries", "Exits", "Other records", "Location flags", "Total records"];
@@ -288,7 +294,7 @@ public static class Reports
         band.AddColumn(Unit.FromCentimeter(27));
         var br = band.AddRow(); br.Shading.Color = C(Ink); br.TopPadding = br.BottomPadding = Unit.FromPoint(8);
         var bp = br.Cells[0].AddParagraph(); bp.Format.LeftIndent = Unit.FromPoint(8);
-        var t1 = bp.AddFormattedText("XV DIGITAL ACCESS CONTROL", TextFormat.Bold); t1.Font.Size = 16; t1.Font.Color = Colors.White;
+        var t1 = bp.AddFormattedText(req.Heading ?? "XV DIGITAL ACCESS CONTROL", TextFormat.Bold); t1.Font.Size = 16; t1.Font.Color = Colors.White;
         bp.AddLineBreak();
         var t2 = bp.AddFormattedText($"Personnel & Gate Records Report  •  {Scope(req)}  •  Generated {DateTime.Now:dd MMM yyyy HH:mm}"); t2.Font.Size = 8.5; t2.Font.Color = C("#FCD34D");
         sec.AddParagraph().Format.SpaceAfter = Unit.FromPoint(6);

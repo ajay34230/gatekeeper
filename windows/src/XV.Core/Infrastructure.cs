@@ -119,6 +119,11 @@ public sealed class Settings
     /// <summary>Lock the Command Center after this many idle minutes (0 = never); unlocked with the administrator password.</summary>
     public int AutoLockMinutes { get; set; } = 10;
 
+    /// <summary>Heading printed at the top of an Excel/PDF export, with {Scope} replaced by what the export covers
+    /// (e.g. "Capt John Doe" for one person, "Alpha Company" for a company, "2 Platoon" for a platoon). Editable in
+    /// Settings so a unit can phrase it however their paperwork expects.</summary>
+    public string ExportHeadingTemplate { get; set; } = "Movement History of {Scope}";
+
     /// <summary>Card Studio design (theme, header texts, instructions, CO details), stored as JSON by the Card Studio.</summary>
     public string CardDesignJson { get; set; } = "";
 

@@ -137,6 +137,7 @@ public partial class MainWindow : Window
         else if (TabVehicles.IsChecked == true) RenderVehicles();
         else if (TabAccounts.IsChecked == true) RenderAccounts();
         else if (TabSettings.IsChecked == true) RenderSettings();
+        else if (TabExport.IsChecked == true) RenderExport();
         else RenderAudit();
     }
 
@@ -539,6 +540,142 @@ public partial class MainWindow : Window
         ContentHost.Content = panel;
     }
 
+    /// <summary>Who/when/format/heading export, replacing the old single "Company-wise report…" button with real
+    /// scope choices (individual, platoon, section, company, battalion/unit, everyone), real date ranges (today /
+    /// this week / this month / entire history / a custom range), and a per-export customisable heading.</summary>
+    void RenderExport()
+    {
+        Header("EXPORT REPORTS", "", "Choose who and what period to export, then pick a file format. CSV is data only; Excel and PDF print the heading below.");
+
+        var persons = App.Store.Persons();
+        string[] scopeLevels = ["All Personnel", "Battalion / Unit", "Company", "Platoon", "Section", "Individual"];
+        var scopeBox = new ComboBox { Width = 260 };
+        foreach (var lvl in scopeLevels) scopeBox.Items.Add(lvl);
+        scopeBox.SelectedIndex = 0;
+
+        var valuePanel = new StackPanel { Margin = new Thickness(0, 10, 0, 0) };
+        ComboBox? valueBox = null;
+
+        void RebuildValuePanel()
+        {
+            valuePanel.Children.Clear();
+            valueBox = null;
+            var level = scopeBox.SelectedItem as string ?? "All Personnel";
+            if (level == "All Personnel") return;
+            if (level == "Individual")
+            {
+                var vb = new ComboBox { Width = 420, IsEditable = true, IsTextSearchEnabled = true };
+                foreach (var p in persons.OrderBy(p => S(p["name"]))) vb.Items.Add($"{DisplayId(S(p["id"]))} — {S(p["rank"])} {S(p["name"])}".Trim());
+                valuePanel.Children.Add(Label("Select person"));
+                valuePanel.Children.Add(vb);
+                valueBox = vb;
+                return;
+            }
+            var field = level switch { "Battalion / Unit" => "unit", "Company" => "company", "Platoon" => "platoon", _ => "section" };
+            var values = persons.Select(p => S(p[field])).Where(v => v.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(v => v).ToList();
+            var vb2 = new ComboBox { Width = 300 };
+            foreach (var v in values) vb2.Items.Add(v);
+            if (values.Count > 0) vb2.SelectedIndex = 0;
+            valuePanel.Children.Add(Label($"Select {level.ToLowerInvariant()}"));
+            valuePanel.Children.Add(vb2);
+            if (values.Count == 0) valuePanel.Children.Add(Para($"No personnel have a {level.ToLowerInvariant()} recorded yet.", "#71717A"));
+            valueBox = vb2;
+        }
+        scopeBox.SelectionChanged += (_, _) => RebuildValuePanel();
+        RebuildValuePanel();
+
+        string[] dateRanges = ["Today", "This Week (last 7 days)", "This Month", "Entire History", "Custom Range"];
+        var rangeBox = new ComboBox { Width = 260 };
+        foreach (var r in dateRanges) rangeBox.Items.Add(r);
+        rangeBox.SelectedIndex = 2;
+
+        var fromPick = new DatePicker { SelectedDate = DateTime.Today.AddDays(-30), Width = 160 };
+        var toPick = new DatePicker { SelectedDate = DateTime.Today, Width = 160 };
+        var customPanel = Col(Label("From"), fromPick, Label("To"), toPick);
+        customPanel.Visibility = Visibility.Collapsed;
+        rangeBox.SelectionChanged += (_, _) => customPanel.Visibility = rangeBox.SelectedIndex == 4 ? Visibility.Visible : Visibility.Collapsed;
+
+        var withRecords = new CheckBox { Content = "Include gate & history records (untick for roster only)", IsChecked = true, Margin = new Thickness(0, 12, 0, 0) };
+
+        var headingField = new TextBox { Text = App.Settings.ExportHeadingTemplate, FontFamily = Mono };
+        var saveHeadingDefault = new CheckBox { Content = "Save as the default heading for future exports", IsChecked = false, Margin = new Thickness(0, 8, 0, 0) };
+
+        (List<string> ids, string company, string scopeLabel) ResolveScope()
+        {
+            var level = scopeBox.SelectedItem as string ?? "All Personnel";
+            if (level == "All Personnel") return ([], "ALL", "All Personnel");
+            if (level == "Individual")
+            {
+                var id = (valueBox?.Text ?? "").Split(['—'], 2, StringSplitOptions.None)[0].Trim();
+                var p = persons.FirstOrDefault(x => string.Equals(DisplayId(S(x["id"])), id, StringComparison.OrdinalIgnoreCase) || string.Equals(S(x["id"]), id, StringComparison.OrdinalIgnoreCase));
+                if (p == null) return ([], "ALL", "Selected Person");
+                var label = $"{S(p["rank"])} {S(p["name"])}".Trim();
+                return ([S(p["id"])], "ALL", label.Length > 0 ? label : S(p["name"]));
+            }
+            var field = level switch { "Battalion / Unit" => "unit", "Company" => "company", "Platoon" => "platoon", _ => "section" };
+            var val = valueBox?.SelectedItem as string ?? "";
+            var ids = persons.Where(p => string.Equals(S(p[field]), val, StringComparison.OrdinalIgnoreCase)).Select(p => S(p["id"])).ToList();
+            var suffix = level is "Platoon" or "Section" or "Company" ? " " + level : "";
+            var company = level == "Company" ? val : "ALL";
+            return (ids, company, (val + suffix).Trim());
+        }
+
+        (DateTime from, DateTime to) ResolveDates()
+        {
+            var today = DateTime.Today;
+            return rangeBox.SelectedIndex switch
+            {
+                0 => (today, today),
+                1 => (today.AddDays(-6), today),
+                2 => (new DateTime(today.Year, today.Month, 1), today),
+                3 => (new DateTime(2000, 1, 1), today),
+                _ => (fromPick.SelectedDate ?? today.AddDays(-30), toPick.SelectedDate ?? today),
+            };
+        }
+
+        void Export(string kind)
+        {
+            try
+            {
+                if (!AdminGate.Require(this, $"Export {kind.ToUpperInvariant()} report")) return;
+                var (ids, company, scopeLabel) = ResolveScope();
+                if ((scopeBox.SelectedItem as string) != "All Personnel" && ids.Count == 0) { MessageBox.Show(this, "No personnel match that selection.", "Export"); return; }
+                var (from, to) = ResolveDates();
+                if (from > to) throw new Exception("'From' must be before 'To'.");
+                var template = headingField.Text.Trim().Length > 0 ? headingField.Text.Trim() : App.Settings.ExportHeadingTemplate;
+                if (saveHeadingDefault.IsChecked == true && template != App.Settings.ExportHeadingTemplate) { App.Settings.ExportHeadingTemplate = template; App.Settings.Save(); }
+                var heading = template.Replace("{Scope}", scopeLabel, StringComparison.OrdinalIgnoreCase);
+                var req = new XV.Core.ReportRequest(company, ids, from, to, withRecords.IsChecked == true, heading);
+                var safeName = new string(scopeLabel.Where(char.IsLetterOrDigit).ToArray());
+                var name = $"XV-{(safeName.Length > 0 ? safeName : "Export")}-{from:yyyyMMdd}-{to:yyyyMMdd}";
+                var (filter, ext) = kind switch { "xlsx" => ("Excel workbook|*.xlsx", ".xlsx"), "pdf" => ("PDF document|*.pdf", ".pdf"), _ => ("CSV|*.csv", ".csv") };
+                var dlg = new Microsoft.Win32.SaveFileDialog { FileName = name + ext, Filter = filter };
+                if (dlg.ShowDialog(this) != true) return;
+                if (kind == "xlsx") XV.Core.Reports.Excel(App.Store, req, dlg.FileName);
+                else if (kind == "pdf") XV.Core.Reports.Pdf(App.Store, req, dlg.FileName);
+                else XV.Core.Reports.Csv(App.Store, req, dlg.FileName);
+                if (MessageBox.Show(this, "Report saved. Open it now?", "Export finished", MessageBoxButton.YesNo) == MessageBoxResult.Yes)
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dlg.FileName) { UseShellExecute = true });
+            }
+            catch (Exception ex) { MessageBox.Show(this, ex.Message, "Export"); }
+        }
+
+        var panel = Col(
+            Card(Col(T("WHO", 11, "#A1A1AA", bold: true).M(0, 0, 0, 8), scopeBox, valuePanel), "#141417").M(0, 0, 0, 14),
+            Card(Col(T("WHEN", 11, "#A1A1AA", bold: true).M(0, 0, 0, 8), rangeBox, customPanel, withRecords), "#141417").M(0, 0, 0, 14),
+            Card(Col(
+                T("EXPORT HEADING", 11, "#A1A1AA", bold: true).M(0, 0, 0, 8),
+                Para("{Scope} is replaced with who this export covers -- e.g. \"Capt John Doe\", \"Alpha Company\", \"2 Platoon\". Also editable from Settings.", "#71717A"),
+                headingField, saveHeadingDefault
+            ), "#141417").M(0, 0, 0, 14),
+            Card(Col(
+                T("FILE FORMAT", 11, "#A1A1AA", bold: true).M(0, 0, 0, 10),
+                Wrap(Btn("Export CSV", (_, _) => Export("csv"), "BtnBase"), Btn("Export PDF", (_, _) => Export("pdf"), "BtnDanger"), Btn("Export Excel", (_, _) => Export("xlsx"), "BtnEmerald"))
+            ), "#141417")
+        );
+        ContentHost.Content = panel;
+    }
+
     /// <summary>Settings used to be scattered across header buttons that each opened their own dialog -- this tab
     /// gives them one place with a quick-status summary up top and a clearly labelled card per area below.</summary>
     void RenderSettings()
@@ -560,7 +697,8 @@ public partial class MainWindow : Window
             Kv("Auto-lock", s.AutoLockMinutes > 0 ? $"{s.AutoLockMinutes} minute(s) idle" : "Off"),
             Kv("Outbound internet block", s.BlockOutbound ? "ON" : "OFF"),
             Kv("Self-registration approval", s.RequireApproval ? "Required" : "Auto-approved"),
-            Kv("Administrator password", s.HasAdminPassword ? "Set" : "Not set")
+            Kv("Administrator password", s.HasAdminPassword ? "Set" : "Not set"),
+            Kv("Export heading template", s.ExportHeadingTemplate)
         ), "#111113").M(0, 0, 0, 16);
 
         var grid = CardGrid();
@@ -582,6 +720,9 @@ public partial class MainWindow : Window
         grid.Children.Add(SettingsCard("Lock Now",
             "Lock this Command Center immediately. The administrator password is required to unlock it again.",
             "Lock Command Center", Lock_Click, "BtnDanger"));
+        grid.Children.Add(SettingsCard("Reports & Export",
+            "Export personnel and gate records by individual, platoon, section, company or battalion, for any date range, in CSV, PDF or Excel -- including the heading template above.",
+            "Open Export Tab", (_, _) => TabExport.IsChecked = true, "BtnEmerald"));
 
         ContentHost.Content = Col(quick, grid);
     }
@@ -677,7 +818,8 @@ public partial class MainWindow : Window
         yield return (() => { TabVehicles.IsChecked = true; Refresh(); }, "03-vehicles");
         yield return (() => { TabAccounts.IsChecked = true; Refresh(); }, "04-accounts-devices");
         yield return (() => { TabAudit.IsChecked = true; Refresh(); }, "05-audit");
-        yield return (() => { TabSettings.IsChecked = true; Refresh(); }, "06-settings");
+        yield return (() => { TabExport.IsChecked = true; Refresh(); }, "06-export");
+        yield return (() => { TabSettings.IsChecked = true; Refresh(); }, "07-settings");
     }
 }
 
