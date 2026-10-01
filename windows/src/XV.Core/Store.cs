@@ -641,6 +641,33 @@ public sealed partial class Store : IDisposable
         return result;
     }
 
+    /// <summary>A vehicle this terminal could not identify offline -- not in its local registry and no connection
+    /// to verify it online -- so the guard typed the plate by eye instead of being unable to record it at all.
+    /// Logged as a standalone event with no manifest or presence tracking (there is no registry record to attach
+    /// either to); an administrator reconciles it from the live feed / history once reviewed.</summary>
+    public JsonObject ManualVehicleSighting(JsonObject e, string deviceId, string operatorId)
+    {
+        CheckEvent(e, deviceId, operatorId);
+        var result = Tx(() =>
+        {
+            var hash = Hash(e);
+            var existing = One("SELECT payload_hash, seq FROM events WHERE event_id=$1", T(e, "eventId"));
+            if (existing != null)
+            {
+                if (S(existing["payload_hash"]) != hash) throw new StoreException("EVENT_ID_REUSED", "Event id reused with different content");
+                return new JsonObject { ["status"] = "duplicate", ["eventId"] = T(e, "eventId"), ["serverSequence"] = Convert.ToInt64(existing["seq"]) };
+            }
+            if (Upper(T(e, "entityType")) != "VEHICLE") throw new StoreException("INVALID_EVENT_TYPE", "Manual sighting must be a vehicle event", 400);
+            var vid = CanonId(T(e, "entityId"));
+            var seq = NextSeq();
+            InsertEvent(e, "VEHICLE", vid, Upper(T(e, "eventType")), seq, hash, null);
+            Audit(operatorId, "VEHICLE_MANUAL_SIGHTING", "VEHICLE", vid, T(e, "eventId"));
+            return new JsonObject { ["status"] = "accepted", ["eventId"] = T(e, "eventId"), ["serverSequence"] = seq };
+        });
+        Notify();
+        return result;
+    }
+
     public JsonObject VehicleTransaction(JsonObject payload, string deviceId, string operatorId)
     {
         var e = payload["event"] as JsonObject ?? throw new StoreException("INVALID_TRANSACTION", "Missing event", 400);

@@ -2328,7 +2328,8 @@ private fun VehicleReviewButton(vm: MainViewModel) {
 }
 
 @Composable
-private fun UnknownResultScreen(vm: MainViewModel, message: String) {
+private fun UnknownResultScreen(vm: MainViewModel, message: String, offerManualVehicleEntry: Boolean = false) {
+    var manualReg by rememberSaveable { mutableStateOf("") }
     Column(
         Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 22.dp),
@@ -2346,6 +2347,27 @@ private fun UnknownResultScreen(vm: MainViewModel, message: String) {
         Spacer(Modifier.height(20.dp))
         Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
             Text("The event was not committed locally.", fontFamily = Mono, fontSize = 9.sp, color = UiMuted, modifier = Modifier.padding(12.dp), textAlign = TextAlign.Center)
+        }
+        if (offerManualVehicleEntry) {
+            Spacer(Modifier.height(20.dp))
+            Surface(Modifier.fillMaxWidth(), color = UiWarningBg, shape = SmallShape, border = BorderStroke(1.dp, tc(0xFFFDE68A))) {
+                Column(Modifier.padding(14.dp)) {
+                    Text(
+                        "No connection to verify this vehicle, and it isn't in this terminal's offline registry. You can still record the entry by typing the plate you can see — it will sync to the Command Center for reconciliation once this terminal is connected again.",
+                        fontFamily = Sans, fontSize = 11.sp, color = tc(0xFF78350F)
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        manualReg, { manualReg = it.uppercase().take(20) }, Modifier.fillMaxWidth(), singleLine = true,
+                        placeholder = { Text("Registration number, e.g. MH12AB1234", fontFamily = Sans, fontSize = 13.sp) },
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    PrimaryButton("RECORD ENTRY MANUALLY", Icons.Default.LocalShipping, manualReg.isNotBlank()) {
+                        vm.recordManualVehicleEntry(manualReg)
+                    }
+                }
+            }
         }
         Spacer(Modifier.height(20.dp))
         PrimaryButton("SCAN PERSON QR", Icons.Default.Person) { vm.openPersonScanner() }
@@ -2897,7 +2919,7 @@ private fun SessionRouter(vm: MainViewModel) {
         is ScanSession.VehicleDriver -> VehicleDriverScreen(vm, s)
         is ScanSession.VehicleCoDriver -> VehicleCoDriverScreen(vm, s)
         is ScanSession.VehicleOccupants -> VehicleOccupantsScreen(vm, s)
-        is ScanSession.Unknown -> UnknownResultScreen(vm, s.message)
+        is ScanSession.Unknown -> UnknownResultScreen(vm, s.message, s.offerManualVehicleEntry)
         ScanSession.Closed -> Unit
     }
 }

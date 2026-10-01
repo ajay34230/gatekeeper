@@ -94,7 +94,10 @@ sealed interface ScanSession {
         val coDriver: PersonEntity?,
         val occupants: List<PersonEntity>
     ) : ScanSession
-    data class Unknown(val message: String) : ScanSession
+    /** [offerManualVehicleEntry]: this was a vehicle scan that couldn't be matched locally while offline -- the
+     * guard can still type the registration plate by eye and record an entry, synced for the PC to reconcile once
+     * connectivity returns, instead of being unable to record the vehicle at all. */
+    data class Unknown(val message: String, val offerManualVehicleEntry: Boolean = false) : ScanSession
 }
 
 enum class ScannerTarget { PERSON, VEHICLE, DRIVER, CO_DRIVER, OCCUPANT, PAIRING }
@@ -463,6 +466,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (v != null) scannedVehicle = v
         vehicleMismatch = if (result.locationMismatch) result.scannedLocation else ""
         session = when {
+            // Not in the local registry and no connection to verify it online either: offer a manual, typed-plate
+            // entry instead of turning the vehicle away outright -- it syncs to the PC to reconcile once this
+            // terminal reaches the Command Center again.
+            v == null && !network.isNetworkAvailable() -> ScanSession.Unknown(
+                (result.error ?: "Unknown vehicle") + " No connection to verify it online either.",
+                offerManualVehicleEntry = true
+            )
             v == null -> ScanSession.Unknown(result.error ?: "Unknown vehicle")
             !v.active -> ScanSession.Unknown("This vehicle credential is inactive.")
             else -> ScanSession.VehicleScan(v.id, repo.isVehicleInside(v.id))
@@ -617,6 +627,31 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun removeCoDriver() {
         (session as? ScanSession.VehicleOccupants)?.let {
             session = it.copy(coDriver = null)
+        }
+    }
+
+    /** Records a manually-typed vehicle entry when the plate couldn't be matched locally and there is no
+     * connection to verify it online -- see ScanSession.Unknown.offerManualVehicleEntry. */
+    fun recordManualVehicleEntry(registration: String, remarks: String = "") {
+        viewModelScope.launch(gateErrors) {
+            when (
+                val result = repo.createManualVehicleEntry(registration, config.locationId, config.gateId, config.deviceId, config.operatorId, remarks)
+            ) {
+                is OperationResult.Success -> {
+                    val e = result.value
+                    val plate = registration.trim().uppercase()
+                    completedEvent = e
+                    completedDurationMs = 0L
+                    completedVehicle = CompletedVehicleDisplay(VehicleEntity(e.entityId, plate, "Vehicle (unverified)", true), null, null, emptyList())
+                    message = "VEHICLE ENTRY RECORDED (MANUAL) • $plate • will be reconciled on sync"
+                    session = ScanSession.Closed
+                    showSuccess = true
+                    trySync()
+                }
+                is OperationResult.Rejected -> {
+                    message = if (result.reason == "REGISTRATION_REQUIRED") "Enter the vehicle's registration number." else result.reason
+                }
+            }
         }
     }
 

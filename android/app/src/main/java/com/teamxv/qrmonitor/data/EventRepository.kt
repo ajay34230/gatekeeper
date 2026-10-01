@@ -328,6 +328,31 @@ class EventRepository(
         OperationResult.Success(event to (now - activeManifest.createdAt))
     }
 
+    /** Records an entry for a vehicle this terminal cannot identify (not in the local registry and no connection
+     * to verify it online) by the registration plate the guard reads and types in by eye. Stored as a standalone
+     * event -- there is no local vehicle/manifest record to attach it to -- and syncs to the Command Center like
+     * any other queued record, where the plate is what identifies it for reconciliation. */
+    suspend fun createManualVehicleEntry(
+        registration: String,
+        location: String,
+        gate: String,
+        device: String,
+        operator: String,
+        remarks: String = ""
+    ): OperationResult<MovementEvent> {
+        val plate = registration.trim().uppercase()
+        if (plate.isBlank()) return OperationResult.Rejected("REGISTRATION_REQUIRED")
+        val entityId = "UNREG-" + plate.replace(Regex("[^A-Z0-9]"), "").take(24)
+        val now = System.currentTimeMillis()
+        val event = MovementEvent(
+            newEventId(), EntityType.VEHICLE, entityId, EventType.ENTRY, location, gate, device, operator,
+            now, now, SyncStatus.PENDING,
+            remarks = "Manually recorded offline: registration $plate could not be verified against the registry. ${remarks.trim()}".trim().take(300)
+        )
+        events.insert(toEntity(event))
+        return OperationResult.Success(event)
+    }
+
     suspend fun activeVehicleManifest(vehicleId: String): Pair<VehicleManifestEntity, List<VehicleManifestMemberEntity>>? {
         val manifest = manifests.activeForVehicle(vehicleId) ?: return null
         return manifest to manifests.members(manifest.manifestId)
@@ -347,7 +372,23 @@ class EventRepository(
             if (event.entityType == EntityType.VEHICLE) {
                 val manifest = manifests.findManifestByEvent(event.eventId) ?: manifests.findManifestByExitEvent(event.eventId)
                 if (manifest == null) {
-                    events.updateSync(event.eventId, SyncStatus.CONFLICT.name, eventEntity.syncAttempts + 1, "VEHICLE_MANIFEST_NOT_FOUND", now)
+                    // No manifest at all means this was a manually-typed plate recorded offline for a vehicle not
+                    // in the local registry (see createManualVehicleEntry) -- there is no driver/occupants to send,
+                    // so it goes to the Command Center as a standalone sighting for an administrator to reconcile,
+                    // not through the vehicle-transaction path that assumes a registered vehicle and manifest.
+                    val attempts = eventEntity.syncAttempts + 1
+                    events.updateSync(event.eventId, SyncStatus.SYNCING.name, attempts, null, now)
+                    val result = api.submitManualVehicleSighting(baseUrl(), event)
+                    if (result.isSuccess) {
+                        events.updateSync(event.eventId, SyncStatus.SYNCED.name, attempts, null, System.currentTimeMillis())
+                        synced++
+                    } else {
+                        val f = result.exceptionOrNull()
+                        val permanent = f is HttpFailure && f.code in 400..499 && f.code != 429
+                        val status = if (f is HttpFailure && f.code == 409) SyncStatus.CONFLICT else if (permanent) SyncStatus.REJECTED else SyncStatus.FAILED
+                        events.updateSync(event.eventId, status.name, attempts, f?.message, System.currentTimeMillis())
+                        if (!permanent) throw SyncTransientException(f?.message ?: "Vehicle sighting sync failed", f)
+                    }
                     continue
                 }
                 val members = manifests.members(manifest.manifestId)

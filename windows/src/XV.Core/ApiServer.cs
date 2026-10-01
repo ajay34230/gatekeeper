@@ -234,6 +234,7 @@ public sealed class ApiServer : IAsyncDisposable
             case "heartbeat": _store.Heartbeat(deviceId, data, ip, viaInternet); return (200, new JsonObject { ["status"] = "ok", ["deviceId"] = deviceId });
             case "events.create": { var r = _store.PersonEvent(data, deviceId, operatorId); return (r["status"]!.ToString() == "duplicate" ? 200 : 201, r); }
             case "vehicle.transaction": { var r = _store.VehicleTransaction(data, deviceId, operatorId); return (r["status"]!.ToString() == "duplicate" ? 200 : 201, r); }
+            case "vehicle.manualSighting": { var r = _store.ManualVehicleSighting(data, deviceId, operatorId); return (r["status"]!.ToString() == "duplicate" ? 200 : 201, r); }
             default: return (404, new JsonObject { ["status"] = "error", ["reason"] = "UNKNOWN_OPERATION" });
         }
     }

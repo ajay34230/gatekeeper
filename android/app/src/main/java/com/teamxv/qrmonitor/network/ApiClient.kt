@@ -207,6 +207,18 @@ class ApiClient(private val profile: ConnectionProfile? = null) {
         rpc("vehicle.transaction", json.encodeToJsonElement(tx)).toString()
     }
 
+    /** A vehicle this terminal could not identify offline (not in the local registry, no connection to verify) --
+     * the guard typed the plate by eye. No manifest exists for it, so it goes to the Command Center as a
+     * standalone sighting instead of through the vehicle-transaction path. */
+    fun submitManualVehicleSighting(baseUrl: String, event: MovementEvent): Result<String> = runCatching {
+        rpc("vehicle.manualSighting", json.encodeToJsonElement(EventPayload(
+            event.eventId, event.entityType.name, event.entityId, event.eventType.name,
+            event.locationId, event.gateId, event.deviceId, event.operatorId,
+            event.eventTimestamp, event.createdAt, event.sourceType.name, event.sourceId,
+            event.locationMismatch, event.scannedLocation, event.reason, event.remarks, event.expectedReturn, event.comingFrom
+        ))).toString()
+    }
+
     // ------------------------------------------------------------------ pairing (no device key yet)
 
     /** Enrolls this terminal using the one-time code from the pairing QR. Tries LAN addresses, then the internet URL. */
