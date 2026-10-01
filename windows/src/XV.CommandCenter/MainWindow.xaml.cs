@@ -683,9 +683,9 @@ public partial class MainWindow : Window
         var s = App.Settings;
         Header("COMMAND CENTER SETTINGS", "", "Station setup, data protection, connectivity and maintenance for this Command Center.");
 
-        Border SettingsCard(string title, string desc, string actionLabel, RoutedEventHandler onClick, string style = "BtnAmber") =>
+        Border SettingsCard(string glyph, string title, string desc, string actionLabel, RoutedEventHandler onClick, string style = "BtnAmber") =>
             Card(Col(
-                T(title, 13.5, "#F4F4F5", bold: true).M(0, 0, 0, 6),
+                Row(Icon(glyph, "#F59E0B", 16).M(0, 0, 8, 0), T(title, 13.5, "#F4F4F5", bold: true)).M(0, 0, 0, 6),
                 T(desc, 11.5, "#A1A1AA").Wrap().M(0, 0, 0, 12),
                 Btn(actionLabel, onClick, style)
             ), "#141417").M(0, 0, 12, 12);
@@ -702,25 +702,25 @@ public partial class MainWindow : Window
         ), "#111113").M(0, 0, 0, 16);
 
         var grid = CardGrid();
-        grid.Children.Add(SettingsCard("Station & General",
+        grid.Children.Add(SettingsCard("", "Station & General",
             "Locations, gates, server name, custom fields, movement reasons, data protection, diagnostics and maintenance.",
             "Open Station & General Settings", (_, _) => new StationsWindow { Owner = this }.ShowDialog()));
-        grid.Children.Add(SettingsCard("Cloud Link",
+        grid.Children.Add(SettingsCard("", "Cloud Link",
             "Internet connection method, allowed address ranges, and the public URL terminals use away from base.",
             "Open Cloud Link", (_, _) => new CloudLinkWindow { Owner = this }.ShowDialog(), "BtnBlue"));
-        grid.Children.Add(SettingsCard("Local Wi-Fi & Pair Device",
+        grid.Children.Add(SettingsCard("", "Local Wi-Fi & Pair Device",
             "Pair a new terminal to this Command Center over the local network with a one-time QR code.",
             "Scan / Show Pairing QR", Pair_Click, "BtnGold"));
-        grid.Children.Add(SettingsCard("Administrator Password",
+        grid.Children.Add(SettingsCard("", "Administrator Password",
             s.HasAdminPassword ? "A password is set and protects sensitive actions (data protection changes, wipes, auto-lock)." : "No administrator password is set yet -- sensitive actions are currently unprotected.",
             s.HasAdminPassword ? "Change Password" : "Set Password", (_, _) => AdminGate.ChangePassword(this), "BtnGold"));
-        grid.Children.Add(SettingsCard("Comms Center",
+        grid.Children.Add(SettingsCard("", "Comms Center",
             "Messages, alerts and voice/video calls with paired terminals.",
             "Open Comms Center", Comms_Click, "BtnDanger"));
-        grid.Children.Add(SettingsCard("Lock Now",
+        grid.Children.Add(SettingsCard("", "Lock Now",
             "Lock this Command Center immediately. The administrator password is required to unlock it again.",
             "Lock Command Center", Lock_Click, "BtnDanger"));
-        grid.Children.Add(SettingsCard("Reports & Export",
+        grid.Children.Add(SettingsCard("", "Reports & Export",
             "Export personnel and gate records by individual, platoon, section, company or battalion, for any date range, in CSV, PDF or Excel -- including the heading template above.",
             "Open Export Tab", (_, _) => TabExport.IsChecked = true, "BtnEmerald"));
 
