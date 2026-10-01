@@ -566,7 +566,7 @@ public partial class MainWindow : Window
             {
                 var vb = new ComboBox { Width = 420, IsEditable = true, IsTextSearchEnabled = true };
                 foreach (var p in persons.OrderBy(p => S(p["name"]))) vb.Items.Add($"{DisplayId(S(p["id"]))} — {S(p["rank"])} {S(p["name"])}".Trim());
-                valuePanel.Children.Add(Label("Select person"));
+                valuePanel.Children.Add(Lbl("Select person"));
                 valuePanel.Children.Add(vb);
                 valueBox = vb;
                 return;
@@ -576,9 +576,9 @@ public partial class MainWindow : Window
             var vb2 = new ComboBox { Width = 300 };
             foreach (var v in values) vb2.Items.Add(v);
             if (values.Count > 0) vb2.SelectedIndex = 0;
-            valuePanel.Children.Add(Label($"Select {level.ToLowerInvariant()}"));
+            valuePanel.Children.Add(Lbl($"Select {level.ToLowerInvariant()}"));
             valuePanel.Children.Add(vb2);
-            if (values.Count == 0) valuePanel.Children.Add(Para($"No personnel have a {level.ToLowerInvariant()} recorded yet.", "#71717A"));
+            if (values.Count == 0) valuePanel.Children.Add(Prg($"No personnel have a {level.ToLowerInvariant()} recorded yet.", "#71717A"));
             valueBox = vb2;
         }
         scopeBox.SelectionChanged += (_, _) => RebuildValuePanel();
@@ -591,7 +591,7 @@ public partial class MainWindow : Window
 
         var fromPick = new DatePicker { SelectedDate = DateTime.Today.AddDays(-30), Width = 160 };
         var toPick = new DatePicker { SelectedDate = DateTime.Today, Width = 160 };
-        var customPanel = Col(Label("From"), fromPick, Label("To"), toPick);
+        var customPanel = Col(Lbl("From"), fromPick, Lbl("To"), toPick);
         customPanel.Visibility = Visibility.Collapsed;
         rangeBox.SelectionChanged += (_, _) => customPanel.Visibility = rangeBox.SelectedIndex == 4 ? Visibility.Visible : Visibility.Collapsed;
 
@@ -665,7 +665,7 @@ public partial class MainWindow : Window
             Card(Col(T("WHEN", 11, "#A1A1AA", bold: true).M(0, 0, 0, 8), rangeBox, customPanel, withRecords), "#141417").M(0, 0, 0, 14),
             Card(Col(
                 T("EXPORT HEADING", 11, "#A1A1AA", bold: true).M(0, 0, 0, 8),
-                Para("{Scope} is replaced with who this export covers -- e.g. \"Capt John Doe\", \"Alpha Company\", \"2 Platoon\". Also editable from Settings.", "#71717A"),
+                Prg("{Scope} is replaced with who this export covers -- e.g. \"Capt John Doe\", \"Alpha Company\", \"2 Platoon\". Also editable from Settings.", "#71717A"),
                 headingField, saveHeadingDefault
             ), "#141417").M(0, 0, 0, 14),
             Card(Col(
@@ -760,6 +760,12 @@ public partial class MainWindow : Window
     }
 
     // ------------------------------------------------------------------ small builders
+
+    // DarkWindow has its own Label/Para (protected members of that base class) -- MainWindow isn't a DarkWindow,
+    // so inline panels built here (RenderExport, RenderSettings) need their own equivalents, named to avoid
+    // colliding with System.Windows.Controls.Label.
+    static TextBlock Lbl(string text) => new() { Text = text.ToUpperInvariant(), Foreground = B("#A1A1AA"), FontSize = 10.5, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 10, 0, 5) };
+    static TextBlock Prg(string text, string color = "#A1A1AA") => new() { Text = text, Foreground = B(color), FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 4) };
 
     static string Initials(string name) => string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => char.ToUpperInvariant(w[0])));
 
