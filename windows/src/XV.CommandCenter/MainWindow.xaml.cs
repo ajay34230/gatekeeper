@@ -203,7 +203,8 @@ public partial class MainWindow : Window
                 body.Children.Add(Spread(T("Manifest: " + string.Join(", ", occ.Select(DisplayId)), 10, "#64748B", mono: true), T($"{occ.Count} aboard", 10, "#64748B", mono: true)));
             }
             var card = Card(body, flag ? "#FFFBEB" : "#FFFFFF", flag ? "#B45309" : "#E2E8F0").M(0, 0, 10, 10);
-            if (S(r["entity_type"]) == "PERSON") { card.Cursor = System.Windows.Input.Cursors.Hand; var id = S(r["entity_id"]); card.MouseLeftButtonUp += (_, _) => Dialogs.History(this, "PERSON", id); }
+            var entType = S(r["entity_type"]);
+            if (entType is "PERSON" or "VEHICLE") { card.Cursor = System.Windows.Input.Cursors.Hand; var id = S(r["entity_id"]); card.MouseLeftButtonUp += (_, _) => Dialogs.History(this, entType, id); }
             grid.Children.Add(card);
         }
         ContentHost.Content = grid;

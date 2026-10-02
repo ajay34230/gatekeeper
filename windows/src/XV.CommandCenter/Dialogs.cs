@@ -358,6 +358,18 @@ public static class Dialogs
             var loc = Choice("Location", locs, locs.FirstOrDefault() ?? "");
             var gate = Choice("Gate", gates, gates.FirstOrDefault() ?? "");
             var remarks = Field("Remarks (reason, authority, pass number…)");
+            var returnLabel = Label("Expected return date (optional)");
+            var returnDate = new DatePicker { SelectedDate = null, DisplayDateStart = DateTime.Today };
+            Body.Children.Add(returnLabel);
+            Body.Children.Add(returnDate);
+            void SyncReturnVisibility()
+            {
+                var show = type.Text == "EXIT";
+                returnLabel.Visibility = returnDate.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+                if (!show) returnDate.SelectedDate = null;
+            }
+            type.SelectionChanged += (_, _) => SyncReturnVisibility();
+            SyncReturnVisibility();
             AddButton("Cancel", Close);
             AddButton("Save Record", () =>
             {
@@ -365,8 +377,9 @@ public static class Dialogs
                 {
                     if (!TimeSpan.TryParse(time.Text.Trim(), out var tod)) throw new Exception("Enter the time as HH:mm, e.g. 14:30");
                     var when = (date.SelectedDate ?? DateTime.Today).Date + tod;
+                    var expectedReturn = type.Text == "EXIT" && returnDate.SelectedDate is { } rd ? new DateTimeOffset(rd.Date.AddHours(23).AddMinutes(59)).ToUnixTimeMilliseconds() : 0L;
                     App.Store.AddManualRecord(personId, type.Text, new DateTimeOffset(when).ToUnixTimeMilliseconds(),
-                        loc.Text.Split(' ')[0], gate.Text.Split(' ')[0], remarks.Text);
+                        loc.Text.Split(' ')[0], gate.Text.Split(' ')[0], remarks.Text, expectedReturn: expectedReturn);
                     DialogResult = true;
                 }
                 catch (Exception ex) { Fail(ex); }
