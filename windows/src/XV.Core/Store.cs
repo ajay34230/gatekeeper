@@ -471,12 +471,23 @@ public sealed partial class Store : IDisposable
     /// <summary>SHA-256 of a QR secret, so terminals can verify a badge without holding the secret itself (Minimal mode).</summary>
     public static string SecretHash(string code) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes((code ?? "").Trim().ToUpperInvariant()))).ToLowerInvariant();
 
+    /// <summary>Privacy-safe name for anything sent to a phone: "Ajay Singh" → "A SINGH", "Ajay Singh Shekhawat" → "AS SHEKHAWAT", a single word is unchanged.</summary>
+    public static string AbbrevName(string? name)
+    {
+        var parts = (name ?? "").Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length <= 1) return (name ?? "").Trim();
+        var initials = string.Concat(parts[..^1].Select(p => char.ToUpperInvariant(p[0])));
+        return initials + " " + parts[^1].ToUpperInvariant();
+    }
+
     /// <summary>
     /// Registry sent to terminals, limited by the Data Sharing mode chosen by the administrator:
-    ///   FULL         – names, ranks, units and QR secrets (fully offline scanning)
+    ///   FULL         – abbreviated name, rank, company, QR secret (fully offline scanning); never the
+    ///                  army/service number or unit designation, which stay PC-side regardless of mode
     ///   MINIMAL      – IDs, status and hashed QR secrets only; no names or personal details
     ///   RECEIVE_ONLY – no registry at all; every scan is verified online and nothing is stored on the phone
     /// Active vehicle manifests and presence are IDs only and are shared in FULL and MINIMAL modes.
+    /// Sent over the server's TLS-only Kestrel listener (ApiServer), so this is always encrypted in transit.
     /// </summary>
     public JsonObject Bootstrap()
     {
@@ -491,8 +502,8 @@ public sealed partial class Store : IDisposable
             ["persons"] = new JsonArray(!shareRegistry ? [] : Query("SELECT id,secret_code,name,rank,service_no,unit,company,role,category,status,access_locations,valid_from,valid_to FROM persons ORDER BY id").Select(r => (JsonNode)new JsonObject
             {
                 ["personId"] = S(r["id"]), ["secretCode"] = full ? S(r["secret_code"]) : "", ["secretHash"] = SecretHash(S(r["secret_code"])),
-                ["name"] = full ? S(r["name"]) : "", ["rank"] = full ? S(r["rank"]) : "", ["serviceNo"] = full ? S(r["service_no"]) : "",
-                ["unit"] = full ? S(r["unit"]) : "", ["company"] = full ? S(r["company"]) : "", ["role"] = full ? S(r["role"]) : "",
+                ["name"] = full ? AbbrevName(S(r["name"])) : "", ["rank"] = full ? S(r["rank"]) : "", ["serviceNo"] = "",
+                ["unit"] = "", ["company"] = full ? S(r["company"]) : "", ["role"] = full ? S(r["role"]) : "",
                 ["category"] = S(r["category"]), ["status"] = S(r["status"]), ["active"] = S(r["status"]) == "ACTIVE",
                 ["accessLocations"] = S(r["access_locations"]),
                 ["validFrom"] = Convert.ToInt64(r["valid_from"]), ["validTo"] = Convert.ToInt64(r["valid_to"]),
