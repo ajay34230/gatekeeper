@@ -4,23 +4,38 @@
         Title="XV Digital Access Control" Width="1600" Height="980" MinWidth="1180" MinHeight="700"
         WindowStartupLocation="CenterScreen" WindowState="Maximized" Icon="Assets/app.ico">
     <Window.Background>
-        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-            <GradientStop Color="#EEF2FF" Offset="0"/>
-            <GradientStop Color="#F8FAFC" Offset="0.25"/>
-            <GradientStop Color="#F8FAFC" Offset="1"/>
+        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#C7D2FE" Offset="0"/>
+            <GradientStop Color="#DBEAFE" Offset="0.22"/>
+            <GradientStop Color="#F0F9FF" Offset="0.45"/>
+            <GradientStop Color="#F8FAFC" Offset="0.7"/>
+            <GradientStop Color="#FEF3E2" Offset="1"/>
         </LinearGradientBrush>
     </Window.Background>
     <DockPanel>
         <!-- ============ Header bar ============ -->
-        <Border DockPanel.Dock="Top" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="20,10">
+        <Border DockPanel.Dock="Top">
             <Border.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                    <GradientStop Color="#FFFFFF" Offset="0"/>
-                    <GradientStop Color="#FFF7ED" Offset="0.55"/>
+                    <GradientStop Color="#EEF2FF" Offset="0"/>
+                    <GradientStop Color="#FFFFFF" Offset="0.3"/>
+                    <GradientStop Color="#FFF7ED" Offset="0.65"/>
                     <GradientStop Color="#FFFFFF" Offset="1"/>
                 </LinearGradientBrush>
             </Border.Background>
-            <Grid>
+            <DockPanel>
+            <Border DockPanel.Dock="Bottom" Height="4">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                        <GradientStop Color="#7C3AED" Offset="0"/>
+                        <GradientStop Color="#2563EB" Offset="0.3"/>
+                        <GradientStop Color="#0E7490" Offset="0.5"/>
+                        <GradientStop Color="#059669" Offset="0.68"/>
+                        <GradientStop Color="#F59E0B" Offset="1"/>
+                    </LinearGradientBrush>
+                </Border.Background>
+            </Border>
+            <Grid Margin="20,10,20,8">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
                     <Border Width="42" Height="42" CornerRadius="12">
@@ -100,6 +115,7 @@
                     </Button>
                 </WrapPanel>
             </Grid>
+            </DockPanel>
         </Border>
 
         <!-- ============ Status bar ============ -->
@@ -119,9 +135,10 @@
             <!-- ============ Left telemetry sidebar ============ -->
             <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
                 <Border.Background>
-                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                        <GradientStop Color="#F0F9FF" Offset="0"/>
-                        <GradientStop Color="#F1F5F9" Offset="0.4"/>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0.3,1">
+                        <GradientStop Color="#DBEAFE" Offset="0"/>
+                        <GradientStop Color="#E0E7FF" Offset="0.18"/>
+                        <GradientStop Color="#F1F5F9" Offset="0.45"/>
                         <GradientStop Color="#F1F5F9" Offset="1"/>
                     </LinearGradientBrush>
                 </Border.Background>
@@ -185,12 +202,19 @@
                 <Border DockPanel.Dock="Top" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="16,12">
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                        <Border Background="#FFFFFF" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="10" Padding="4">
+                        <Border BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="10" Padding="4">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                    <GradientStop Color="#EEF2FF" Offset="0"/>
+                                    <GradientStop Color="#FFFFFF" Offset="0.5"/>
+                                    <GradientStop Color="#FFF7ED" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
                             <StackPanel Orientation="Horizontal">
-                                <RadioButton x:Name="TabFeed" Style="{StaticResource TabPill}" GroupName="tabs" IsChecked="True" Checked="Tab_Checked"/>
-                                <RadioButton x:Name="TabPersons" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked"/>
-                                <RadioButton x:Name="TabVehicles" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked"/>
-                                <RadioButton x:Name="TabAccounts" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked"/>
+                                <RadioButton x:Name="TabFeed" Style="{StaticResource TabPill}" GroupName="tabs" IsChecked="True" Checked="Tab_Checked" Content="Live Feed"/>
+                                <RadioButton x:Name="TabPersons" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked" Content="Personnel Registry"/>
+                                <RadioButton x:Name="TabVehicles" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked" Content="Vehicle Fleet"/>
+                                <RadioButton x:Name="TabAccounts" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked" Content="Accounts &amp; Devices"/>
                                 <RadioButton x:Name="TabAudit" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked" Content="Audit Trail"/>
                                 <RadioButton x:Name="TabExport" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked" Content="Export"/>
                                 <RadioButton x:Name="TabSettings" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked" Content="Settings"/>
@@ -204,6 +228,40 @@
                     </Grid>
                 </Border>
 
+                <Grid>
+                    <Grid.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#F8FAFC" Offset="0"/>
+                            <GradientStop Color="#F1F5F9" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Grid.Background>
+                    <!-- Decorative background blobs: soft, out-of-focus color so the data cards on top stay fully readable. -->
+                    <Canvas IsHitTestVisible="False" ClipToBounds="True">
+                        <Ellipse Width="460" Height="460" Canvas.Right="-160" Canvas.Top="-180" Opacity="0.5">
+                            <Ellipse.Fill>
+                                <RadialGradientBrush>
+                                    <GradientStop Color="#C4B5FD" Offset="0"/>
+                                    <GradientStop Color="#00C4B5FD" Offset="1"/>
+                                </RadialGradientBrush>
+                            </Ellipse.Fill>
+                        </Ellipse>
+                        <Ellipse Width="400" Height="400" Canvas.Left="-140" Canvas.Top="260" Opacity="0.45">
+                            <Ellipse.Fill>
+                                <RadialGradientBrush>
+                                    <GradientStop Color="#67E8F9" Offset="0"/>
+                                    <GradientStop Color="#0067E8F9" Offset="1"/>
+                                </RadialGradientBrush>
+                            </Ellipse.Fill>
+                        </Ellipse>
+                        <Ellipse Width="420" Height="420" Canvas.Right="40" Canvas.Bottom="-200" Opacity="0.4">
+                            <Ellipse.Fill>
+                                <RadialGradientBrush>
+                                    <GradientStop Color="#FDE68A" Offset="0"/>
+                                    <GradientStop Color="#00FDE68A" Offset="1"/>
+                                </RadialGradientBrush>
+                            </Ellipse.Fill>
+                        </Ellipse>
+                    </Canvas>
                 <ScrollViewer x:Name="MainScroll" Padding="24,18">
                     <StackPanel>
                         <Grid x:Name="SectionHeader" Margin="0,0,0,12">
@@ -224,6 +282,7 @@
                         <ContentControl x:Name="ContentHost"/>
                     </StackPanel>
                 </ScrollViewer>
+                </Grid>
             </DockPanel>
         </Grid>
     </DockPanel>
