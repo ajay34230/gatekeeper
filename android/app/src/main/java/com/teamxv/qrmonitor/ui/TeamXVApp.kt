@@ -1502,7 +1502,6 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
     var chosenType by rememberSaveable(session.person.id) { mutableStateOf(if (session.inside) EventType.EXIT else EventType.ENTRY) }
     var reason by rememberSaveable(session.person.id) { mutableStateOf(if (session.inside) "" else vm.suggestedEntryReason(session.person.id)) }
     var expectedReturn by rememberSaveable(session.person.id) { mutableStateOf(0L) }
-    var needDate by remember { mutableStateOf(false) }
     var customReason by rememberSaveable(session.person.id) { mutableStateOf("") }
     var remarks by rememberSaveable(session.person.id) { mutableStateOf("") }
     var comingFrom by rememberSaveable(session.person.id) { mutableStateOf("") }
@@ -1525,7 +1524,8 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
     val postName = cfg.locationName.ifBlank { cfg.locationId }
     val stayMs = if (session.inside && entryAt != null) System.currentTimeMillis() - entryAt else 0L
     val action = if (exiting) "RECORD EXIT" else "RECORD ENTRY"
-    val needsReturn = exiting && vm.returnReasons.any { it.equals(finalReason, ignoreCase = true) }
+    // Asked on every exit so the guard can log it when relevant, but never required to record the exit.
+    val needsReturn = exiting
 
     Column(
         Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)
@@ -1616,13 +1616,9 @@ private fun PersonResultScreen(vm: MainViewModel, session: ScanSession.PersonRes
                 vm.reasons, reason, { reason = it }, customReason, { customReason = it }, remarks, { remarks = it },
                 comingFrom = comingFrom, onComingFrom = if (!exiting) { { comingFrom = it } } else null
             )
-            if (allowed && needsReturn) ReturnDatePicker(expectedReturn) { expectedReturn = it; needDate = false }
-            if (allowed && needsReturn && needDate && expectedReturn == 0L) StatusBanner("Choose the expected return date for \"$finalReason\" before recording the exit.", BannerTone.Error)
+            if (allowed && needsReturn) ReturnDatePicker(expectedReturn) { expectedReturn = it }
             if (allowed) Surface(
-                Modifier.fillMaxWidth().height(58.dp).clickable {
-                    if (needsReturn && expectedReturn == 0L) needDate = true
-                    else confirm = true
-                },
+                Modifier.fillMaxWidth().height(58.dp).clickable { confirm = true },
                 color = UiInk,
                 shape = RoundedCornerShape(100.dp),
                 shadowElevation = 2.dp
@@ -1927,20 +1923,23 @@ private fun HandoverProgress(title: String, subtitle: String) {
     if (subtitle.isNotBlank()) { Spacer(Modifier.height(6.dp)); Text(subtitle, fontFamily = Sans, fontSize = 11.sp, color = UiMuted) }
 }
 
-/** Expected return date for leave / TD exits (end of the chosen day), required for the reasons set on the PC. */
+/** Expected return date on exit -- offered every time so the guard can log it when relevant, but always optional. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ReturnDatePicker(value: Long, onPick: (Long) -> Unit) {
     var open by remember { mutableStateOf(false) }
-    Surface(Modifier.fillMaxWidth().clickable { open = true }, color = if (value == 0L) UiWarningBg else UiSurface, shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, if (value == 0L) UiWarning else UiBorder)) {
+    Surface(Modifier.fillMaxWidth().clickable { open = true }, color = UiSurface, shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, UiBorder)) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.AccessTime, null, tint = UiWarning, modifier = Modifier.size(18.dp))
+            Icon(Icons.Default.AccessTime, null, tint = UiMuted, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text("EXPECTED RETURN DATE", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 1.sp, color = UiMuted)
-                Text(if (value == 0L) "Tap to choose (required)" else SimpleDateFormat("EEEE, dd MMM yyyy", Locale.getDefault()).format(Date(value)),
-                    fontFamily = Sans, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = if (value == 0L) UiWarning else UiInk)
+                Text("EXPECTED RETURN DATE (OPTIONAL)", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 1.sp, color = UiMuted)
+                Text(if (value == 0L) "Tap to set, only if this person is expected back" else SimpleDateFormat("EEEE, dd MMM yyyy", Locale.getDefault()).format(Date(value)),
+                    fontFamily = Sans, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = if (value == 0L) UiMuted else UiInk)
+            }
+            if (value != 0L) IconButton(onClick = { onPick(0L) }, modifier = Modifier.size(28.dp)) {
+                Icon(Icons.Default.Close, "Clear return date", tint = UiMuted, modifier = Modifier.size(16.dp))
             }
         }
     }
