@@ -9,7 +9,7 @@ namespace XV.CommandCenter;
 
 public partial class MainWindow : Window
 {
-    string _feedFilter = "ALL", _company = "ALL", _personView = "CARDS", _personSort = "ID";
+    string _feedFilter = "ALL", _company = "ALL", _personView = "CARDS", _personSort = "ID", _vehicleSort = "ID";
     readonly HashSet<string> _selected = [];
     readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(3) };
     bool _refreshQueued;
@@ -219,6 +219,10 @@ public partial class MainWindow : Window
     [
         ("ID", "ID (default)"), ("NAME", "Name"), ("RANK", "Rank (seniority)"), ("COMPANY", "Company"),
         ("PLATOON", "Platoon"), ("SERVICE", "Service No"), ("LASTSEEN", "Last Seen"),
+    ];
+    static readonly (string Key, string Label)[] VehicleSorts =
+    [
+        ("ID", "ID (default)"), ("PLATE", "Registration"), ("COMPANY", "Company"), ("STATUS", "Status"), ("INSIDE", "In Yard First"),
     ];
     // Highest seniority first; a rank not in this list (or blank) sorts after every known rank.
     static readonly string[] RankSeniority =
@@ -470,12 +474,26 @@ public partial class MainWindow : Window
         return panel;
     }
 
+    IEnumerable<Dictionary<string, object?>> SortVehicles(IEnumerable<Dictionary<string, object?>> src) => _vehicleSort switch
+    {
+        "PLATE" => src.OrderBy(v => S(v["plate"]), StringComparer.OrdinalIgnoreCase),
+        "COMPANY" => src.OrderBy(v => S(v["company"]), StringComparer.OrdinalIgnoreCase).ThenBy(v => S(v["plate"]), StringComparer.OrdinalIgnoreCase),
+        "STATUS" => src.OrderBy(v => S(v["status"]), StringComparer.OrdinalIgnoreCase).ThenBy(v => S(v["plate"]), StringComparer.OrdinalIgnoreCase),
+        "INSIDE" => src.OrderByDescending(v => L(v["inside_since"]) > 0).ThenBy(v => S(v["plate"]), StringComparer.OrdinalIgnoreCase),
+        _ => src.OrderBy(v => S(v["id"]), StringComparer.OrdinalIgnoreCase),
+    };
+
     void RenderVehicles()
     {
-        var rows = App.Store.Vehicles(Query);
+        var rows = SortVehicles(App.Store.Vehicles(Query)).ToList();
         Header("TACTICAL & LOGISTICS VEHICLE FLEET", $"{rows.Count} Vehicles", "Registered vehicles with windshield QR credentials. Occupant manifests are captured at the gate.");
         SectionActions.Children.Add(Btn("+ Register Vehicle", AddVehicle_Click, "BtnAmber"));
         SectionActions.Children.Add(Btn("Import / Export", ImportExport_Click, "BtnEmerald"));
+        var sortPick = new ComboBox { Width = 160, Margin = new Thickness(0, 0, 10, 6), VerticalAlignment = VerticalAlignment.Center };
+        foreach (var v in VehicleSorts) sortPick.Items.Add(v.Label);
+        sortPick.SelectedIndex = Math.Max(0, Array.FindIndex(VehicleSorts, v => v.Key == _vehicleSort));
+        sortPick.SelectionChanged += (_, _) => { _vehicleSort = VehicleSorts[sortPick.SelectedIndex].Key; RenderTab(); };
+        FilterChips.Children.Add(Row(T("Sort by  ", 11.5, "#64748B", bold: true), sortPick));
         if (rows.Count == 0) { ContentHost.Content = Empty("No vehicles registered.\nUse '+ Register Vehicle' or import a CSV file."); return; }
         var grid = CardGrid();
         foreach (var v in rows)
@@ -823,6 +841,7 @@ public partial class MainWindow : Window
     void StatInside_Click(object s, System.Windows.Input.MouseButtonEventArgs e) => TabPersons.IsChecked = true;
     void StatFleet_Click(object s, System.Windows.Input.MouseButtonEventArgs e) => TabVehicles.IsChecked = true;
     void StatFlags_Click(object s, System.Windows.Input.MouseButtonEventArgs e) { _feedFilter = "FLAGS"; TabFeed.IsChecked = true; RenderTab(); }
+    void StatTotal_Click(object s, System.Windows.Input.MouseButtonEventArgs e) { _feedFilter = "ALL"; TabFeed.IsChecked = true; RenderTab(); }
 
     public IEnumerable<(Action select, string name)> ScreenshotTabs()
     {

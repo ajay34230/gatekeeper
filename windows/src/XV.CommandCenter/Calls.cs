@@ -204,7 +204,19 @@ public static class Calls
             Width = video ? 960 : 440; Height = video ? 640 : 560; Background = B("#09090B");
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             Icon = new BitmapImage(new Uri("pack://application:,,,/Assets/app.ico"));
-            Content = _web;
+            // The call page (call.html) has its own in-page hang-up button, but it depends on WebRTC/WebView2
+            // having loaded successfully. This native bar is a guaranteed fallback so there is always a visible,
+            // working way to end the call even if the page fails to render.
+            var endBtn = new Button
+            {
+                Content = "End Call", Style = (Style)Application.Current.Resources["BtnDanger"], Padding = new Thickness(22, 10, 22, 10),
+                FontSize = 13, HorizontalAlignment = HorizontalAlignment.Center,
+            };
+            endBtn.Click += (_, _) => { if (!_quiet) _onUserClose(); CloseQuietly(); };
+            var bar = new Border { Background = B("#18181B"), Padding = new Thickness(0, 10, 0, 10), Child = endBtn };
+            var dock = new DockPanel();
+            DockPanel.SetDock(bar, Dock.Bottom); dock.Children.Add(bar); dock.Children.Add(_web);
+            Content = dock;
             Closing += (_, _) => { if (!_quiet) _onUserClose(); };
             Loaded += async (_, _) =>
             {
@@ -260,7 +272,7 @@ public static class Calls
         public IncomingCallWindow(string peer, bool video, Action accept, Action decline)
         {
             Title = "Incoming call"; Width = 420; SizeToContent = SizeToContent.Height; Topmost = true; ResizeMode = ResizeMode.NoResize;
-            Background = B("#101012"); WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            Background = B("#FFFFFF"); WindowStartupLocation = WindowStartupLocation.CenterScreen;
             Icon = new BitmapImage(new Uri("pack://application:,,,/Assets/app.ico"));
             var acceptBtn = Btn(video ? "Accept video" : "Accept", (_, _) => { _handled = true; accept(); }, "BtnEmerald");
             var declineBtn = Btn("Decline", (_, _) => { _handled = true; decline(); Close(); }, "BtnDanger");
@@ -268,8 +280,8 @@ public static class Calls
             Content = new Border
             {
                 Padding = new Thickness(24), BorderBrush = B("#059669"), BorderThickness = new Thickness(0, 4, 0, 0),
-                Child = Col(T(video ? "INCOMING VIDEO CALL" : "INCOMING VOICE CALL", 11, "#6EE7B7", bold: true), T(peer, 18, "#F4F4F5", bold: true).M(0, 8),
-                    T("End-to-end encrypted • direct connection", 11, "#A1A1AA").M(0, 6), Row(acceptBtn, declineBtn.M(10)).M(0, 18)),
+                Child = Col(T(video ? "INCOMING VIDEO CALL" : "INCOMING VOICE CALL", 11, "#047857", bold: true), T(peer, 18, "#0F172A", bold: true).M(0, 8),
+                    T("End-to-end encrypted • direct connection", 11, "#64748B").M(0, 6), Row(acceptBtn, declineBtn.M(10)).M(0, 18)),
             };
             try
             {

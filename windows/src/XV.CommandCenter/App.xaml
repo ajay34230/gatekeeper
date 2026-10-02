@@ -35,7 +35,6 @@
         <Style x:Key="CardBox" TargetType="Border">
             <Setter Property="Background" Value="{StaticResource Card}"/><Setter Property="BorderBrush" Value="{StaticResource Line}"/>
             <Setter Property="BorderThickness" Value="1"/><Setter Property="CornerRadius" Value="12"/><Setter Property="Padding" Value="14"/>
-            <Setter Property="Effect"><Setter.Value><DropShadowEffect Color="#0F172A" Opacity="0.06" BlurRadius="10" ShadowDepth="1"/></Setter.Value></Setter>
         </Style>
 
         <!-- Buttons -->
@@ -48,32 +47,12 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="b" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8" Padding="{TemplateBinding Padding}"
-                                RenderTransformOrigin="0.5,0.5">
-                            <Border.RenderTransform><ScaleTransform x:Name="bScale" ScaleX="1" ScaleY="1"/></Border.RenderTransform>
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8" Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Trigger.EnterActions>
-                                    <BeginStoryboard>
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="bScale" Storyboard.TargetProperty="ScaleX" To="1.035" Duration="0:0:0.12"/>
-                                            <DoubleAnimation Storyboard.TargetName="bScale" Storyboard.TargetProperty="ScaleY" To="1.035" Duration="0:0:0.12"/>
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </Trigger.EnterActions>
-                                <Trigger.ExitActions>
-                                    <BeginStoryboard>
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="bScale" Storyboard.TargetProperty="ScaleX" To="1" Duration="0:0:0.12"/>
-                                            <DoubleAnimation Storyboard.TargetName="bScale" Storyboard.TargetProperty="ScaleY" To="1" Duration="0:0:0.12"/>
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </Trigger.ExitActions>
-                                <Setter TargetName="b" Property="Opacity" Value="0.92"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="b" Property="Opacity" Value="0.78"/></Trigger>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Opacity" Value="0.88"/></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="b" Property="Opacity" Value="0.72"/></Trigger>
                             <Trigger Property="IsEnabled" Value="False"><Setter TargetName="b" Property="Opacity" Value="0.4"/></Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -227,14 +206,13 @@
             <Setter Property="CaretBrush" Value="#0F172A"/><Setter Property="BorderThickness" Value="0"/>
         </Style>
         <Style TargetType="ToolTip">
-            <Setter Property="Background" Value="#1E293B"/><Setter Property="Foreground" Value="White"/><Setter Property="BorderBrush" Value="#334155"/>
-            <Setter Property="Padding" Value="9,6"/><Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="Background" Value="#0F172A"/><Setter Property="Foreground" Value="#FDE68A"/><Setter Property="BorderBrush" Value="#F59E0B"/>
+            <Setter Property="Padding" Value="10,7"/><Setter Property="FontSize" Value="11.5"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToolTip">
-                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="{TemplateBinding Padding}">
-                            <Border.Effect><DropShadowEffect Color="#000000" Opacity="0.18" BlurRadius="10" ShadowDepth="2"/></Border.Effect>
-                            <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}"/>
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="7" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}" TextElement.FontWeight="SemiBold"/>
                         </Border>
                     </ControlTemplate>
                 </Setter.Value>
