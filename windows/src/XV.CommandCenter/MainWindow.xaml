@@ -67,7 +67,7 @@
                                 </StackPanel>
                             </Border>
                         </StackPanel>
-                        <TextBlock Style="{StaticResource MonoText}" Margin="0,3,0,0" Text="HQ Central Command  •  Multi-Gate Telemetry • Encrypted Local Server (TLS + AES-256-GCM)"/>
+                        <TextBlock Style="{StaticResource MonoText}" Margin="0,3,0,0" Text="Multi-Gate Telemetry • Encrypted Local Server (TLS + AES-256-GCM)"/>
                     </StackPanel>
                 </StackPanel>
 
