@@ -312,5 +312,18 @@ public sealed partial class Store
     public List<string> TerminalsAt(string locationId) =>
         Query("SELECT device_id FROM devices WHERE active=1 AND location_id=$1", CanonId(locationId)).Select(r => S(r["device_id"])).ToList();
 
+    /// <summary>The location a terminal reports in its transit calls becomes its current location, so alerts reach the right phone
+    /// even before its next heartbeat.</summary>
+    public string TerminalLocation(string deviceId, string? reported)
+    {
+        var loc = CanonId(reported);
+        if (loc.Length > 0 && Count("SELECT COUNT(*) FROM locations WHERE id=$1", loc) > 0)
+        {
+            Exec("UPDATE devices SET location_id=$1 WHERE device_id=$2 AND location_id<>$1", loc, deviceId);
+            return loc;
+        }
+        return DeviceLocation(deviceId);
+    }
+
     public string DeviceLocation(string deviceId) => S(Scalar("SELECT location_id FROM devices WHERE device_id=$1", deviceId));
 }

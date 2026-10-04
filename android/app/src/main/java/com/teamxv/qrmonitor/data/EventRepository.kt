@@ -310,7 +310,11 @@ class EventRepository(
         device: String,
         operator: String,
         locationMismatch: Boolean = false,
-        scannedLocation: String = ""
+        scannedLocation: String = "",
+        /** Where the vehicle is going: a known location id or a typed place name, plus the approximate minutes (0 = not entered). */
+        destinationId: String = "",
+        destinationName: String = "",
+        transitMinutes: Int = 0
     ): OperationResult<Pair<MovementEvent, Long?>> = db.withTransaction {
         val vehicle = vehicles.find(vehicleId) ?: return@withTransaction OperationResult.Rejected("VEHICLE_NOT_FOUND")
         val activeManifest = manifests.activeForVehicle(vehicle.id)
@@ -319,7 +323,9 @@ class EventRepository(
         val event = MovementEvent(
             newEventId(), EntityType.VEHICLE, vehicle.id, EventType.EXIT,
             location, gate, device, operator, now, now, SyncStatus.PENDING,
-            locationMismatch = locationMismatch, scannedLocation = scannedLocation
+            locationMismatch = locationMismatch, scannedLocation = scannedLocation,
+            destinationId = destinationId.trim().take(40), destinationName = destinationName.trim().take(60),
+            transitMinutes = transitMinutes.coerceIn(0, 2880)
         )
         val closed = manifests.closeManifest(activeManifest.manifestId, event.eventId, now)
         if (closed != 1) return@withTransaction OperationResult.Rejected("MANIFEST_STATE_CHANGED")
@@ -400,7 +406,8 @@ class EventRepository(
                         eventType = event.eventType.name, locationId = event.locationId, gateId = event.gateId,
                         deviceId = event.deviceId, operatorId = event.operatorId, eventTimestamp = event.eventTimestamp,
                         createdAt = event.createdAt, sourceType = event.sourceType.name, sourceId = event.sourceId,
-                        locationMismatch = event.locationMismatch, scannedLocation = event.scannedLocation
+                        locationMismatch = event.locationMismatch, scannedLocation = event.scannedLocation,
+                        destinationId = event.destinationId, destinationName = event.destinationName, transitMinutes = event.transitMinutes
                     ),
                     manifest = com.teamxv.qrmonitor.network.VehicleManifestPayload(
                         manifestId = manifest.manifestId, vehicleId = manifest.vehicleId, entryEventId = manifest.eventId,
@@ -447,7 +454,8 @@ class EventRepository(
         e.eventId, e.entityType.name, e.entityId, e.eventType.name,
         e.locationId, e.gateId, e.deviceId, e.operatorId, e.eventTimestamp,
         e.createdAt, e.syncStatus.name, 0, null, e.createdAt,
-        e.sourceType.name, e.sourceId, e.locationMismatch, e.scannedLocation, e.reason, e.remarks, e.expectedReturn, e.comingFrom
+        e.sourceType.name, e.sourceId, e.locationMismatch, e.scannedLocation, e.reason, e.remarks, e.expectedReturn, e.comingFrom,
+        e.destinationId, e.destinationName, e.transitMinutes
     )
 
     private fun toModel(e: MovementEventEntity) = MovementEvent(
@@ -455,7 +463,8 @@ class EventRepository(
         EventType.valueOf(e.eventType), e.locationId, e.gateId,
         e.deviceId, e.operatorId, e.eventTimestamp, e.createdAt,
         SyncStatus.valueOf(e.syncStatus), PresenceSource.valueOf(e.sourceType), e.sourceId,
-        e.locationMismatch, e.scannedLocation, e.reason, e.remarks, e.expectedReturn, e.comingFrom
+        e.locationMismatch, e.scannedLocation, e.reason, e.remarks, e.expectedReturn, e.comingFrom,
+        e.destinationId, e.destinationName, e.transitMinutes
     )
 
     private fun newEventId() = "EVT-" + UUID.randomUUID().toString().replace("-", "").take(12).uppercase()

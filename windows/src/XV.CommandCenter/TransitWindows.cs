@@ -318,7 +318,7 @@ public sealed class TransitAlertWindow : Window
         return added;
     }
 
-    UIElement TripRow(Dictionary<string, object?> t)
+    Border TripRow(Dictionary<string, object?> t)
     {
         var dest = S(t["dest_name"]) + (S(t["dest_loc"]).Length == 0 ? "  (new place)" : "");
         var body = Col(

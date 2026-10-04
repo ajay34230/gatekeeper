@@ -39,7 +39,11 @@ data class MovementEvent(
     val remarks: String = "",
     val expectedReturn: Long = 0L,
     /** Where the person is coming from, entered by the guard on ENTRY only -- shown on the gate record. */
-    val comingFrom: String = ""
+    val comingFrom: String = "",
+    /** Vehicle EXIT only: where the vehicle is going (a known location id, or a typed place) and the approximate minutes. */
+    val destinationId: String = "",
+    val destinationName: String = "",
+    val transitMinutes: Int = 0
 )
 
 data class NetworkStatus(

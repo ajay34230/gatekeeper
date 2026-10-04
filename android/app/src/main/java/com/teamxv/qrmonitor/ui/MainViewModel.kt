@@ -246,6 +246,67 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(appErrors) { repo.observeAttentionCount().collectLatest { attention = it } }
     }
 
+    // ------------------------------------------------------------------ vehicles on the way (transit)
+
+    /** Vehicles that left another location for this terminal's location and have not been recorded as arrived. */
+    var incomingTrips by mutableStateOf(listOf<com.teamxv.qrmonitor.network.TransitTrip>())
+        private set
+    var transitListOpen by mutableStateOf(false)
+    var transitError by mutableStateOf("")
+        private set
+    private var transitSkew by mutableLongStateOf(0L)
+    private var transitClock by mutableLongStateOf(System.currentTimeMillis())
+    /** Trip id -> server time until which this terminal's pop-up stays hidden after the RP closed it. */
+    private val transitHidden = androidx.compose.runtime.mutableStateMapOf<String, Long>()
+
+    /** Server clock, so late/on-time does not depend on this phone's clock being exact. */
+    fun serverNow(): Long = transitClock + transitSkew
+
+    fun isLate(t: com.teamxv.qrmonitor.network.TransitTrip): Boolean = t.overdue || (t.dueAt > 0 && serverNow() > t.dueAt)
+
+    /** Late trips whose pop-up is not hidden: shown with a cross, and back 15 minutes after it is closed. */
+    val alertTrips: List<com.teamxv.qrmonitor.network.TransitTrip>
+        get() = incomingTrips.filter { isLate(it) && (transitHidden[it.transitId] ?: 0L) <= serverNow() }
+
+    /** Standard minutes from this terminal's location to [destinationId]; 0 when the PC has no time saved for that pair. */
+    fun standardMinutes(destinationId: String): Int =
+        config.transitRoutes.firstOrNull { it.first == config.locationId && it.second == destinationId }?.third ?: 0
+
+    fun refreshIncoming() {
+        transitClock = System.currentTimeMillis()
+        if (!config.paired || !config.hasValidOnlineToken() || config.locationId.isBlank()) { if (incomingTrips.isNotEmpty()) incomingTrips = emptyList(); return }
+        viewModelScope.launch(Dispatchers.IO + appErrors) {
+            api.openTransits(config.locationId).onSuccess { r ->
+                transitSkew = r.serverTime - System.currentTimeMillis()
+                transitClock = System.currentTimeMillis()
+                incomingTrips = r.trips
+                transitHidden.keys.retainAll(r.trips.map { it.transitId }.toSet())
+            }
+        }
+    }
+
+    /** The RP closed the pop-up: hide it for 15 minutes here and tell the server, which asks again after the same time. */
+    fun snoozeAlerts(trips: List<com.teamxv.qrmonitor.network.TransitTrip>) {
+        val until = serverNow() + 15 * 60_000L
+        trips.forEach { transitHidden[it.transitId] = until }
+        viewModelScope.launch(Dispatchers.IO + appErrors) { trips.forEach { api.snoozeTransit(it.transitId, config.locationId) } }
+    }
+
+    /** Records what happened to a trip. Nothing is assumed: the trip stays open until this succeeds. */
+    fun resolveTrip(trip: com.teamxv.qrmonitor.network.TransitTrip, kind: String, minutes: Int, placeName: String, placeId: String, onDone: (Boolean) -> Unit) {
+        transitError = ""
+        viewModelScope.launch(Dispatchers.IO + appErrors) {
+            val r = api.resolveTransit(trip.transitId, kind, minutes, placeName, placeId, config.locationId)
+            if (r.isSuccess) {
+                refreshIncoming()
+                withContext(Dispatchers.Main) { onDone(true) }
+            } else {
+                transitError = r.exceptionOrNull()?.message ?: "Could not save. Check the connection and try again."
+                withContext(Dispatchers.Main) { onDone(false) }
+            }
+        }
+    }
+
     fun login(username: String, password: String) {
         val user = username.trim()
         if (user.isBlank() || password.isBlank()) {
@@ -692,7 +753,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun confirmVehicleExit() {
+    fun confirmVehicleExit(destinationId: String = "", destinationName: String = "", transitMinutes: Int = 0) {
         val s = session as? ScanSession.VehicleScan ?: return
         viewModelScope.launch(gateErrors) {
             when (
@@ -703,7 +764,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     config.deviceId,
                     config.operatorId,
                     vehicleMismatch.isNotBlank(),
-                    vehicleMismatch
+                    vehicleMismatch,
+                    destinationId, destinationName, transitMinutes
                 )
             ) {
                 is OperationResult.Success -> {

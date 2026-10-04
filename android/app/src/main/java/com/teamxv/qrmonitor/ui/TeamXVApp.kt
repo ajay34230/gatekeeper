@@ -81,6 +81,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import com.teamxv.qrmonitor.network.TransitTrip
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -165,6 +168,7 @@ fun TeamXVApp(vm: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel
         while (vm.loggedIn) {
             vm.enforceSession()
             vm.testConnection()
+            vm.refreshIncoming()
             vm.syncStateRefresh()
             kotlinx.coroutines.delay(30_000)
         }
@@ -183,6 +187,7 @@ fun TeamXVApp(vm: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel
         }
     }
 
+    if (vm.loggedIn) TransitAlertHost(vm)
     Surface(Modifier.fillMaxSize(), color = UiBackground) {
         when {
             vm.scannerTarget == ScannerTarget.PAIRING -> ScannerHost(vm)
@@ -532,6 +537,10 @@ private fun HomeScreen(vm: MainViewModel) {
         ) {
             SosButton(vm)
             Spacer(Modifier.height(12.dp))
+            if (vm.incomingTrips.isNotEmpty()) {
+                IncomingVehiclesCard(vm)
+                Spacer(Modifier.height(12.dp))
+            }
             Text(
                 "Operator: ${cfg.operatorId} ${cfg.operatorName}".trim(),
                 fontFamily = Sans,
@@ -961,9 +970,9 @@ private fun ActivityScreen(vm: MainViewModel) {
                     modifier = Modifier.clickable {
                         // Export CSV Action in Android app
                         val csvBuilder = StringBuilder()
-                        csvBuilder.append("Event ID,Timestamp,Type,Action,Entity ID,Location,Gate,Synced\n")
+                        csvBuilder.append("Event ID,Timestamp,Type,Action,Entity ID,Location,Gate,Synced,Going To,Approx Minutes\n")
                         vm.events.forEach { ev ->
-                            csvBuilder.append("${ev.eventId},${ev.eventTimestamp},${ev.entityType},${ev.eventType},${ev.entityId},${ev.locationId},${ev.gateId},${ev.syncStatus == SyncStatus.SYNCED}\n")
+                            csvBuilder.append("${ev.eventId},${ev.eventTimestamp},${ev.entityType},${ev.eventType},${ev.entityId},${ev.locationId},${ev.gateId},${ev.syncStatus == SyncStatus.SYNCED},${ev.destinationName.replace(",", " ")},${if (ev.transitMinutes > 0) ev.transitMinutes.toString() else ""}\n")
                         }
                     },
                     color = UiSurface,
@@ -1126,6 +1135,7 @@ private fun ActivityDetailSheet(event: MovementEvent, stayMs: Long? = null, onDi
                     if (stayMs != null && stayMs > 0) ReviewRow("Stay Duration (Entry → Exit)", formatDuration(stayMs), valueColor = UiWarning)
                     ReviewRow("Location / Gate", "${event.locationId} • ${event.gateId}")
                     if (event.comingFrom.isNotBlank()) ReviewRow("Coming From", event.comingFrom)
+                    if (event.destinationName.isNotBlank()) ReviewRow("Going To", event.destinationName + if (event.transitMinutes > 0) " • about ${event.transitMinutes} min" else "", valueColor = UiBlue)
                     if (event.reason.isNotBlank()) ReviewRow("Reason", event.reason)
                     if (event.remarks.isNotBlank()) ReviewRow("Remarks", event.remarks)
                     if (event.expectedReturn > 0) ReviewRow("Expected Back", SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(event.expectedReturn)), valueColor = if (event.expectedReturn < System.currentTimeMillis()) UiError else UiWarning)
@@ -2076,6 +2086,10 @@ private fun VehicleScanScreen(vm: MainViewModel, session: ScanSession.VehicleSca
     val vehicle = vm.scannedVehicle ?: VehicleEntity(session.vehicleId, "", "Vehicle", true)
     val entry = !session.inside
     var confirmExit by rememberSaveable(session.vehicleId) { mutableStateOf(false) }
+    var destId by rememberSaveable(session.vehicleId) { mutableStateOf("") }
+    var destName by rememberSaveable(session.vehicleId) { mutableStateOf("") }
+    var destOther by rememberSaveable(session.vehicleId) { mutableStateOf(false) }
+    var destMinutes by rememberSaveable(session.vehicleId) { mutableStateOf("") }
     Column(
         Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 14.dp),
@@ -2095,6 +2109,10 @@ private fun VehicleScanScreen(vm: MainViewModel, session: ScanSession.VehicleSca
                     KeyValueRow("Current presence", if (session.inside) "On-Site (Inside)" else "Outside", positive = false)
                 }
             }
+            if (!entry) {
+                Spacer(Modifier.height(11.dp))
+                TransitDestinationCard(vm, destId, destName, destOther, destMinutes) { id, name, other, mins -> destId = id; destName = name; destOther = other; destMinutes = mins }
+            }
         }
         Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             // Entry builds a full manifest (driver/co-driver/occupants) with its own review step before committing.
@@ -2112,12 +2130,13 @@ private fun VehicleScanScreen(vm: MainViewModel, session: ScanSession.VehicleSca
             title = "CONFIRM VEHICLE EXIT",
             subtitle = "Confirmation Required",
             onDismiss = { confirmExit = false },
-            onConfirm = { confirmExit = false; vm.confirmVehicleExit() }
+            onConfirm = { confirmExit = false; vm.confirmVehicleExit(destId, destName, destMinutes.toIntOrNull() ?: 0) }
         ) {
             ReviewRow("Vehicle", "${vehicle.registration.ifBlank { vehicle.id }} (${displayId(vehicle.id)})")
             ReviewRow("Type", vehicle.type.ifBlank { "—" })
             ReviewRow("Direction", "EXIT", valueColor = UiWarning)
             ReviewRow("Location / Gate", "${vm.currentConfig().locationName.ifBlank { vm.currentConfig().locationId }} • ${vm.currentConfig().gateName.ifBlank { vm.currentConfig().gateId }}")
+            if (destName.isNotBlank()) ReviewRow("Going To", destName.trim() + (destMinutes.toIntOrNull()?.takeIf { it > 0 }?.let { " • about $it min" } ?: ""), valueColor = UiBlue)
             if (vm.vehicleMismatch.isNotBlank()) ReviewRow("Location Flag", "QR: ${vm.vehicleMismatch}", valueColor = UiWarning)
             ReviewRow("Timestamp", formatLongTime(System.currentTimeMillis()))
         }
@@ -3058,6 +3077,209 @@ private fun CommsBubble(m: com.teamxv.qrmonitor.comms.CommsMessageEntity) {
                     SimpleDateFormat("dd MMM HH:mm", Locale.getDefault()).format(Date(m.createdAt)) + tick,
                     fontFamily = Mono, fontSize = 10.sp, color = if (mine && !alert) tc(0xFFA1A1AA) else UiMuted
                 )
+            }
+        }
+    }
+}
+
+
+// ------------------------------------------------------------------ vehicles on the way (transit)
+
+private fun clockOf(ms: Long): String = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(ms))
+private fun minutesText(m: Long): String = if (m < 60) "$m min" else "${m / 60}h ${"%02d".format(m % 60)}m"
+
+/** Vehicle exit: where it is going and the approximate time. Optional; the vehicle is never marked arrived by itself. */
+@Composable
+private fun TransitDestinationCard(
+    vm: MainViewModel, destId: String, destName: String, other: Boolean, minutes: String,
+    onChange: (String, String, Boolean, String) -> Unit
+) {
+    val here = vm.currentConfig().locationId
+    val options = listOf("NONE" to "Not entered") + vm.locations.filter { it.first != here } + listOf("OTHER" to "Other place (type the name)…")
+    val selected = when { other -> "OTHER"; destId.isBlank() -> "NONE"; else -> destId }
+    Surface(Modifier.fillMaxWidth(), color = UiSurface, shape = SmallShape, border = BorderStroke(1.dp, UiBorder)) {
+        Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("WHERE IS THE VEHICLE GOING? (OPTIONAL)", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 1.sp, color = UiMuted)
+            StationDropdown("Destination", options, selected, Modifier.fillMaxWidth()) { id, name ->
+                when (id) {
+                    "NONE" -> onChange("", "", false, "")
+                    "OTHER" -> onChange("", "", true, "")
+                    else -> { val std = vm.standardMinutes(id); onChange(id, name, false, if (std > 0) std.toString() else "") }
+                }
+            }
+            if (other) {
+                OutlinedTextField(destName, { if (it.length <= 60) onChange("", it, true, minutes) }, Modifier.fillMaxWidth(), singleLine = true,
+                    placeholder = { Text("Name of the place", fontFamily = Sans, fontSize = 13.sp) }, shape = RoundedCornerShape(10.dp))
+            }
+            if (destId.isNotBlank() || (other && destName.isNotBlank())) {
+                OutlinedTextField(minutes, { v -> if (v.length <= 4 && v.all { it.isDigit() }) onChange(destId, destName, other, v) }, Modifier.fillMaxWidth(), singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    label = { Text("Approximate time to reach (minutes)", fontFamily = Sans, fontSize = 12.sp) }, shape = RoundedCornerShape(10.dp))
+                val std = if (destId.isNotBlank()) vm.standardMinutes(destId) else 0
+                Text(
+                    if (std > 0) "Standard time for this route is $std min (set on the PC). Change it only if this trip is different."
+                    else "No standard time is saved for this route. Enter the approximate minutes so the server can alert if the vehicle is late.",
+                    fontFamily = Sans, fontSize = 11.sp, color = UiMuted
+                )
+                Text(
+                    "The vehicle is not recorded as arrived by itself. If it has not arrived by then, the server and the destination RP are alerted until someone records that it reached, stopped, or went to another location.",
+                    fontFamily = Sans, fontSize = 11.sp, color = UiFaint
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun IncomingVehiclesCard(vm: MainViewModel) {
+    val late = vm.incomingTrips.count { vm.isLate(it) }
+    val tint = if (late > 0) UiError else UiWarning
+    Surface(
+        Modifier.fillMaxWidth().clickable { vm.transitListOpen = true },
+        color = if (late > 0) UiErrorBg else UiWarningBg, shape = SmallShape, border = BorderStroke(1.dp, tint)
+    ) {
+        Row(Modifier.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.LocalShipping, null, tint = tint, modifier = Modifier.size(26.dp))
+            Spacer(Modifier.width(11.dp))
+            Column(Modifier.weight(1f)) {
+                Text("VEHICLES ON THE WAY (${vm.incomingTrips.size})", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = tint)
+                Text(
+                    if (late > 0) "$late not reached in time. Tap to record when it arrived, or that it stopped or went elsewhere."
+                    else "Heading to this location. Tap to see them.",
+                    fontFamily = Sans, fontSize = 11.sp, color = UiMuted
+                )
+            }
+            Icon(Icons.Default.ArrowForward, null, tint = tint, modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+@Composable
+private fun TripSummary(vm: MainViewModel, t: TransitTrip) {
+    val late = vm.isLate(t)
+    Surface(Modifier.fillMaxWidth(), color = if (late) UiErrorBg else UiSurfaceSubtle, shape = SmallShape, border = BorderStroke(1.dp, if (late) UiError else UiBorder)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(t.plate.ifBlank { displayId(t.vehicleId) }, fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = UiInk, modifier = Modifier.weight(1f))
+                Text(
+                    if (late) "LATE ${minutesText(((vm.serverNow() - t.dueAt) / 60_000L).coerceAtLeast(0))}" else "ON THE WAY",
+                    fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = if (late) UiError else UiWarning
+                )
+            }
+            Text("${t.fromName.ifBlank { t.fromId }}  →  ${t.destName.ifBlank { "this location" }}", fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = UiInk)
+            Text(
+                "Left ${clockOf(t.leftAt)}" + if (t.dueAt > 0) " • expected by ${clockOf(t.dueAt)} (${minutesText(t.expectedMin)})" else " • approx time not set",
+                fontFamily = Mono, fontSize = 10.5.sp, color = UiMuted
+            )
+        }
+    }
+}
+
+/** Shows the pop-up for late vehicles (with a cross: it returns in 15 minutes) and the list / close-trip sheets. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TransitAlertHost(vm: MainViewModel) {
+    val alerts = vm.alertTrips
+    var resolving by remember { mutableStateOf<TransitTrip?>(null) }
+    var resolveKind by remember { mutableStateOf("REACHED") }
+    if (alerts.isNotEmpty() && resolving == null && !vm.transitListOpen) {
+        AlertDialog(
+            onDismissRequest = { vm.snoozeAlerts(alerts) },
+            containerColor = UiSurface,
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.WarningAmber, null, tint = UiError)
+                    Spacer(Modifier.width(8.dp))
+                    Text("VEHICLE NOT REACHED", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = UiError, modifier = Modifier.weight(1f))
+                    IconButton(onClick = { vm.snoozeAlerts(alerts) }) { Icon(Icons.Default.Close, "Close", tint = UiMuted) }
+                }
+            },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Closing this reminds you again in 15 minutes, with a sound, until you record what happened.", fontFamily = Sans, fontSize = 12.sp, color = UiMuted)
+                    alerts.forEach { TripSummary(vm, it) }
+                }
+            },
+            confirmButton = { TextButton(onClick = { vm.transitListOpen = true }) { Text("RECORD WHAT HAPPENED", fontFamily = Sans, fontWeight = FontWeight.Bold) } }
+        )
+    }
+    if (vm.transitListOpen) {
+        TransitListSheet(vm, onClose = { vm.snoozeAlerts(vm.alertTrips); vm.transitListOpen = false }) { trip, kind ->
+            resolving = trip; resolveKind = kind; vm.transitListOpen = false
+        }
+    }
+    resolving?.let { t -> ResolveTripSheet(vm, t, resolveKind) { resolving = null } }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TransitListSheet(vm: MainViewModel, onClose: () -> Unit, onResolve: (TransitTrip, String) -> Unit) {
+    ModalBottomSheet(onDismissRequest = onClose, containerColor = UiSurface, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).navigationBarsPadding().padding(bottom = 14.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("VEHICLES ON THE WAY", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = UiInk, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+            Text("A vehicle is only recorded as arrived when its entry is scanned here, or when you record it below.", fontFamily = Sans, fontSize = 12.sp, color = UiMuted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            if (vm.incomingTrips.isEmpty()) Text("No vehicle is on the way to this location.", fontFamily = Sans, fontSize = 13.sp, color = UiMuted, modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp), textAlign = TextAlign.Center)
+            vm.incomingTrips.sortedByDescending { vm.isLate(it) }.forEach { t ->
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TripSummary(vm, t)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SecondaryButton(Modifier.weight(1f), "IT REACHED", null) { onResolve(t, "REACHED") }
+                        SecondaryButton(Modifier.weight(1f), "STOPPED / MOVED ELSEWHERE", null) { onResolve(t, "DIVERTED") }
+                    }
+                }
+            }
+            SecondaryButton("CLOSE", null, onClose)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ResolveTripSheet(vm: MainViewModel, trip: TransitTrip, initialKind: String, onClose: () -> Unit) {
+    var kind by remember { mutableStateOf(initialKind) }
+    val elapsed = ((vm.serverNow() - trip.leftAt) / 60_000L).coerceAtLeast(1L)
+    var minutes by remember { mutableStateOf(elapsed.toString()) }
+    var placeId by remember { mutableStateOf("") }
+    var placeName by remember { mutableStateOf("") }
+    var typing by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+    var problem by remember { mutableStateOf("") }
+    val dismiss = { vm.snoozeAlerts(vm.alertTrips); onClose() }
+    ModalBottomSheet(onDismissRequest = dismiss, containerColor = UiSurface, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).navigationBarsPadding().padding(bottom = 14.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("RECORD WHAT HAPPENED", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = UiInk, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+            TripSummary(vm, trip)
+            listOf("REACHED" to "It reached ${trip.destName.ifBlank { "this location" }}", "STOPPED" to "It stopped on the way", "DIVERTED" to "It moved to another location").forEach { (k, label) ->
+                Row(Modifier.fillMaxWidth().clickable { kind = k; problem = "" }, verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = kind == k, onClick = { kind = k; problem = "" })
+                    Text(label, fontFamily = Sans, fontSize = 14.sp, color = UiInk)
+                }
+            }
+            if (kind != "REACHED") {
+                val options = listOf("OTHER" to "Other place (type the name)…") + vm.locations.filter { kind != "DIVERTED" || it.first != trip.destId }
+                StationDropdown(if (kind == "STOPPED") "Where did it stop?" else "Which location did it go to?", options, if (typing) "OTHER" else placeId, Modifier.fillMaxWidth()) { id, name ->
+                    if (id == "OTHER") { typing = true; placeId = ""; placeName = "" } else { typing = false; placeId = id; placeName = name }
+                }
+                if (typing) OutlinedTextField(placeName, { if (it.length <= 60) placeName = it }, Modifier.fillMaxWidth(), singleLine = true,
+                    placeholder = { Text("Name of the place", fontFamily = Sans, fontSize = 13.sp) }, shape = RoundedCornerShape(10.dp))
+            }
+            OutlinedTextField(minutes, { v -> if (v.length <= 4 && v.all { it.isDigit() }) minutes = v }, Modifier.fillMaxWidth(), singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                label = { Text(when (kind) { "REACHED" -> "Time taken to reach (minutes)"; "STOPPED" -> "Time taken until it stopped (minutes)"; else -> "Time taken to reach that location (minutes)" }, fontFamily = Sans, fontSize = 12.sp) },
+                shape = RoundedCornerShape(10.dp))
+            Text("It left at ${clockOf(trip.leftAt)}; about $elapsed min have passed. Enter the minutes from when it left until this happened, not from now.", fontFamily = Sans, fontSize = 11.sp, color = UiMuted)
+            val err = problem.ifBlank { vm.transitError }
+            if (err.isNotBlank()) Text(err, fontFamily = Sans, fontSize = 12.sp, color = UiError, fontWeight = FontWeight.SemiBold)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SecondaryButton(Modifier.weight(1f), "CANCEL", null, dismiss)
+                PrimaryButton(Modifier.weight(1f), "SAVE", Icons.Default.CheckCircle, !saving) {
+                    val m = minutes.toIntOrNull() ?: 0
+                    when {
+                        m < 1 -> problem = "Enter the time taken in minutes."
+                        kind != "REACHED" && placeId.isBlank() && placeName.isBlank() -> problem = "Choose or type the location name."
+                        else -> { problem = ""; saving = true; vm.resolveTrip(trip, kind, m, if (placeId.isBlank()) placeName.trim() else "", placeId) { ok -> saving = false; if (ok) onClose() } }
+                    }
+                }
             }
         }
     }

@@ -48,8 +48,18 @@ class HttpFailure(val code: Int, val bodyText: String) : Exception(
     val locationId: String, val gateId: String, val deviceId: String, val operatorId: String,
     val eventTimestamp: Long, val createdAt: Long, val sourceType: String = "DIRECT", val sourceId: String? = null,
     val locationMismatch: Boolean = false, val scannedLocation: String = "",
-    val reason: String = "", val remarks: String = "", val expectedReturn: Long = 0L, val comingFrom: String = ""
+    val reason: String = "", val remarks: String = "", val expectedReturn: Long = 0L, val comingFrom: String = "",
+    val destinationId: String = "", val destinationName: String = "", val transitMinutes: Int = 0
 )
+/** Standard time between two locations, set on the PC (Transit Times tab). */
+@Serializable data class TransitRoute(val from: String, val to: String, val minutes: Int)
+/** A vehicle that left another location for this terminal's location and has not been recorded as arrived. */
+@Serializable data class TransitTrip(
+    val transitId: String, val vehicleId: String, val plate: String = "", val vehicleType: String = "",
+    val fromId: String = "", val fromName: String = "", val destId: String = "", val destName: String = "",
+    val leftAt: Long = 0L, val expectedMin: Long = 0L, val dueAt: Long = 0L, val overdue: Boolean = false, val rpSnoozeUntil: Long = 0L
+)
+@Serializable data class TransitList(val serverTime: Long = 0L, val locationId: String = "", val trips: List<TransitTrip> = emptyList())
 @Serializable data class VehicleManifestPayload(
     val manifestId: String, val vehicleId: String, val entryEventId: String, val locationId: String,
     val gateId: String, val driverId: String, val coDriverId: String? = null, val occupants: List<String>,
@@ -85,7 +95,7 @@ class HttpFailure(val code: Int, val bodyText: String) : Exception(
     val version: String = "", val persons: List<MasterPerson> = emptyList(), val vehicles: List<MasterVehicle> = emptyList(),
     val locations: List<NamedItem> = emptyList(), val gates: List<NamedItem> = emptyList(),
     val presence: List<PresenceItem> = emptyList(), val serverTime: Long = 0L, val reasons: List<String> = emptyList(),
-    val returnReasons: List<String> = emptyList()
+    val returnReasons: List<String> = emptyList(), val transitRoutes: List<TransitRoute> = emptyList()
 )
 
 /** Contents of the pairing QR shown by the PC Command Center ("XVGK1:" + base64url JSON). */
@@ -192,6 +202,23 @@ class ApiClient(private val profile: ConnectionProfile? = null) {
         rpc("heartbeat", buildJsonObject {
             put("locationId", locationId); put("gateId", gateId); put("operatorId", operatorId); put("pending", pending); put("appVersion", appVersion)
         }).toString()
+    }
+
+    /** Vehicles heading to this terminal's location that have not been recorded as arrived. */
+    fun openTransits(locationId: String): Result<TransitList> = runCatching {
+        json.decodeFromJsonElement(TransitList.serializer(), rpc("transit.open", buildJsonObject { put("locationId", locationId) }))
+    }
+
+    /** Records what happened to a trip: kind is REACHED, STOPPED or DIVERTED; minutes is the time taken from departure. */
+    fun resolveTransit(transitId: String, kind: String, minutes: Int, placeName: String, placeLocationId: String, locationId: String): Result<String> = runCatching {
+        rpc("transit.resolve", buildJsonObject {
+            put("transitId", transitId); put("kind", kind); put("minutes", minutes); put("placeName", placeName); put("placeLocationId", placeLocationId); put("locationId", locationId)
+        }).toString()
+    }
+
+    /** The RP closed the alert: the server asks again in 15 minutes. */
+    fun snoozeTransit(transitId: String, locationId: String): Result<String> = runCatching {
+        rpc("transit.snooze", buildJsonObject { put("transitId", transitId); put("locationId", locationId) }).toString()
     }
 
     fun submitEvent(baseUrl: String, event: MovementEvent): Result<String> = runCatching {

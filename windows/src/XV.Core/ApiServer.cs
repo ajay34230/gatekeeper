@@ -237,14 +237,14 @@ public sealed class ApiServer : IAsyncDisposable
             case "transit.open":
             {
                 // Trips heading to the location this terminal is assigned to (the destination RP's list).
-                var loc = _store.DeviceLocation(deviceId);
+                var loc = _store.TerminalLocation(deviceId, data["locationId"]?.ToString());
                 var trips = loc.Length == 0 ? [] : _store.OpenTransitsTo(loc);
                 return (200, new JsonObject { ["serverTime"] = Store.NowMs, ["locationId"] = loc, ["trips"] = new JsonArray(trips.Select(t => (JsonNode)_store.TransitJson(t)).ToArray()) });
             }
             case "transit.resolve":
             {
                 var id = data["transitId"]?.ToString() ?? "";
-                var loc = _store.DeviceLocation(deviceId);
+                var loc = _store.TerminalLocation(deviceId, data["locationId"]?.ToString());
                 if (!_store.OpenTransitsTo(loc).Any(t => t["transit_id"]?.ToString() == id))
                     throw new StoreException("NOT_YOUR_TRIP", "This trip is not heading to this terminal's location", 403);
                 _store.ResolveTransit(id, data["kind"]?.ToString() ?? "", (int)(data["minutes"]?.GetValue<long>() ?? 0), data["placeName"]?.ToString() ?? "",
@@ -254,7 +254,7 @@ public sealed class ApiServer : IAsyncDisposable
             case "transit.snooze":
             {
                 var id = data["transitId"]?.ToString() ?? "";
-                if (_store.OpenTransitsTo(_store.DeviceLocation(deviceId)).Any(t => t["transit_id"]?.ToString() == id)) _store.SnoozeTransitRp(id);
+                if (_store.OpenTransitsTo(_store.TerminalLocation(deviceId, data["locationId"]?.ToString())).Any(t => t["transit_id"]?.ToString() == id)) _store.SnoozeTransitRp(id);
                 return (200, new JsonObject { ["status"] = "ok" });
             }
             case "vehicle.manualSighting": { var r = _store.ManualVehicleSighting(data, deviceId, operatorId); return (r["status"]!.ToString() == "duplicate" ? 200 : 201, r); }

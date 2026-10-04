@@ -37,7 +37,11 @@ data class MovementEventEntity(
     /** Expected return (epoch ms) for exits on leave / TD; 0 when not asked. */
     val expectedReturn: Long = 0L,
     /** Where the person is coming from, entered by the guard on ENTRY only; blank on EXIT and on vehicle events. */
-    val comingFrom: String = ""
+    val comingFrom: String = "",
+    /** Vehicle EXIT only: the destination the guard entered and the approximate minutes (0 = not entered). */
+    val destinationId: String = "",
+    val destinationName: String = "",
+    val transitMinutes: Int = 0
 )
 
 @Entity(tableName = "presence_sessions", indices = [
