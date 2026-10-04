@@ -120,7 +120,7 @@ public static class TransitDialogs
     sealed class ResolveTripDialog : DarkWindow
     {
         public ResolveTripDialog(Dictionary<string, object?> t, string kind) : base("Close trip • " + S(t["plate"]),
-            $"{S(t["from_name"])} → {S(t["dest_name"])}  •  left {Time(L(t["left_at"]), "dd MMM HH:mm")}. The vehicle is only recorded as reached when you enter it here.", 620, 720)
+            $"{S(t["from_name"])} → {S(t["dest_name"])}  •  left {Time(L(t["left_at"]), "dd MMM HH:mm")}. The vehicle is only recorded as reached when you enter it here.", 620, 600)
         {
             var labels = LocationLabels();
             var elapsedMin = Math.Max(1, (Store.NowMs - L(t["left_at"])) / 60_000);
@@ -287,7 +287,7 @@ public sealed class TransitAlertWindow : Window
 
     public TransitAlertWindow(List<Dictionary<string, object?>> due)
     {
-        Title = "Vehicles not reached"; Width = 640; Height = Math.Min(620, SystemParameters.WorkArea.Height - 40); Topmost = true;
+        Title = "Vehicles not reached"; Width = 640; SizeToContent = SizeToContent.Height; MaxHeight = Math.Min(620, SystemParameters.WorkArea.Height - 40); Topmost = true;
         Background = B("#FFF1F2"); WindowStartupLocation = WindowStartupLocation.CenterScreen;
         Icon = new BitmapImage(new Uri("pack://application:,,,/Assets/app.ico"));
         var head = new Border
