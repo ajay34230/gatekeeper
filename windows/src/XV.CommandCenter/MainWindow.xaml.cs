@@ -829,6 +829,11 @@ public partial class MainWindow : Window
         grid.Children.Add(SettingsCard("", "Comms Center",
             "Messages, alerts and voice/video calls with paired terminals.",
             "Open Comms Center", Comms_Click, "BtnDanger"));
+        grid.Children.Add(SettingsCard("", "Leave & Overdue Alerts",
+            s.AbsenceAlertLocations.Count + s.AbsenceAlertOperators.Count == 0
+                ? "“… has not returned from leave” is shown on this PC only. Choose which locations and RPs should also get it on their phone."
+                : $"Also sent to {s.AbsenceAlertLocations.Count} location(s) and {s.AbsenceAlertOperators.Count} RP(s). Nobody else gets it.",
+            "Choose who gets the alert", (_, _) => { if (new AbsenceRecipientsDialog { Owner = this }.ShowDialog() == true) RenderTab(); }, "BtnDanger"));
         grid.Children.Add(SettingsCard("", "Lock Now",
             "Lock this Command Center immediately. The administrator password is required to unlock it again.",
             "Lock Command Center", Lock_Click, "BtnDanger"));

@@ -19,6 +19,22 @@ public static class AbsenceText
         return reason.Trim().Length > 0 ? $"has not returned ({reason.Trim()})" : "has not returned";
     }
 
+    /// <summary>The message sent to a phone: the person's rank and name, what has not happened, and how late it is.</summary>
+    public static string PhoneAlert(IReadOnlyDictionary<string, object?> a, long nowMs)
+    {
+        string G(string k) => a.TryGetValue(k, out var v) ? v?.ToString() ?? "" : "";
+        long N(string k) => long.TryParse(G(k), out var n) ? n : 0;
+        var kind = G("kind");
+        var who = kind == "VISITOR_OVERSTAY" ? G("name") : $"{G("rank")} {G("name")}".Trim();
+        var due = N("expected_return"); var left = N("left_at");
+        string Clock(long ms, string f) => DateTimeOffset.FromUnixTimeMilliseconds(ms).LocalDateTime.ToString(f);
+        var parts = new List<string>();
+        if (left > 0) parts.Add((kind == "VISITOR_OVERSTAY" ? "Came in " : "Left ") + Clock(left, "dd MMM HH:mm"));
+        if (due > 0) parts.Add((kind == "VISITOR_OVERSTAY" ? "pass ended " : "expected back ") + Clock(due, "dd MMM yyyy"));
+        if (due > 0 && nowMs > due) parts.Add($"{Reports.Duration(nowMs - due)} overdue");
+        return $"{who} {NotReturned(G("reason"), G("remarks"), kind)}." + (parts.Count > 0 ? "\n" + string.Join(" • ", parts) : "");
+    }
+
     /// <summary>"is due back from leave" for the reminder before the return date.</summary>
     public static string DueBack(string reason, string remarks)
     {

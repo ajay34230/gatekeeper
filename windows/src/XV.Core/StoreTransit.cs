@@ -325,5 +325,16 @@ public sealed partial class Store
         return DeviceLocation(deviceId);
     }
 
+    /// <summary>Active terminals that should also get an alert: those assigned to one of the locations, or signed in by one of the operators.</summary>
+    public List<string> TerminalsForAlert(IEnumerable<string> locationIds, IEnumerable<string> operatorIds)
+    {
+        var locs = locationIds.Select(CanonId).Where(x => x.Length > 0).ToHashSet();
+        var ops = operatorIds.Select(Upper).Where(x => x.Length > 0).ToHashSet();
+        if (locs.Count == 0 && ops.Count == 0) return [];
+        return Query("SELECT device_id, location_id, operator_id FROM devices WHERE active=1")
+            .Where(d => locs.Contains(S(d["location_id"])) || ops.Contains(Upper(S(d["operator_id"]))))
+            .Select(d => S(d["device_id"])).ToList();
+    }
+
     public string DeviceLocation(string deviceId) => S(Scalar("SELECT location_id FROM devices WHERE device_id=$1", deviceId));
 }

@@ -317,6 +317,27 @@ public static class OverdueMonitor
         foreach (var a in fresh) App.Store.AdminAudit("OVERDUE_ALERT", $"{S(a["person_id"])} {S(a["reason"])} due {Time(L(a["expected_return"]), "yyyy-MM-dd HH:mm")}");
         SystemSounds.Exclamation.Play();
         new AbsenceAlertWindow(fresh, overdue: true, main).Show();
+        SendToChosenTerminals(fresh);
+    }
+
+    /// <summary>The PC always shows the alert; phones get it only if the server chose their location or RP in Settings.</summary>
+    static void SendToChosenTerminals(List<Dictionary<string, object?>> fresh)
+    {
+        try
+        {
+            var s = App.Settings;
+            var devices = App.Store.TerminalsForAlert(s.AbsenceAlertLocations, s.AbsenceAlertOperators);
+            foreach (var a in fresh)
+            {
+                var text = AbsenceText.PhoneAlert(a, Store.NowMs);
+                foreach (var d in devices)
+                {
+                    try { App.Comms.Send(d, "ALERT", text, "Command Center"); } catch { /* terminal unreachable: Comms keeps it for the next connection */ }
+                }
+            }
+            if (devices.Count > 0) App.Store.AdminAudit("OVERDUE_ALERT_SENT", $"{fresh.Count} alert(s) to {devices.Count} terminal(s)");
+        }
+        catch { /* the alert on the PC has already been shown */ }
     }
 }
 

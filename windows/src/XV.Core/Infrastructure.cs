@@ -113,6 +113,12 @@ public sealed class Settings
     /// <summary>Reasons offered on the terminal when recording an entry / exit (the operator can also type a custom reason).</summary>
     public List<string> MovementReasons { get; set; } = ["TD", "Proceeding on Leave", "Rejoining from Leave", "Posting Out", "Posting In", "Local Work"];
 
+    /// <summary>Locations whose terminals also receive the "has not returned" alert. The PC always shows it; nobody else gets it unless chosen here.</summary>
+    public List<string> AbsenceAlertLocations { get; set; } = [];
+
+    /// <summary>Operators (RPs) whose terminals also receive the "has not returned" alert, chosen separately from the locations.</summary>
+    public List<string> AbsenceAlertOperators { get; set; } = [];
+
     /// <summary>Exit reasons for which the terminal asks the expected return date (tracked for overdue alerts).</summary>
     public List<string> ReturnDateReasons { get; set; } = ["TD", "Proceeding on Leave", "Local Work"];
 

@@ -120,3 +120,63 @@ public sealed class AbsenceAlertWindow : Window
         };
     }
 }
+
+/// <summary>Settings: which locations and RPs also receive the "has not returned" alert on their phone (the PC always gets it).</summary>
+public sealed class AbsenceRecipientsDialog : DarkWindow
+{
+    readonly List<(CheckBox box, string id)> _locs = [];
+    readonly List<(CheckBox box, string id)> _ops = [];
+    readonly TextBlock _summary;
+
+    public AbsenceRecipientsDialog() : base("Leave & overdue alerts",
+        "The PC always shows “… has not returned from leave”. Choose who else should get it. It is sent to their phone only, and nobody else sees it.", 640, 740)
+    {
+        var s = App.Settings;
+        _summary = Para("", "#047857");
+        Body.Children.Add(_summary);
+
+        Body.Children.Add(Label("Send to these locations (every terminal at the location)"));
+        foreach (var l in App.Store.Locations())
+        {
+            var id = S(l["id"]);
+            var cb = new CheckBox { Content = $"{id} — {S(l["name"])}", IsChecked = s.AbsenceAlertLocations.Contains(id, StringComparer.OrdinalIgnoreCase), Margin = new Thickness(0, 3, 0, 3) };
+            cb.Click += (_, _) => Recount();
+            _locs.Add((cb, id)); Body.Children.Add(cb);
+        }
+        if (_locs.Count == 0) Body.Children.Add(Para("No locations yet. Add them in Station & General settings."));
+
+        Body.Children.Add(Label("Send to these RPs (the terminal they are signed in on)"));
+        foreach (var a in App.Store.Accounts().Where(a => S(a["status"]) == "ACTIVE"))
+        {
+            var id = S(a["id"]);
+            var cb = new CheckBox { Content = $"{id} — {S(a["name"])}", IsChecked = s.AbsenceAlertOperators.Contains(id, StringComparer.OrdinalIgnoreCase), Margin = new Thickness(0, 3, 0, 3) };
+            cb.Click += (_, _) => Recount();
+            _ops.Add((cb, id)); Body.Children.Add(cb);
+        }
+        if (_ops.Count == 0) Body.Children.Add(Para("No active operator accounts yet."));
+        Recount();
+
+        AddButton("Cancel", Close);
+        AddButton("Send test alert", () =>
+        {
+            var devices = App.Store.TerminalsForAlert(Picked(_locs), Picked(_ops));
+            if (devices.Count == 0) { MessageBox.Show(this, "Choose at least one location or RP that has a paired terminal first.", "Test alert"); return; }
+            foreach (var d in devices) { try { App.Comms.Send(d, "ALERT", "TEST: this is how a “has not returned from leave” alert will reach you. No action is needed.", "Command Center"); } catch { } }
+            MessageBox.Show(this, $"Test alert sent to {devices.Count} terminal(s).", "Test alert");
+        }, "BtnBlue");
+        AddButton("Save", () =>
+        {
+            s.AbsenceAlertLocations = Picked(_locs); s.AbsenceAlertOperators = Picked(_ops); s.Save();
+            App.Store.AdminAudit("ABSENCE_ALERT_RECIPIENTS", $"{s.AbsenceAlertLocations.Count} location(s), {s.AbsenceAlertOperators.Count} RP(s)");
+            DialogResult = true;
+        }, "BtnAmber");
+    }
+
+    static List<string> Picked(List<(CheckBox box, string id)> list) => list.Where(x => x.box.IsChecked == true).Select(x => x.id).ToList();
+
+    void Recount()
+    {
+        var n = App.Store.TerminalsForAlert(Picked(_locs), Picked(_ops)).Count;
+        _summary.Text = n == 0 ? "Right now the alert is shown on this PC only." : $"The alert will also be sent to {n} paired terminal(s).";
+    }
+}
