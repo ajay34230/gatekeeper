@@ -45,7 +45,22 @@ export interface CardThemeConfig {
 }
 
 /** Card layout and wording chosen by the administrator (saved on the PC, applies to every card). */
+export type CardLayout = 'classic' | 'modernSplit' | 'modernSingle';
+
 export interface CardDesign {
+  /** classic = the formal government card; modernSplit = details on the front, QR on the back; modernSingle = everything on one side. */
+  layout: CardLayout;
+  modAccent: string;
+  modTheme: 'light' | 'dark';
+  modTitle: string;
+  modSubtitle: string;
+  modFooter: string;
+  modBackNote: string;
+  modLogoFront: string;   // data URL, '' = none
+  modLogoBack: string;    // data URL, '' = none (on the single-sided card this is the right-hand logo)
+  modLogoSize: number;    // % of the standard logo height, 50-160
+  modShowPhoto: boolean;
+  modExtras: string[];
   theme: ThemeId;
   govtLine: string;
   title: string;

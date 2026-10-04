@@ -4,6 +4,7 @@ import { CARD_THEMES, DEFAULT_DESIGN, ARMY_RANKS, BLOOD_GROUPS, CARD_SIZES, card
 import { DETAIL_FIELD_CATALOG, DETAIL_FONT_SCALES, DETAIL_COLOR_PRESETS } from './detailFields';
 import { CardFace } from './components/CardFace';
 import { SignaturePad } from './components/SignaturePad';
+import { MODERN_ACCENTS, MODERN_EXTRAS } from './components/ModernCard';
 import { NationalCrest } from './components/MilitaryEmblem';
 import { host, preloadMedia } from './host';
 import { cardCheck } from './mrz';
@@ -238,7 +239,7 @@ export default function App() {
           {current ? (
             <div className={`flex ${view === 'dual' ? 'flex-wrap' : ''} gap-8 justify-center`}>
               {(view === 'dual' || !flipped) && <div className="space-y-2"><div className="text-center text-sm font-mono font-bold text-amber-300 tracking-widest">CARD FRONT</div><CardFace side="front" soldier={current} design={design} check={checks[current.id] ?? ''} /></div>}
-              {(view === 'dual' || flipped) && <div className="space-y-2"><div className="text-center text-sm font-mono font-bold text-cyan-300 tracking-widest">CARD BACK</div><CardFace side="back" soldier={current} design={design} /></div>}
+              {(view === 'dual' || flipped) && design.layout !== 'modernSingle' && <div className="space-y-2"><div className="text-center text-sm font-mono font-bold text-cyan-300 tracking-widest">CARD BACK</div><CardFace side="back" soldier={current} design={design} /></div>}
             </div>
           ) : <div className="text-center text-slate-500 py-24 font-mono">{loaded ? 'No soldier to show.' : 'Loading register…'}</div>}
 
@@ -335,6 +336,52 @@ export default function App() {
 
             {tab === 'theme' && (
               <div className="space-y-5">
+                <div className="rounded-xl border border-slate-800 p-4 space-y-3">
+                  <div className="text-xs font-mono font-bold text-amber-400 uppercase">Card style</div>
+                  <div className="grid grid-cols-1 gap-2">
+                    {([['classic', 'Classic — formal armed forces card'], ['modernSplit', 'Modern, two sides — details on the front, QR on the back'], ['modernSingle', 'Modern, one side — photo, details and QR together']] as const).map(([k, t]) => (
+                      <button key={k} onClick={() => setD({ layout: k })} className={`px-3 py-2 rounded-lg text-sm text-left border ${design.layout === k ? 'border-amber-500 text-amber-300 bg-amber-500/10' : 'border-slate-700 text-slate-400'}`}>{t}</button>
+                    ))}
+                  </div>
+                </div>
+                {design.layout !== 'classic' && (
+                  <div className="rounded-xl border border-slate-800 p-4 space-y-3">
+                    <div className="text-xs font-mono font-bold text-amber-400 uppercase">Modern card — colours, wording, logos</div>
+                    <div className="flex flex-wrap gap-2">
+                      {MODERN_ACCENTS.map(a => (
+                        <button key={a.label} onClick={() => setD({ modAccent: a.label })} title={a.label} className={`px-3 py-1 rounded-lg text-xs border flex items-center gap-2 ${design.modAccent === a.label ? 'border-amber-500 text-amber-300' : 'border-slate-700 text-slate-400'}`}>
+                          <span style={{ width: 14, height: 14, borderRadius: 7, background: `linear-gradient(135deg, ${a.a}, ${a.b})`, display: 'inline-block' }} />{a.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      {([['light', 'Light card'], ['dark', 'Dark card']] as const).map(([k, t]) => (
+                        <button key={k} onClick={() => setD({ modTheme: k })} className={`px-3 py-1 rounded-lg text-xs border ${design.modTheme === k ? 'border-amber-500 text-amber-300 bg-amber-500/10' : 'border-slate-700 text-slate-400'}`}>{t}</button>
+                      ))}
+                      <button onClick={() => setD({ modShowPhoto: !design.modShowPhoto })} className={`px-3 py-1 rounded-lg text-xs border ${design.modShowPhoto ? 'border-amber-500 text-amber-300 bg-amber-500/10' : 'border-slate-700 text-slate-400'}`}>{design.modShowPhoto ? 'Photo: shown' : 'Photo: hidden'}</button>
+                    </div>
+                    {([['modTitle', 'Card title'], ['modSubtitle', 'Sub-title'], ['modFooter', 'Footer line'], ['modBackNote', 'Note under the QR (two-sided card)']] as const).map(([k, t]) => (
+                      <label key={k} className="block text-xs text-slate-400">{t}
+                        <input value={design[k]} onChange={e => setD({ [k]: e.target.value } as Partial<CardDesign>)} className="mt-1 w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-1.5 text-sm text-slate-100" />
+                      </label>
+                    ))}
+                    <div className="text-xs text-slate-400">Extra details on the card (rank, name, army no, unit and mobile are always shown)</div>
+                    <div className="flex flex-wrap gap-2">
+                      {MODERN_EXTRAS.map(e => {
+                        const on = design.modExtras.includes(e.key);
+                        return <button key={e.key} onClick={() => setD({ modExtras: on ? design.modExtras.filter(x => x !== e.key) : [...design.modExtras, e.key] })} className={`px-3 py-1 rounded-lg text-xs border ${on ? 'border-amber-500 text-amber-300 bg-amber-500/10' : 'border-slate-700 text-slate-400'}`}>{on ? '✓ ' : ''}{e.label}</button>;
+                      })}
+                    </div>
+                    <ImagePick label={design.layout === 'modernSingle' ? 'Logo — left of the title' : 'Logo — front'} mode={design.modLogoFront ? 'custom' : 'none'} image={design.modLogoFront} options={[['none', 'No logo']]}
+                      onMode={() => setD({ modLogoFront: '' })} onImage={u => setD({ modLogoFront: u })} read={readFile} />
+                    <ImagePick label={design.layout === 'modernSingle' ? 'Logo — right of the title' : 'Logo — back'} mode={design.modLogoBack ? 'custom' : 'none'} image={design.modLogoBack} options={[['none', 'No logo']]}
+                      onMode={() => setD({ modLogoBack: '' })} onImage={u => setD({ modLogoBack: u })} read={readFile} />
+                    <label className="block text-xs text-slate-400">Logo size: {design.modLogoSize}%
+                      <input type="range" min={50} max={160} value={design.modLogoSize} onChange={e => setD({ modLogoSize: Number(e.target.value) })} className="w-full" />
+                    </label>
+                    <div className="text-[11px] text-slate-500">The QR on the card is the soldier's genuine gate code. Card size and orientation are chosen below.</div>
+                  </div>
+                )}
                 <div className="rounded-xl border border-slate-800 p-4 space-y-3">
                   <div className="text-xs font-mono font-bold text-amber-400 uppercase">Card size &amp; orientation</div>
                   <div className="flex flex-wrap gap-2">
@@ -459,13 +506,13 @@ export default function App() {
       {exportSoldier && exportJob?.format === 'pdf' && (
         <div className="export-area">
           <div className="export-page" style={{ width: `${size.w}mm`, height: `${size.h}mm` }}><div className="print-zoom" style={{ zoom: mmZoom, width: base }}><CardFace side="front" soldier={exportSoldier} design={design} check={checks[exportSoldier.id] ?? ''} /></div></div>
-          <div className="export-page" style={{ width: `${size.w}mm`, height: `${size.h}mm` }}><div className="print-zoom" style={{ zoom: mmZoom, width: base }}><CardFace side="back" soldier={exportSoldier} design={design} /></div></div>
+          {design.layout !== 'modernSingle' && <div className="export-page" style={{ width: `${size.w}mm`, height: `${size.h}mm` }}><div className="print-zoom" style={{ zoom: mmZoom, width: base }}><CardFace side="back" soldier={exportSoldier} design={design} /></div></div>}
         </div>
       )}
       {exportSoldier && exportJob?.format === 'png' && (
         <div className="export-png" style={{ position: 'fixed', left: -10000, top: 0 }}>
           <div id="export-png-front" style={{ width: base }}><CardFace side="front" soldier={exportSoldier} design={design} check={checks[exportSoldier.id] ?? ''} className="!shadow-none" /></div>
-          <div id="export-png-back" style={{ width: base, marginTop: 20 }}><CardFace side="back" soldier={exportSoldier} design={design} className="!shadow-none" /></div>
+          {design.layout !== 'modernSingle' && <div id="export-png-back" style={{ width: base, marginTop: 20 }}><CardFace side="back" soldier={exportSoldier} design={design} className="!shadow-none" /></div>}
         </div>
       )}
 
@@ -476,7 +523,7 @@ export default function App() {
         {printList.map(s => (
           <div key={s.id} className="print-row">
             {zoomBox(<CardFace side="front" soldier={s} design={design} check={checks[s.id] ?? ''} />)}
-            {zoomBox(<CardFace side="back" soldier={s} design={design} />)}
+            {design.layout !== 'modernSingle' && zoomBox(<CardFace side="back" soldier={s} design={design} />)}
           </div>
         ))}
       </div>

@@ -133,6 +133,8 @@ public static class GuideContent
             "Design and print ID cards with a genuine QR code, and keep a record of every card issued, re-issued, printed or lost.",
             [
                 "Press ID Card Studio. Choose the people (one, a company, or a selection), adjust the design and print or save as PDF.",
+                "In Theme & Emblems > Card style pick Classic (formal armed forces card), Modern two sides (details on the front, QR on the back) or Modern one side (photo, details and QR together).",
+                "For the modern cards choose the colour, light or dark card, the wording, extra details (company, blood group and so on) and upload a logo: front and back logo on the two-sided card, left and right logo on the one-side card. A slider sets the logo size.",
                 "Open the Card Register to see each soldier's card number, issue date, last print and loss history.",
                 "If a card is lost press Report lost... The old card is refused at every gate at once and a new QR code is made for the next card.",
                 "Press Export company-wise... to save the register.",

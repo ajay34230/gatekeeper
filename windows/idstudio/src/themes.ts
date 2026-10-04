@@ -13,6 +13,18 @@ export const CARD_THEMES: Record<ThemeId, CardThemeConfig> = {
 
 /** Starting wording (same as the reference design); every line can be changed in the Studio. */
 export const DEFAULT_DESIGN: CardDesign = {
+  layout: 'classic',
+  modAccent: 'Emerald',
+  modTheme: 'light',
+  modTitle: 'IDENTITY CARD',
+  modSubtitle: 'AUTHORISED PERSONNEL',
+  modFooter: 'PROPERTY OF THE UNIT • IF FOUND PLEASE RETURN',
+  modBackNote: 'Scan this code at any gate. If found, return to the nearest unit office.',
+  modLogoFront: '',
+  modLogoBack: '',
+  modLogoSize: 100,
+  modShowPhoto: true,
+  modExtras: [],
   theme: 'army',
   govtLine: 'GOVERNMENT OF INDIA • MINISTRY OF DEFENCE',
   title: 'ARMED FORCES IDENTITY CARD',
