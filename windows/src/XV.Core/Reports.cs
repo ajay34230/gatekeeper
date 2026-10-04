@@ -550,4 +550,195 @@ public static class ConnectionSheet
         renderer.RenderDocument();
         renderer.PdfDocument.Save(path);
     }
+
+    // ------------------------------------------------------------------ Route Chart Export
+
+    public static void RouteChartExcel(List<Dictionary<string, object?>> events, string title, string subtitle, string path)
+    {
+        using var wb = new XLWorkbook();
+        wb.Properties.Title = "Route Chart - " + title;
+        wb.Properties.Author = "XV Command Center";
+
+        var ws = wb.Worksheets.Add("Route");
+        ws.TabColor = XLColor.FromHtml("#06B6D4");
+
+        var colWidth = 4;
+        Title(ws, 1, colWidth, "ROUTE VISUALIZATION", "#4F46E5");
+        ws.Cell(2, 1).Value = title; ws.Range(2, 1, 2, colWidth).Merge().Style.Font.SetBold().Font.SetFontSize(12).Font.SetFontColor(XLColor.FromHtml("#0F172A"));
+        ws.Cell(3, 1).Value = subtitle; ws.Range(3, 1, 3, colWidth).Merge().Style.Font.SetItalic().Font.SetFontSize(10).Font.SetFontColor(XLColor.FromHtml("#64748B"));
+
+        Header(ws, 5, ["Time", "Event", "Location", "Duration / Travel"]);
+
+        var chronoEvents = events.AsEnumerable().Reverse().ToList();
+        var row = 6;
+        var prevTs = 0L;
+        var prevLoc = "";
+
+        foreach (var evt in chronoEvents)
+        {
+            var ts = L(evt["event_ts"]);
+            var locName = S(evt["location_name"]);
+            var gateName = S(evt["gate_name"]);
+            var eventType = S(evt["event_type"]);
+            var stay = L(evt["stay_ms"]);
+            var isEntry = eventType == "ENTRY";
+
+            // Travel indicator
+            if (prevTs > 0 && prevLoc != locName)
+            {
+                var travelMs = ts - prevTs;
+                ws.Cell(row, 1).Value = "";
+                ws.Cell(row, 2).Value = "↓ Travelled";
+                ws.Cell(row, 3).Value = locName;
+                ws.Cell(row, 4).Value = travelMs > 0 ? Duration(travelMs) : "same time";
+                ws.Range(row, 1, row, 4).Style.Font.SetItalic().Font.SetFontColor(XLColor.FromHtml("#94A3B8"));
+                row++;
+            }
+
+            // Location entry
+            ws.Cell(row, 1).Value = Local(ts).ToString("HH:mm");
+            ws.Cell(row, 2).Value = (isEntry ? "📍 ARRIVED" : "🚪 LEFT");
+            ws.Cell(row, 3).Value = locName + " • " + gateName;
+            ws.Cell(row, 4).Value = stay > 0 ? "Stayed " + Duration(stay) : "";
+
+            var c2 = ws.Cell(row, 2);
+            var (bg, fg) = isEntry ? ("#D1FAE5", "#065F46") : ("#FEF3C7", "#92400E");
+            c2.Style.Fill.SetBackgroundColor(XLColor.FromHtml(bg)).Font.SetFontColor(XLColor.FromHtml(fg)).Font.SetBold();
+
+            ws.Cell(row, 1).Style.Font.SetFontFamily("Consolas").Font.SetFontSize(11).Font.SetBold();
+            ws.Cell(row, 3).Style.Font.SetFontSize(11);
+            if (row % 2 == 0) ws.Range(row, 1, row, 4).Style.Fill.SetBackgroundColor(XLColor.FromHtml("#F8FAFC"));
+
+            prevTs = ts + stay;
+            prevLoc = locName;
+            row++;
+        }
+
+        Grid(ws.Range(5, 1, row - 1, 4));
+        ws.Columns(1, 4).AdjustToContents(2, 40);
+        ws.PageSetup.PageOrientation = XLPageOrientation.Portrait;
+        ws.PageSetup.FitToPages(1, 1);
+        ws.PageSetup.Margins.Top = 0.5; ws.PageSetup.Margins.Bottom = 0.5; ws.PageSetup.Margins.Left = 0.5; ws.PageSetup.Margins.Right = 0.5;
+        wb.SaveAs(path);
+    }
+
+    public static void RouteChartPdf(List<Dictionary<string, object?>> events, string title, string subtitle, Store? store, string path)
+    {
+        GlobalFontSettings.FontResolver = new SystemFontResolverPublic();
+        var doc = new Document();
+        doc.DefaultStyle.Font.Name = "XV Sans";
+
+        var section = doc.AddSection();
+        section.PageSetup.PageFormat = PageFormat.A4;
+        section.PageSetup.TopMargin = Unit.FromCentimeter(1.5);
+        section.PageSetup.BottomMargin = Unit.FromCentimeter(1.5);
+        section.PageSetup.LeftMargin = Unit.FromCentimeter(1.5);
+        section.PageSetup.RightMargin = Unit.FromCentimeter(1.5);
+
+        // Header
+        var headerTable = section.AddTable();
+        headerTable.AddColumn(Unit.FromCentimeter(15));
+        var headerRow = headerTable.AddRow();
+        headerRow.Shading.Color = Color.Parse("#FF4F46E5");
+        var headerPara = headerRow.Cells[0].AddParagraph();
+        var t = headerPara.AddFormattedText("ROUTE VISUALIZATION", TextFormat.Bold);
+        t.Font.Size = 14; t.Font.Color = Colors.White;
+        headerPara.Format.LeftIndent = Unit.FromPoint(8); headerRow.Height = Unit.FromPoint(28);
+
+        section.AddParagraph().Format.SpaceAfter = Unit.FromPoint(0);
+        var titlePara = section.AddParagraph(title);
+        titlePara.Format.Font.Bold = true; titlePara.Format.Font.Size = 11; titlePara.Format.Font.Color = Color.Parse("#FF0F172A");
+        titlePara.Format.SpaceAfter = Unit.FromPoint(2);
+
+        var subtitlePara = section.AddParagraph(subtitle);
+        subtitlePara.Format.Font.Size = 9; subtitlePara.Format.Font.Color = Color.Parse("#FF64748B");
+        subtitlePara.Format.SpaceAfter = Unit.FromPoint(10);
+
+        // Route table
+        var table = section.AddTable();
+        table.AddColumn(Unit.FromCentimeter(1.2)); // Time
+        table.AddColumn(Unit.FromCentimeter(1.8)); // Event
+        table.AddColumn(Unit.FromCentimeter(7));   // Location
+        table.AddColumn(Unit.FromCentimeter(4.2)); // Duration
+
+        table.Borders.Width = 0.5;
+        table.Borders.Color = Color.Parse("#FFD4D4D8");
+        table.LeftPadding = table.RightPadding = Unit.FromPoint(4);
+        table.TopPadding = table.BottomPadding = Unit.FromPoint(3);
+
+        // Headers
+        var headRow = table.AddRow();
+        headRow.Shading.Color = Color.Parse("#FF27272A");
+        string[] headers = ["Time", "Event", "Location", "Duration / Travel"];
+        for (var i = 0; i < headers.Length; i++)
+        {
+            var p = headRow.Cells[i].AddParagraph(headers[i]);
+            p.Format.Font.Bold = true; p.Format.Font.Color = Colors.White; p.Format.Font.Size = 9;
+            p.Format.Alignment = ParagraphAlignment.Left;
+        }
+
+        var chronoEvents = events.AsEnumerable().Reverse().ToList();
+        var prevTs = 0L;
+        var prevLoc = "";
+        var rowNum = 0;
+
+        foreach (var evt in chronoEvents)
+        {
+            var ts = L(evt["event_ts"]);
+            var locName = S(evt["location_name"]);
+            var gateName = S(evt["gate_name"]);
+            var eventType = S(evt["event_type"]);
+            var stay = L(evt["stay_ms"]);
+            var isEntry = eventType == "ENTRY";
+
+            // Travel row
+            if (prevTs > 0 && prevLoc != locName)
+            {
+                var travelMs = ts - prevTs;
+                var row = table.AddRow();
+                if (rowNum++ % 2 == 1) row.Shading.Color = Color.Parse("#FFF8FAFC");
+                row.Cells[0].AddParagraph();
+                var travelPara = row.Cells[1].AddParagraph("↓");
+                travelPara.Format.Font.Italic = true; travelPara.Format.Font.Color = Color.Parse("#FF94A3B8"); travelPara.Format.Font.Size = 8;
+                var destPara = row.Cells[2].AddParagraph(locName);
+                destPara.Format.Font.Italic = true; destPara.Format.Font.Color = Color.Parse("#FF94A3B8"); destPara.Format.Font.Size = 8;
+                var durationPara = row.Cells[3].AddParagraph(travelMs > 0 ? Duration(travelMs) + " travel" : "");
+                durationPara.Format.Font.Italic = true; durationPara.Format.Font.Color = Color.Parse("#FF94A3B8"); durationPara.Format.Font.Size = 8;
+            }
+
+            // Location row
+            var locRow = table.AddRow();
+            locRow.Height = Unit.FromPoint(18);
+            if (rowNum++ % 2 == 1) locRow.Shading.Color = Color.Parse("#FFF8FAFC");
+
+            var (bgColor, fgColor) = isEntry ? ("#FFD1FAE5", "#FF065F46") : ("#FFFEF3C7", "#FF92400E");
+            locRow.Cells[1].Shading.Color = Color.Parse(bgColor);
+
+            var timePara = locRow.Cells[0].AddParagraph(Local(ts).ToString("HH:mm"));
+            timePara.Format.Font.Bold = true; timePara.Format.Font.Size = 9; timePara.Format.Font.Name = "Consolas";
+
+            var eventPara = locRow.Cells[1].AddParagraph(isEntry ? "📍" : "🚪");
+            eventPara.Format.Font.Bold = true; eventPara.Format.Font.Color = Color.Parse(fgColor); eventPara.Format.Font.Size = 9;
+
+            var locPara = locRow.Cells[2].AddParagraph(locName + " • " + gateName);
+            locPara.Format.Font.Size = 9; locPara.Format.Font.Bold = true;
+
+            var durationText = stay > 0 ? "Stayed " + Duration(stay) : "";
+            var durPara = locRow.Cells[3].AddParagraph(durationText);
+            durPara.Format.Font.Size = 9; durPara.Format.Font.Color = Color.Parse("#FF64748B");
+
+            prevTs = ts + stay;
+            prevLoc = locName;
+        }
+
+        // Summary
+        section.AddParagraph().Format.SpaceAfter = Unit.FromPoint(6);
+        var summary = section.AddParagraph($"{chronoEvents.Count} movements recorded");
+        summary.Format.Font.Size = 8; summary.Format.Font.Color = Color.Parse("#FF64748B");
+        summary.Format.SpaceBefore = Unit.FromPoint(6);
+
+        var renderer = new PdfDocumentRenderer { Document = doc };
+        renderer.RenderDocument();
+        renderer.PdfDocument.Save(path);
+    }
 }

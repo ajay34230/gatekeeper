@@ -342,7 +342,12 @@ public static class Dialogs
             if (type == "PERSON")
             {
                 AddButton("+ Add Record", () => { Close(); AddRecord(Owner, id); History(Owner, type, id); }, "BtnBlue");
-                AddButton("Export…", () => Report(this, "ALL", [id]), "BtnEmerald");
+                AddButton("Export Route…", () => ExportRoute(this, type, id, rows), "BtnEmerald");
+                AddButton("Export…", () => Report(this, "ALL", [id]), "BtnGold");
+            }
+            else if (type == "VEHICLE")
+            {
+                AddButton("Export Route…", () => ExportRoute(this, type, id, rows), "BtnEmerald");
             }
             AddButton("Close", Close, "BtnAmber");
         }
@@ -411,6 +416,64 @@ public static class Dialogs
     }
 
     public static void History(Window owner, string type, string id) => new HistoryWindow(type, id) { Owner = owner }.ShowDialog();
+
+    sealed class ExportRouteDialog : DarkWindow
+    {
+        public ExportRouteDialog(string type, string id, List<Dictionary<string, object?>> events) : base("Export Route • " + DisplayId(id),
+            "Download route chart as PDF (print-friendly, single page) or Excel (professional, color-coded).", 500, 280)
+        {
+            var entity = type == "PERSON"
+                ? App.Store.Persons().FirstOrDefault(x => S(x["id"]) == id)
+                : App.Store.Vehicles().FirstOrDefault(x => S(x["id"]) == id);
+
+            if (entity == null) { Body.Children.Add(Para("Entity not found.")); goto btns; }
+
+            var title = type == "PERSON"
+                ? $"{S(entity["name"])} • {S(entity["rank"])} • {S(entity["company"])}"
+                : $"{S(entity["plate"])} • {S(entity["type"])}";
+
+            Body.Children.Add(Para($"Route Chart: {events.Count} movements", "#B45309"));
+            Body.Children.Add(Para($"Title: {title}", "#64748B"));
+
+            Body.Children.Add(Label("Format"));
+            var format = Choice("Choose format", ["Excel (Professional, color-coded)", "PDF (Print-friendly, single page)"], "Excel (Professional, color-coded)");
+
+            btns:
+            AddButton("Cancel", Close);
+            AddButton("Export", () =>
+            {
+                try
+                {
+                    var fmt = format.SelectedIndex == 0 ? "xlsx" : "pdf";
+                    var ext = fmt == "xlsx" ? ".xlsx" : ".pdf";
+                    var name = $"XV-Route-{DisplayId(id)}-{DateTime.Now:yyyyMMdd-HHmm}{ext}";
+                    var dlg = new SaveFileDialog
+                    {
+                        FileName = name,
+                        Filter = fmt == "xlsx" ? "Excel workbook|*.xlsx" : "PDF document|*.pdf"
+                    };
+                    if (dlg.ShowDialog() != true) return;
+
+                    if (fmt == "xlsx")
+                    {
+                        XV.Core.Reports.RouteChartExcel(events, title, $"Movement history • {DateTime.Now:dd MMM yyyy}", dlg.FileName);
+                    }
+                    else
+                    {
+                        XV.Core.Reports.RouteChartPdf(events, title, $"Movement history • {DateTime.Now:dd MMM yyyy}", App.Store, dlg.FileName);
+                    }
+
+                    if (MessageBox.Show("Route exported. Open it now?", "Export finished", MessageBoxButton.YesNo) == MessageBoxResult.Yes)
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dlg.FileName) { UseShellExecute = true });
+                    Close();
+                }
+                catch (Exception ex) { Fail(ex); }
+            }, "BtnEmerald");
+        }
+    }
+
+    static void ExportRoute(Window owner, string type, string id, List<Dictionary<string, object?>> events) =>
+        new ExportRouteDialog(type, id, events) { Owner = owner }.ShowDialog();
 
     sealed class AddRecordDialog : DarkWindow
     {
