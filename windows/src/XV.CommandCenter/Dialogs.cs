@@ -318,6 +318,12 @@ public static class Dialogs
             var rows = App.Store.EventsForEntity(type, id);
             if (rows.Count == 0 && !(type == "VEHICLE" && App.Store.Transits("", id).Count > 0)) { Body.Children.Add(Para("No gate activity has been recorded yet.")); goto buttons; }
 
+            var topIndex = 0;
+            if (type == "VEHICLE" && App.Store.Vehicles().FirstOrDefault(x => S(x["id"]) == id) is { } vehicleRow)
+            {
+                Body.Children.Add(VehicleDetailsCard(TransitText.VehicleDetails(vehicleRow)));
+                topIndex = 1;
+            }
             var manualTrips = type == "VEHICLE" ? App.Store.Transits("", id).Where(t => S(t["exit_event_id"]).Length == 0).ToList() : [];
             var routePanel = BuildRouteChart(rows, manualTrips);
             if (routePanel != null) Body.Children.Add(routePanel);
@@ -341,7 +347,7 @@ public static class Dialogs
                     Body.Children.Add(Card(T("🚚  " + tripLine, 11.5, overdue ? "#9F1239" : closed ? "#065F46" : "#92400E", bold: true).Wrap(), overdue ? "#FFF1F2" : closed ? "#ECFDF5" : "#FFFBEB", overdue ? "#FDA4AF" : closed ? "#A7F3D0" : "#FDE68A", 8).M(24, -2, 0, 8));
                 }
             }
-            if (rows.Count > 0) Body.Children.Insert(0, Para($"{rows.Count} records • total recorded time on site: {Duration(total ?? 0)}", "#B45309"));
+            if (rows.Count > 0) Body.Children.Insert(topIndex, Para($"{rows.Count} records • total recorded time on site: {Duration(total ?? 0)}", "#B45309"));
 
             buttons:
             if (type == "PERSON")
@@ -355,6 +361,14 @@ public static class Dialogs
                 AddButton("Export Route…", () => ExportRoute(this, type, id, rows), "BtnEmerald");
             }
             AddButton("Close", Close, "BtnAmber");
+        }
+
+        static Border VehicleDetailsCard(IReadOnlyList<(string Label, string Value)> details)
+        {
+            var wrap = new WrapPanel();
+            foreach (var (label, value) in details)
+                wrap.Children.Add(Col(T(label.ToUpperInvariant(), 9.5, "#64748B", bold: true), T(value, 12.5, "#0F172A", bold: true, mono: true)).M(0, 0, 24, 8));
+            return Card(Col(T("VEHICLE DETAILS", 11, "#4F46E5", bold: true).M(0, 0, 0, 8), wrap), "#EEF2FF", "#C7D2FE", 12).M(0, 0, 0, 10);
         }
 
         static Border? BuildRouteChart(List<Dictionary<string, object?>> newestFirst, List<Dictionary<string, object?>> manualTrips)
@@ -371,6 +385,7 @@ public static class Dialogs
                 var block = Col(head);
                 if (st.Place.Length > 0) block.Children.Add(T(travel ? "→ " + st.Place : st.Place, 12, "#0F172A", bold: true).M(0, 4, 0, 0));
                 if (st.Detail.Length > 0) block.Children.Add(T(st.Detail, 10.5, "#64748B").Wrap().M(0, 2, 0, 0));
+                if (st.Crew.Length > 0) block.Children.Add(T(st.Crew, 10.5, "#3730A3", bold: true).Wrap().M(0, 3, 0, 0));
                 timeline.Children.Add(new Border
                 {
                     BorderBrush = B(fg), BorderThickness = new Thickness(travel ? 1 : 0, 0, 0, 0), Padding = new Thickness(travel ? 24 : 12, 7, 12, 7),
@@ -410,6 +425,7 @@ public static class Dialogs
                 {
                     if (!AdminGate.Require(this, "Export route chart")) return;
                     var manual = type == "VEHICLE" ? App.Store.Transits("", id).Where(t => S(t["exit_event_id"]).Length == 0).ToList() : new List<Dictionary<string, object?>>();
+                    var details = type == "VEHICLE" ? TransitText.VehicleDetails(entity) : null;
                     var fmt = format.SelectedIndex == 0 ? "xlsx" : "pdf";
                     var ext = fmt == "xlsx" ? ".xlsx" : ".pdf";
                     var name = $"XV-Route-{DisplayId(id)}-{DateTime.Now:yyyyMMdd-HHmm}{ext}";
@@ -422,11 +438,11 @@ public static class Dialogs
 
                     if (fmt == "xlsx")
                     {
-                        XV.Core.Reports.RouteChartExcel(events, title, "Movement history", dlg.FileName, manual);
+                        XV.Core.Reports.RouteChartExcel(events, title, "Movement history", dlg.FileName, manual, details);
                     }
                     else
                     {
-                        XV.Core.Reports.RouteChartPdf(events, title, "Movement history", dlg.FileName, manual);
+                        XV.Core.Reports.RouteChartPdf(events, title, "Movement history", dlg.FileName, manual, details);
                     }
 
                     if (MessageBox.Show("Route exported. Open it now?", "Export finished", MessageBoxButton.YesNo) == MessageBoxResult.Yes)
@@ -598,7 +614,7 @@ public static class Dialogs
             r["trip_approx"] = L(r["tr_expected_min"]) > 0 ? L(r["tr_expected_min"]).ToString() : ""; r["trip_taken"] = L(r["tr_actual_min"]) > 0 ? L(r["tr_actual_min"]).ToString() : "";
             r["trip_how"] = TransitText.Via(S(r["tr_resolved_via"]), S(r["tr_resolved_by"])); return r; }),
         ("Time", "time"), ("Action", "event_type"), ("Type", "entity_type"), ("ID", "entity_id"), ("Name / Plate", "title"), ("Location", "location_name"), ("Gate", "gate_name"),
-        ("Operator", "operator_id"), ("Terminal", "device_id"), ("Stay", "stay"), ("Location flag", "loc_mismatch"), ("QR location", "scanned_loc"), ("Occupants", "occupants"),
+        ("Operator", "operator_id"), ("Terminal", "device_id"), ("Stay", "stay"), ("Location flag", "loc_mismatch"), ("QR location", "scanned_loc"), ("Occupants", "occupants"), ("Driver", "driver_label"), ("Co-driver", "co_driver_label"),
         ("Destination", "tr_dest_name"), ("Approx time (min)", "trip_approx"), ("Trip status", "trip_status"), ("Ended at (place)", "tr_end_name"), ("Time taken (min)", "trip_taken"), ("Trip recorded", "trip_how"),
         ("Event ID", "event_id"), ("Server seq", "seq")));
 

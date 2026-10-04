@@ -36,9 +36,10 @@ public static partial class Reports
 
     // ------------------------------------------------------------------ route chart: Excel
 
-    public static void RouteChartExcel(List<Dictionary<string, object?>> newestFirst, string title, string subtitle, string path, IEnumerable<Dictionary<string, object?>>? manualTrips = null)
+    public static void RouteChartExcel(List<Dictionary<string, object?>> newestFirst, string title, string subtitle, string path, IEnumerable<Dictionary<string, object?>>? manualTrips = null, IReadOnlyList<(string Label, string Value)>? details = null)
     {
         var steps = RouteModel.Build(newestFirst, manualTrips);
+        var hasCrew = steps.Any(x => x.Crew.Length > 0);
         var (arrivals, trips, onSite) = RouteTotals(newestFirst);
         using var wb = new XLWorkbook();
         wb.Properties.Title = "Route chart - " + title;
@@ -47,12 +48,19 @@ public static partial class Reports
         var ws = wb.Worksheets.Add("Route");
         ws.TabColor = XLColor.FromHtml("#06B6D4");
         ws.ShowGridLines = false;
-        const int width = 6;
+        var width = hasCrew ? 7 : 6;
+        var statusCol = width;
         Title(ws, 1, width, "ROUTE CHART — MOVEMENT & TRAVEL", RouteBlue);
         ws.Cell(2, 1).Value = title; ws.Range(2, 1, 2, width).Merge().Style.Font.SetBold().Font.SetFontSize(13).Font.SetFontColor(XLColor.FromHtml(Ink));
         ws.Row(2).Height = 24;
         ws.Cell(3, 1).Value = $"{subtitle}   •   Generated {DateTime.Now:dd MMM yyyy HH:mm}";
         ws.Range(3, 1, 3, width).Merge().Style.Font.SetItalic().Font.SetFontColor(XLColor.FromHtml("#52525B"));
+        if (details is { Count: > 0 })
+        {
+            ws.Cell(4, 1).Value = string.Join("   •   ", details.Select(d => $"{d.Label}: {d.Value}"));
+            ws.Range(4, 1, 4, width).Merge().Style.Font.SetBold().Font.SetFontColor(XLColor.FromHtml("#3730A3")).Fill.SetBackgroundColor(XLColor.FromHtml("#EEF2FF")).Alignment.SetWrapText(true).Alignment.SetVertical(XLAlignmentVerticalValues.Center);
+            ws.Row(4).Height = 30;
+        }
 
         // at-a-glance figures
         string[] kpiHead = ["Entries", "Trips with a destination", "Total time on site"];
@@ -81,7 +89,7 @@ public static partial class Reports
             cell.Style.Fill.SetBackgroundColor(XLColor.FromHtml(bg)).Font.SetFontColor(XLColor.FromHtml(fg)).Font.SetBold().Font.SetFontSize(9).Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
         }
 
-        Header(ws, 10, ["Date", "Time", "Step", "Location / Destination", "Details", "Status"]);
+        Header(ws, 10, hasCrew ? ["Date", "Time", "Step", "Location / Destination", "Details", "Driver / Co-driver / On board", "Status"] : ["Date", "Time", "Step", "Location / Destination", "Details", "Status"]);
         var row = 11;
         foreach (var s in steps)
         {
@@ -91,19 +99,21 @@ public static partial class Reports
             ws.Cell(row, 3).Value = s.Title;
             ws.Cell(row, 4).Value = s.Kind == "TRAVEL" ? "→ " + s.Place : s.Place;
             ws.Cell(row, 5).Value = s.Detail;
-            ws.Cell(row, 6).Value = s.Status;
+            if (hasCrew) ws.Cell(row, 6).Value = s.Crew;
+            ws.Cell(row, statusCol).Value = s.Status;
             ws.Range(row, 1, row, width).Style.Fill.SetBackgroundColor(XLColor.FromHtml(s.Kind is "TRAVEL" or "AWAY" ? "#FAFAFA" : "#FFFFFF"));
             ws.Cell(row, 3).Style.Fill.SetBackgroundColor(XLColor.FromHtml(bg)).Font.SetFontColor(XLColor.FromHtml(fg)).Font.SetBold().Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
-            if (s.Status.Length > 0) ws.Cell(row, 6).Style.Fill.SetBackgroundColor(XLColor.FromHtml(bg)).Font.SetFontColor(XLColor.FromHtml(fg)).Font.SetBold().Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+            if (s.Status.Length > 0) ws.Cell(row, statusCol).Style.Fill.SetBackgroundColor(XLColor.FromHtml(bg)).Font.SetFontColor(XLColor.FromHtml(fg)).Font.SetBold().Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
             ws.Cell(row, 2).Style.Font.SetFontName("Consolas").Font.SetBold();
             ws.Cell(row, 4).Style.Font.SetBold();
             if (s.Kind is "TRAVEL" or "AWAY") ws.Range(row, 4, row, 5).Style.Font.SetItalic();
-            ws.Range(row, 4, row, 5).Style.Alignment.SetWrapText(true).Alignment.SetVertical(XLAlignmentVerticalValues.Center);
+            ws.Range(row, 4, row, hasCrew ? 6 : 5).Style.Alignment.SetWrapText(true).Alignment.SetVertical(XLAlignmentVerticalValues.Center);
             row++;
         }
         if (steps.Count == 0) ws.Cell(row++, 1).Value = "No records";
         Grid(ws.Range(10, 1, row - 1, width));
-        ws.Column(1).Width = 13; ws.Column(2).Width = 8; ws.Column(3).Width = 12; ws.Column(4).Width = 34; ws.Column(5).Width = 62; ws.Column(6).Width = 18;
+        ws.Column(1).Width = 13; ws.Column(2).Width = 8; ws.Column(3).Width = 12; ws.Column(4).Width = 34;
+        if (hasCrew) { ws.Column(5).Width = 46; ws.Column(6).Width = 44; ws.Column(7).Width = 18; } else { ws.Column(5).Width = 62; ws.Column(6).Width = 18; }
         ws.SheetView.FreezeRows(10);
         ws.PageSetup.PageOrientation = XLPageOrientation.Landscape;
         ws.PageSetup.PaperSize = XLPaperSize.A4Paper;
@@ -112,10 +122,28 @@ public static partial class Reports
         ws.PageSetup.CenterHorizontally = true;
         ws.PageSetup.Footer.Center.AddText("XV Digital Access Control • Confidential");
 
+        if (details is { Count: > 0 })
+        {
+            var vs = wb.Worksheets.Add("Vehicle details");
+            vs.TabColor = XLColor.FromHtml("#6366F1"); vs.ShowGridLines = false;
+            Title(vs, 1, 2, "VEHICLE DETAILS", Ink);
+            Header(vs, 3, ["Detail", "Value"]);
+            var vr = 4;
+            foreach (var (label, value) in details)
+            {
+                vs.Cell(vr, 1).Value = label; vs.Cell(vr, 2).Value = value;
+                vs.Cell(vr, 1).Style.Font.SetBold().Font.SetFontColor(XLColor.FromHtml("#52525B"));
+                if (vr % 2 == 1) vs.Range(vr, 1, vr, 2).Style.Fill.SetBackgroundColor(XLColor.FromHtml(Band));
+                vr++;
+            }
+            Grid(vs.Range(3, 1, vr - 1, 2));
+            vs.Column(1).Width = 22; vs.Column(2).Width = 40;
+        }
+
         // every raw record, with the trip columns
         var rec = wb.Worksheets.Add("All records");
         rec.TabColor = XLColor.FromHtml(Amber);
-        string[] head = ["Date", "Time", "Record", "Reason", "Location", "Gate", "Stay", "Destination", "Approx time", "Trip status", "Time taken", "How recorded", "Operator", "Remarks"];
+        string[] head = ["Date", "Time", "Record", "Reason", "Location", "Gate", "Stay", "Destination", "Approx time", "Trip status", "Time taken", "How recorded", "Operator", "Driver", "Co-driver", "Also on board", "Remarks"];
         Title(rec, 1, head.Length, "ALL RECORDS — " + title.ToUpperInvariant(), Ink);
         Header(rec, 3, head);
         var r2 = 4;
@@ -129,7 +157,8 @@ public static partial class Reports
                 S(e.GetValueOrDefault("tr_dest_name")), L(e.GetValueOrDefault("tr_expected_min")) > 0 ? TransitText.Mins(L(e["tr_expected_min"])) : "",
                 state.Length == 0 ? "" : TransitText.StateLabel(state, TransitText.IsOverdue(e, "tr_")),
                 L(e.GetValueOrDefault("tr_actual_min")) > 0 ? TransitText.Mins(L(e["tr_actual_min"])) : "",
-                TransitText.Via(S(e.GetValueOrDefault("tr_resolved_via")), S(e.GetValueOrDefault("tr_resolved_by"))), S(e["operator_id"]), S(e["remarks"]),
+                TransitText.Via(S(e.GetValueOrDefault("tr_resolved_via")), S(e.GetValueOrDefault("tr_resolved_by"))), S(e["operator_id"]),
+                S(e.GetValueOrDefault("driver_label")), S(e.GetValueOrDefault("co_driver_label")), S(e.GetValueOrDefault("occupant_labels")), S(e["remarks"]),
             ];
             for (var i = 0; i < vals.Length; i++) rec.Cell(r2, i + 1).Value = S(vals[i]);
             if (r2 % 2 == 1) rec.Range(r2, 1, r2, head.Length).Style.Fill.SetBackgroundColor(XLColor.FromHtml(Band));
@@ -147,15 +176,36 @@ public static partial class Reports
 
     // ------------------------------------------------------------------ route chart: PDF (one page)
 
-    public static void RouteChartPdf(List<Dictionary<string, object?>> newestFirst, string title, string subtitle, string path, IEnumerable<Dictionary<string, object?>>? manualTrips = null)
+    public static void RouteChartPdf(List<Dictionary<string, object?>> newestFirst, string title, string subtitle, string path, IEnumerable<Dictionary<string, object?>>? manualTrips = null, IReadOnlyList<(string Label, string Value)>? details = null)
     {
         EnsureFonts();
         var all = RouteModel.Build(newestFirst, manualTrips);
-        // One printed page: shrink type for longer routes, and keep only the latest steps beyond what a page can hold.
-        var size = all.Count <= 22 ? 9.0 : all.Count <= 34 ? 8.0 : all.Count <= 46 ? 7.0 : 6.2;
-        var pad = all.Count <= 22 ? 4.0 : all.Count <= 34 ? 3.0 : all.Count <= 46 ? 2.2 : 1.6;
-        var maxRows = 62;
-        var shown = all.Count > maxRows ? all.Skip(all.Count - maxRows).ToList() : all;
+        var hasCrew = all.Any(x => x.Crew.Length > 0);
+        // One printed page: measure the rows and pick the largest type size that fits; if even the smallest does not, keep the latest steps.
+        double[] cols = hasCrew ? [2.0, 1.0, 1.6, 3.0, 3.6, 4.6, 2.8] : [2.4, 1.2, 1.9, 4.4, 5.9, 2.8];
+        int Lines(string text, double widthCm, double sz) => text.Length == 0 ? 1 : (int)Math.Ceiling(text.Length / Math.Max(4.0, (widthCm * 28.35 - 7) / (sz * 0.55)));
+        double RowHeight(RouteStep st, double sz, double pd) =>
+            new[] { Lines(st.Kind == "TRAVEL" ? "→ " + st.Place : st.Place, cols[3], sz), Lines(st.Detail, cols[4], sz), hasCrew ? Lines(st.Crew, cols[5], sz) : 1, Lines(st.Status, cols[^1], sz) }.Max() * sz * 1.22 + 2 * pd + 1;
+        var detailRows = details is { Count: > 0 } ? (int)Math.Ceiling(details.Count / 4.0) : 0;
+        double[] sizes = [9.0, 8.5, 8.0, 7.5, 7.0, 6.5, 6.0, 5.5];
+        double size = sizes[^1], pad = 1.5;
+        List<RouteStep> shown = all;
+        foreach (var sz in sizes)
+        {
+            var pd = sz >= 8 ? 3.5 : sz >= 7 ? 2.5 : 1.8;
+            var avail = (29.7 - 2.2 - 4.4 - 0.8) * 28.35 - detailRows * (sz * 1.22 + 2 * 2.5 + 2) - (detailRows > 0 ? 8 : 0) - (sz * 1.22 + 6);
+            if (all.Sum(x => RowHeight(x, sz, pd)) <= avail) { size = sz; pad = pd; break; }
+            size = sizes[^1]; pad = 1.5;
+        }
+        {
+            var avail = (29.7 - 2.2 - 5.2 - 0.8) * 28.35 - detailRows * (size * 1.22 + 7) - (size * 1.22 + 6);
+            if (all.Sum(x => RowHeight(x, size, pad)) > avail)
+            {
+                var keep = new List<RouteStep>(); double used = 0;
+                foreach (var st in Enumerable.Reverse(all)) { var h = RowHeight(st, size, pad); if (used + h > avail) break; keep.Insert(0, st); used += h; }
+                shown = keep;
+            }
+        }
 
         var doc = new Document();
         doc.Info.Title = "Route chart - " + title;
@@ -182,9 +232,30 @@ public static partial class Reports
         var meta = sec.AddParagraph($"{subtitle}   •   {arrivals} entries   •   {trips} trip(s) with a destination" + (onSite > 0 ? $"   •   time on site {Duration(onSite)}" : ""));
         meta.Format.Font.Size = 8; meta.Format.Font.Color = C("#52525B"); meta.Format.SpaceBefore = Unit.FromPoint(5); meta.Format.SpaceAfter = Unit.FromPoint(5);
 
+        if (details is { Count: > 0 })
+        {
+            // vehicle details: label / value pairs, four pairs per row
+            var dt = sec.AddTable();
+            for (var i = 0; i < 4; i++) { dt.AddColumn(Unit.FromCentimeter(2.1)); dt.AddColumn(Unit.FromCentimeter(2.55)); }
+            for (var i = 0; i < details.Count; i += 4)
+            {
+                var dr = dt.AddRow();
+                for (var j = 0; j < 4; j++)
+                {
+                    var has = i + j < details.Count;
+                    var lc = Cell(dr, j * 2, has ? details[i + j].Label : "", bold: true, color: C("#52525B")); if (has) lc.Shading.Color = C("#EEF2FF");
+                    Cell(dr, j * 2 + 1, has ? details[i + j].Value : "", bold: true, color: C("#0F172A"));
+                }
+            }
+            dt.Borders.Width = 0.25; dt.Borders.Color = C("#C7D2FE");
+            dt.LeftPadding = dt.RightPadding = Unit.FromPoint(3); dt.TopPadding = dt.BottomPadding = Unit.FromPoint(2.5);
+            sec.AddParagraph().Format.SpaceAfter = Unit.FromPoint(4);
+        }
+
         var tbl = sec.AddTable();
-        foreach (var w in new[] { 2.4, 1.2, 1.9, 4.4, 5.9, 2.8 }) tbl.AddColumn(Unit.FromCentimeter(w));
-        PdfHeader(tbl, "Date", "Time", "Step", "Location / destination", "Details", "Status");
+        foreach (var w in cols) tbl.AddColumn(Unit.FromCentimeter(w));
+        if (hasCrew) PdfHeader(tbl, "Date", "Time", "Step", "Location / destination", "Details", "Driver / co-driver / on board", "Status");
+        else PdfHeader(tbl, "Date", "Time", "Step", "Location / destination", "Details", "Status");
         var n = 0;
         foreach (var s in shown)
         {
@@ -195,7 +266,9 @@ public static partial class Reports
             var italic = s.Kind is "TRAVEL" or "AWAY";
             Cell(r, 3, s.Kind == "TRAVEL" ? "→ " + s.Place : s.Place, bold: true).Format.Font.Italic = italic;
             Cell(r, 4, s.Detail, color: C("#334155")).Format.Font.Italic = italic;
-            if (s.Status.Length > 0) { var st = Cell(r, 5, s.Status, bold: true, color: C(fg)); st.Shading.Color = C(bg); } else Cell(r, 5, "");
+            var statusIdx = hasCrew ? 6 : 5;
+            if (hasCrew) Cell(r, 5, s.Crew, color: C("#1E293B"));
+            if (s.Status.Length > 0) { var st = Cell(r, statusIdx, s.Status, bold: true, color: C(fg)); st.Shading.Color = C(bg); } else Cell(r, statusIdx, "");
         }
         tbl.Borders.Width = 0.25; tbl.Borders.Color = C("#D4D4D8");
         tbl.LeftPadding = tbl.RightPadding = Unit.FromPoint(3);
@@ -292,7 +365,7 @@ public static partial class Reports
         // ---- Trips
         var ws = wb.Worksheets.Add("Trips");
         ws.TabColor = XLColor.FromHtml("#06B6D4");
-        string[] head = ["Date", "Vehicle", "Vehicle ID", "From", "Planned destination", "Left at", "Approx time", "Expected by", "Status", "Ended at (place)", "Ended at (time)", "Time taken", "Compared with approx", "How recorded", "Remarks"];
+        string[] head = ["Date", "Vehicle", "Vehicle ID", "Driver", "Co-driver", "From", "Planned destination", "Left at", "Approx time", "Expected by", "Status", "Ended at (place)", "Ended at (time)", "Time taken", "Compared with approx", "How recorded", "Remarks"];
         Title(ws, 1, head.Length, "VEHICLE TRIPS — " + period, Ink);
         Header(ws, 3, head);
         row = 4;
@@ -300,17 +373,17 @@ public static partial class Reports
         {
             var status = TripStatus(t);
             var left = Local(L(t["left_at"]));
-            object[] vals = [left.ToString("dd MMM yyyy"), S(t["plate"]), Id(S(t["vehicle_id"])), S(t["from_name"]), S(t["dest_name"]) + (S(t["dest_loc"]).Length == 0 ? " (new place)" : ""), left.ToString("HH:mm"),
+            object[] vals = [left.ToString("dd MMM yyyy"), S(t["plate"]), Id(S(t["vehicle_id"])), S(t.GetValueOrDefault("driver_label")), S(t.GetValueOrDefault("co_driver_label")), S(t["from_name"]), S(t["dest_name"]) + (S(t["dest_loc"]).Length == 0 ? " (new place)" : ""), left.ToString("HH:mm"),
                 L(t["expected_min"]) > 0 ? TransitText.Mins(L(t["expected_min"])) : "not set", L(t["due_at"]) > 0 ? Local(L(t["due_at"])).ToString("dd MMM HH:mm") : "",
                 status, TripPlace(t), L(t["end_at"]) > 0 ? Local(L(t["end_at"])).ToString("dd MMM HH:mm") : "",
                 L(t["actual_min"]) > 0 ? TransitText.Mins(L(t["actual_min"])) : "", VsApprox(t), TripHow(t), S(t["note"])];
             for (var i = 0; i < vals.Length; i++) ws.Cell(row, i + 1).Value = S(vals[i]);
             if (row % 2 == 1) ws.Range(row, 1, row, head.Length).Style.Fill.SetBackgroundColor(XLColor.FromHtml(Band));
             var (bg, fg) = TripColors(status);
-            ws.Cell(row, 9).Style.Fill.SetBackgroundColor(XLColor.FromHtml(bg)).Font.SetFontColor(XLColor.FromHtml(fg)).Font.SetBold().Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+            ws.Cell(row, 11).Style.Fill.SetBackgroundColor(XLColor.FromHtml(bg)).Font.SetFontColor(XLColor.FromHtml(fg)).Font.SetBold().Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
             ws.Cell(row, 2).Style.Font.SetBold();
-            if (VsApprox(t).EndsWith("late")) ws.Cell(row, 13).Style.Font.SetFontColor(XLColor.FromHtml("#9F1239")).Font.SetBold();
-            else if (VsApprox(t).EndsWith("early") || VsApprox(t) == "on time") ws.Cell(row, 13).Style.Font.SetFontColor(XLColor.FromHtml("#047857")).Font.SetBold();
+            if (VsApprox(t).EndsWith("late")) ws.Cell(row, 15).Style.Font.SetFontColor(XLColor.FromHtml("#9F1239")).Font.SetBold();
+            else if (VsApprox(t).EndsWith("early") || VsApprox(t) == "on time") ws.Cell(row, 15).Style.Font.SetFontColor(XLColor.FromHtml("#047857")).Font.SetBold();
             row++;
         }
         if (trips.Count == 0) ws.Cell(row++, 1).Value = "No trips in this period";
@@ -409,18 +482,20 @@ public static partial class Reports
         var h2 = sec.AddParagraph("Trips");
         h2.Format.Font.Bold = true; h2.Format.Font.Size = 11; h2.Format.Font.Color = C(RouteBlue); h2.Format.SpaceBefore = Unit.FromPoint(14); h2.Format.SpaceAfter = Unit.FromPoint(4); h2.Format.KeepWithNext = true;
         var tt = sec.AddTable();
-        foreach (var w in new[] { 2.4, 2.6, 3.2, 3.6, 1.6, 1.8, 2.8, 3.6, 1.9, 3.5 }) tt.AddColumn(Unit.FromCentimeter(w));
-        PdfHeader(tt, "Left", "Vehicle", "From", "Planned destination", "Approx", "Taken", "Status", "Ended at", "vs approx", "How recorded");
+        foreach (var w in new[] { 2.2, 2.4, 3.4, 2.7, 3.0, 1.5, 1.5, 2.5, 2.9, 1.8, 3.1 }) tt.AddColumn(Unit.FromCentimeter(w));
+        PdfHeader(tt, "Left", "Vehicle", "Driver / co-driver", "From", "Planned destination", "Approx", "Taken", "Status", "Ended at", "vs approx", "How recorded");
         n = 0;
         foreach (var t in trips)
         {
             var status = TripStatus(t); var (bg, fg) = TripColors(status);
             var r = tt.AddRow(); if (n++ % 2 == 1) r.Shading.Color = C(Band);
-            Cell(r, 0, Local(L(t["left_at"])).ToString("dd MMM HH:mm")); Cell(r, 1, S(t["plate"]), bold: true); Cell(r, 2, S(t["from_name"]));
-            Cell(r, 3, S(t["dest_name"]) + (S(t["dest_loc"]).Length == 0 ? " (new)" : ""));
-            Cell(r, 4, L(t["expected_min"]) > 0 ? TransitText.Mins(L(t["expected_min"])) : "—"); Cell(r, 5, L(t["actual_min"]) > 0 ? TransitText.Mins(L(t["actual_min"])) : "—");
-            var sc = Cell(r, 6, status, bold: true, color: C(fg)); sc.Shading.Color = C(bg);
-            Cell(r, 7, TripPlace(t)); Cell(r, 8, VsApprox(t)); Cell(r, 9, TripHow(t));
+            Cell(r, 0, Local(L(t["left_at"])).ToString("dd MMM HH:mm")); Cell(r, 1, S(t["plate"]), bold: true);
+            Cell(r, 2, string.Join(" / ", new[] { S(t.GetValueOrDefault("driver_label")), S(t.GetValueOrDefault("co_driver_label")) }.Where(x => x.Length > 0)));
+            Cell(r, 3, S(t["from_name"]));
+            Cell(r, 4, S(t["dest_name"]) + (S(t["dest_loc"]).Length == 0 ? " (new)" : ""));
+            Cell(r, 5, L(t["expected_min"]) > 0 ? TransitText.Mins(L(t["expected_min"])) : "—"); Cell(r, 6, L(t["actual_min"]) > 0 ? TransitText.Mins(L(t["actual_min"])) : "—");
+            var sc = Cell(r, 7, status, bold: true, color: C(fg)); sc.Shading.Color = C(bg);
+            Cell(r, 8, TripPlace(t)); Cell(r, 9, VsApprox(t)); Cell(r, 10, TripHow(t));
         }
         if (trips.Count == 0) { var r = tt.AddRow(); Cell(r, 0, "No trips in this period"); }
         PdfGrid(tt);
@@ -435,12 +510,12 @@ public static partial class Reports
         long fromMs = new DateTimeOffset(from.Date).ToUnixTimeMilliseconds(), toMs = new DateTimeOffset(to.Date.AddDays(1)).ToUnixTimeMilliseconds() - 1;
         var rows = store.Transits("", "", fromMs, toMs, 100_000).Select(t => new Dictionary<string, object?>
         {
-            ["date"] = Local(L(t["left_at"])).ToString("yyyy-MM-dd"), ["left"] = Local(L(t["left_at"])).ToString("HH:mm"), ["vehicle"] = S(t["plate"]), ["vehicle_id"] = Id(S(t["vehicle_id"])),
+            ["date"] = Local(L(t["left_at"])).ToString("yyyy-MM-dd"), ["left"] = Local(L(t["left_at"])).ToString("HH:mm"), ["vehicle"] = S(t["plate"]), ["vehicle_id"] = Id(S(t["vehicle_id"])), ["driver"] = S(t.GetValueOrDefault("driver_label")), ["co_driver"] = S(t.GetValueOrDefault("co_driver_label")),
             ["from"] = S(t["from_name"]), ["to"] = S(t["dest_name"]), ["approx"] = L(t["expected_min"]) > 0 ? L(t["expected_min"]).ToString() : "",
             ["status"] = TripStatus(t), ["ended_place"] = TripPlace(t), ["ended_at"] = L(t["end_at"]) > 0 ? Local(L(t["end_at"])).ToString("yyyy-MM-dd HH:mm") : "",
             ["taken"] = L(t["actual_min"]) > 0 ? L(t["actual_min"]).ToString() : "", ["vs"] = VsApprox(t), ["how"] = TripHow(t), ["remarks"] = S(t["note"]),
         });
-        (string, string)[] cols = [("Date", "date"), ("Left", "left"), ("Vehicle", "vehicle"), ("Vehicle ID", "vehicle_id"), ("From", "from"), ("Planned destination", "to"),
+        (string, string)[] cols = [("Date", "date"), ("Left", "left"), ("Vehicle", "vehicle"), ("Vehicle ID", "vehicle_id"), ("Driver", "driver"), ("Co-driver", "co_driver"), ("From", "from"), ("Planned destination", "to"),
             ("Approx time (min)", "approx"), ("Status", "status"), ("Ended at (place)", "ended_place"), ("Ended at (time)", "ended_at"), ("Time taken (min)", "taken"),
             ("Compared with approx", "vs"), ("How recorded", "how"), ("Remarks", "remarks")];
         File.WriteAllText(path, XV.Core.Csv.Build(rows, cols), new UTF8Encoding(true));

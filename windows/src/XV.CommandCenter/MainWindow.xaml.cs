@@ -734,8 +734,9 @@ public partial class MainWindow : Window
                 var ext = kind == "xlsx" ? ".xlsx" : ".pdf";
                 var dlg = new Microsoft.Win32.SaveFileDialog { FileName = $"XV-Route-{DisplayId(entityId)}-{DateTime.Now:yyyyMMdd-HHmm}{ext}", Filter = kind == "xlsx" ? "Excel workbook|*.xlsx" : "PDF document|*.pdf" };
                 if (dlg.ShowDialog(this) != true) return;
-                if (kind == "xlsx") XV.Core.Reports.RouteChartExcel(rows, title, subtitle, dlg.FileName, manual);
-                else XV.Core.Reports.RouteChartPdf(rows, title, subtitle, dlg.FileName, manual);
+                var details = isPerson ? null : TransitText.VehicleDetails(entity);
+                if (kind == "xlsx") XV.Core.Reports.RouteChartExcel(rows, title, subtitle, dlg.FileName, manual, details);
+                else XV.Core.Reports.RouteChartPdf(rows, title, subtitle, dlg.FileName, manual, details);
                 if (MessageBox.Show(this, "Route chart saved. Open it now?", "Export finished", MessageBoxButton.YesNo) == MessageBoxResult.Yes)
                     System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dlg.FileName) { UseShellExecute = true });
             }

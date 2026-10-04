@@ -60,11 +60,25 @@ static class DemoRoute
             Ev(left5, "EXIT", "Battalion HQ", "Main Gate", stayMin: (long)(left5 - back).TotalMinutes).Trip(left5, "Armory", "EN_ROUTE", 20),
         };
         foreach (var r in vehicle) r["entity_type"] = "VEHICLE";
+        // the crew changes after the breakdown: a different driver and co-driver take the truck out the next day
+        var backMs = new DateTimeOffset(back).ToUnixTimeMilliseconds();
+        foreach (var r in vehicle)
+        {
+            var second = Convert.ToInt64(r["event_ts"]) >= backMs;
+            r["driver_label"] = second ? "Naik Suresh Yadav" : "Havildar Ram Singh";
+            r["co_driver_label"] = second ? "Lance Naik Dev Patel" : "Sepoy Anil Kumar";
+            r["occupant_labels"] = second ? "" : "Sepoy Mohan Lal, Sepoy Ravi Teja";
+        }
         vehicle.Reverse();
+        IReadOnlyList<(string Label, string Value)> vdetails =
+        [
+            ("Registration", "KA-01-MT-4521"), ("Vehicle ID", "V-001"), ("Military reg", "MH-2291-B"), ("Type", "Supply Truck"),
+            ("Model", "Ashok Leyland 10T"), ("Company", "Alpha"), ("Status", "ACTIVE"),
+        ];
 
         Reports.RouteChartExcel(person, "Capt Rajesh Kumar  •  P-014  •  Alpha Company", "Movement history (FAKE DEMO DATA)", Path.Combine(dir, "Route-Chart-PERSON-demo.xlsx"));
         Reports.RouteChartPdf(person, "Capt Rajesh Kumar  •  P-014  •  Alpha Company", "Movement history (FAKE DEMO DATA)", Path.Combine(dir, "Route-Chart-PERSON-demo.pdf"));
-        Reports.RouteChartExcel(vehicle, "KA-01-MT-4521  •  V-001  •  Supply Truck", "Movement history (FAKE DEMO DATA)", Path.Combine(dir, "Route-Chart-VEHICLE-demo.xlsx"));
-        Reports.RouteChartPdf(vehicle, "KA-01-MT-4521  •  V-001  •  Supply Truck", "Movement history (FAKE DEMO DATA)", Path.Combine(dir, "Route-Chart-VEHICLE-demo.pdf"));
+        Reports.RouteChartExcel(vehicle, "KA-01-MT-4521  •  V-001  •  Supply Truck", "Movement history (FAKE DEMO DATA)", Path.Combine(dir, "Route-Chart-VEHICLE-demo.xlsx"), null, vdetails);
+        Reports.RouteChartPdf(vehicle, "KA-01-MT-4521  •  V-001  •  Supply Truck", "Movement history (FAKE DEMO DATA)", Path.Combine(dir, "Route-Chart-VEHICLE-demo.pdf"), null, vdetails);
     }
 }

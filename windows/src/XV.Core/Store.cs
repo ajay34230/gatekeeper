@@ -807,10 +807,13 @@ public sealed partial class Store : IDisposable
 
     // ------------------------------------------------------------------ dashboard queries
 
-    public List<Dictionary<string, object?>> RecentEvents(int limit = 300, string q = "", string type = "ALL") => Query("""
+    public List<Dictionary<string, object?>> RecentEvents(int limit = 300, string q = "", string type = "ALL")
+    {
+        var rows = Query("""
         SELECT e.*, COALESCE(p.name, v.plate, e.entity_id) AS title,
                CASE WHEN e.entity_type='PERSON' THEN TRIM(COALESCE(p.rank,'') || ' ' || COALESCE(p.unit,'')) ELSE COALESCE(v.type,'') END AS subtitle,
                COALESCE(l.name, e.location_id) AS location_name, COALESCE(g.name, e.gate_id) AS gate_name, m.occupants,
+               m.driver_id AS crew_driver_id, m.co_driver_id AS crew_co_driver_id,
                tr.transit_id AS tr_transit_id, tr.dest_name AS tr_dest_name, tr.state AS tr_state, tr.expected_min AS tr_expected_min, tr.due_at AS tr_due_at,
                tr.actual_min AS tr_actual_min, tr.resolved_via AS tr_resolved_via, tr.resolved_by AS tr_resolved_by, tr.end_name AS tr_end_name, tr.note AS tr_note, tr.left_at AS tr_left_at
         FROM events e
@@ -823,14 +826,20 @@ public sealed partial class Store : IDisposable
           AND ($3='' OR e.entity_id LIKE $4 OR p.name LIKE $4 OR v.plate LIKE $4 OR e.location_id LIKE $4 OR l.name LIKE $4 OR e.operator_id LIKE $4)
         ORDER BY e.seq DESC LIMIT $1
         """, limit, type, q.Trim(), "%" + q.Trim() + "%");
+        AttachCrew(rows);
+        return rows;
+    }
 
     /// <summary>The complete movement history for one exact person/vehicle -- every record ever made for it, newest
     /// first, with no recency cap. Used by the "History" dossier view, which must show the total record, not just
     /// however many of the *system's* most recent events (across everyone) happen to include this one.</summary>
-    public List<Dictionary<string, object?>> EventsForEntity(string type, string id) => Query("""
+    public List<Dictionary<string, object?>> EventsForEntity(string type, string id)
+    {
+        var rows = Query("""
         SELECT e.*, COALESCE(p.name, v.plate, e.entity_id) AS title,
                CASE WHEN e.entity_type='PERSON' THEN TRIM(COALESCE(p.rank,'') || ' ' || COALESCE(p.unit,'')) ELSE COALESCE(v.type,'') END AS subtitle,
                COALESCE(l.name, e.location_id) AS location_name, COALESCE(g.name, e.gate_id) AS gate_name, m.occupants,
+               m.driver_id AS crew_driver_id, m.co_driver_id AS crew_co_driver_id,
                tr.transit_id AS tr_transit_id, tr.dest_name AS tr_dest_name, tr.state AS tr_state, tr.expected_min AS tr_expected_min, tr.due_at AS tr_due_at,
                tr.actual_min AS tr_actual_min, tr.resolved_via AS tr_resolved_via, tr.resolved_by AS tr_resolved_by, tr.end_name AS tr_end_name, tr.note AS tr_note, tr.left_at AS tr_left_at
         FROM events e
@@ -842,6 +851,9 @@ public sealed partial class Store : IDisposable
         WHERE e.entity_type=$1 AND e.entity_id=$2
         ORDER BY e.seq DESC
         """, type, id);
+        AttachCrew(rows);
+        return rows;
+    }
 
     public (long inside, long outside, long fleetIn, long fleet, long flags, long total, long entriesToday, long exitsToday) Stats()
     {

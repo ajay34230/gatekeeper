@@ -218,14 +218,38 @@ public sealed partial class Store
     public List<Dictionary<string, object?>> Transits(string state = "", string vehicleId = "", long fromMs = 0, long toMs = long.MaxValue, int limit = 2000)
     {
         var rows = Query("""
-            SELECT t.*, COALESCE(v.plate, t.vehicle_id) AS plate, COALESCE(v.type,'') AS vehicle_type
-            FROM transits t LEFT JOIN vehicles v ON v.id=t.vehicle_id
+            SELECT t.*, COALESCE(v.plate, t.vehicle_id) AS plate, COALESCE(v.type,'') AS vehicle_type,
+                   m.driver_id AS crew_driver_id, m.co_driver_id AS crew_co_driver_id
+            FROM transits t LEFT JOIN vehicles v ON v.id=t.vehicle_id LEFT JOIN manifests m ON m.exit_event_id=t.exit_event_id
             WHERE ($1='' OR t.state=$1) AND ($2='' OR t.vehicle_id=$2) AND t.left_at BETWEEN $3 AND $4
             ORDER BY t.left_at DESC LIMIT $5
             """, Upper(state), CanonId(vehicleId), fromMs, toMs, limit);
         var now = NowMs;
         foreach (var r in rows) Decorate(r, now);
+        AttachCrew(rows);
         return rows;
+    }
+
+    /// <summary>Adds the driver, co-driver and other people on board to vehicle records, by their current rank and name
+    /// (so a name changed in the registry shows its new form everywhere). Records without a crew are left untouched.</summary>
+    void AttachCrew(List<Dictionary<string, object?>> rows)
+    {
+        if (!rows.Any(r => r.TryGetValue("crew_driver_id", out var d) && d != null)) return;
+        var labels = Query("SELECT id, TRIM(COALESCE(rank,'') || ' ' || name) AS label FROM persons").ToDictionary(r => S(r["id"]), r => S(r["label"]));
+        string Label(object? id) => id == null ? "" : labels.TryGetValue(S(id), out var l) ? l : S(id);
+        foreach (var r in rows)
+        {
+            var driver = r.GetValueOrDefault("crew_driver_id"); var co = r.GetValueOrDefault("crew_co_driver_id");
+            r["driver_label"] = Label(driver); r["co_driver_label"] = Label(co);
+            var occ = S(r.GetValueOrDefault("occupants"));
+            IEnumerable<string> others = [];
+            if (occ.Length > 2)
+            {
+                try { others = (System.Text.Json.JsonSerializer.Deserialize<List<string>>(occ) ?? []).Where(x => x != S(driver) && x != S(co)).Select(x => Label(x)); }
+                catch { /* an unreadable manifest simply shows no extra people */ }
+            }
+            r["occupant_labels"] = string.Join(", ", others);
+        }
     }
 
     public Dictionary<string, object?>? TransitForExit(string exitEventId)

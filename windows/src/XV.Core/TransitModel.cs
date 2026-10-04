@@ -46,6 +46,17 @@ public static class TransitText
         return $"Vehicle {vehicle} left {G(t, "from_name")} at {When(N(t, "left_at"))} and has not reached {G(t, "dest_name")}.{late}";
     }
 
+    /// <summary>The vehicle's details for the top of a route chart: registration, id, military registration, type, model, company, status.</summary>
+    public static List<(string Label, string Value)> VehicleDetails(IReadOnlyDictionary<string, object?> v)
+    {
+        var all = new (string, string)[]
+        {
+            ("Registration", G(v, "plate")), ("Vehicle ID", Dash(G(v, "id"))), ("Military reg", G(v, "mil_reg")), ("Type", G(v, "type")),
+            ("Model", G(v, "model")), ("Company", G(v, "company")), ("Status", G(v, "status")),
+        };
+        return all.Where(x => x.Item2.Length > 0).Select(x => (x.Item1, x.Item2)).ToList();
+    }
+
     /// <summary>True when the trip is still open and past its approximate time.</summary>
     public static bool IsOverdue(IReadOnlyDictionary<string, object?> r, string prefix = "", long? nowMs = null)
     {
@@ -81,7 +92,7 @@ public static class TransitText
 }
 
 /// <summary>One line of a route chart: where someone arrived or left, the time away, and what happened on each trip.</summary>
-public sealed record RouteStep(string Kind, long Ts, string Title, string Place, string Detail, string Status);
+public sealed record RouteStep(string Kind, long Ts, string Title, string Place, string Detail, string Status, string Crew = "");
 
 public static class RouteModel
 {
@@ -104,6 +115,22 @@ public static class RouteModel
         var ev = newestFirst.Reverse().OrderBy(x => L(x["event_ts"])).ToList();
         var steps = new List<RouteStep>();
         long expectedBack = 0;
+        var lastDriver = "";
+        var lastCrew = "";
+        // full = driver, co-driver and everyone else on board; short = driver and co-driver only
+        string CrewOf(Dictionary<string, object?> r, bool full = true)
+        {
+            string d = S(r.GetValueOrDefault("driver_label")), c = S(r.GetValueOrDefault("co_driver_label")), o = S(r.GetValueOrDefault("occupant_labels"));
+            return string.Join("  •  ", new[] { d.Length > 0 ? "Driver: " + d : "", c.Length > 0 ? "Co-driver: " + c : "", full && o.Length > 0 ? "Also on board: " + o : "" }.Where(x => x.Length > 0));
+        }
+        // the full crew is written where it arrives or changes, not repeated on every row
+        string CrewIfNew(Dictionary<string, object?> r)
+        {
+            var crew = CrewOf(r);
+            if (crew == lastCrew) return "";
+            lastCrew = crew;
+            return crew;
+        }
         for (var i = 0; i < ev.Count; i++)
         {
             var e = ev[i];
@@ -123,14 +150,17 @@ public static class RouteModel
                 var stay = exit == null ? "Still inside" : L(exit["stay_ms"]) > 0 ? "Stayed " + Dur(L(exit["stay_ms"])) : "";
                 var back = expectedBack > 0 ? (ts > expectedBack + 3_600_000 ? "Came back " + Dur(ts - expectedBack) + " after the expected date" : "Came back on time") : "";
                 expectedBack = 0;
-                steps.Add(new RouteStep("ARRIVED", ts, "ARRIVED", place, string.Join("  •  ", new[] { stay, back, note }.Where(x => x.Length > 0)), ""));
+                var driver = S(e.GetValueOrDefault("driver_label"));
+                var changed = driver.Length > 0 && lastDriver.Length > 0 && !driver.Equals(lastDriver, StringComparison.OrdinalIgnoreCase) ? "Driver changed (was " + lastDriver + ")" : "";
+                if (driver.Length > 0) lastDriver = driver;
+                steps.Add(new RouteStep("ARRIVED", ts, "ARRIVED", place, string.Join("  •  ", new[] { stay, back, changed, note }.Where(x => x.Length > 0)), "", CrewIfNew(e)));
             }
             else if (type == "EXIT")
             {
                 var back = L(e.GetValueOrDefault("expected_return"));
                 expectedBack = back;
                 var detail = string.Join("  •  ", new[] { note, back > 0 ? "Expected back " + DateTimeOffset.FromUnixTimeMilliseconds(back).LocalDateTime.ToString("dd MMM yyyy") : "" }.Where(x => x.Length > 0));
-                steps.Add(new RouteStep("LEFT", ts, "LEFT", place, detail, ""));
+                steps.Add(new RouteStep("LEFT", ts, "LEFT", place, detail, "", CrewIfNew(e)));
 
                 var line = TransitText.Line(e, "tr_", now);
                 var next = i + 1 < ev.Count ? ev[i + 1] : null;
@@ -138,7 +168,7 @@ public static class RouteModel
                 {
                     var overdue = TransitText.IsOverdue(e, "tr_", now);
                     var went = S(e["tr_state"]) is Store.TransitDiverted or Store.TransitStopped && S(e["tr_end_name"]).Length > 0 ? S(e["tr_end_name"]) : S(e["tr_dest_name"]);
-                    steps.Add(new RouteStep("TRAVEL", ts, "TRAVEL", went, line, TransitText.StateLabel(S(e["tr_state"]), overdue)));
+                    steps.Add(new RouteStep("TRAVEL", ts, "TRAVEL", went, line, TransitText.StateLabel(S(e["tr_state"]), overdue), CrewOf(e, full: false)));
                 }
                 else if (next != null && S(next["event_type"]) == "ENTRY")
                     steps.Add(new RouteStep("AWAY", ts, "AWAY", "", $"Away for {Dur(L(next["event_ts"]) - ts)} before the next entry" + (S(e.GetValueOrDefault("entity_type")) == "VEHICLE" ? " (no destination was recorded)" : ""), ""));

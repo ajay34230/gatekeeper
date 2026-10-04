@@ -163,8 +163,9 @@ if (tri >= 0 && tri + 1 < args.Length)
     Reports.TransitCsv(store, d0, DateTime.Today, Path.Combine(args[tri + 1], "XV-Transit.csv"));
     var vh = store.EventsForEntity("VEHICLE", "V014");
     var manual = store.Transits("", "V014").Where(t => (t["exit_event_id"]?.ToString() ?? "").Length == 0).ToList();
-    Reports.RouteChartExcel(vh, "V014 • demo vehicle", "Movement history", Path.Combine(args[tri + 1], "XV-Route.xlsx"), manual);
-    Reports.RouteChartPdf(vh, "V014 • demo vehicle", "Movement history", Path.Combine(args[tri + 1], "XV-Route.pdf"), manual);
+    var vdet = store.Vehicles().FirstOrDefault(v => v["id"]?.ToString() == "V014") is { } vrow ? TransitText.VehicleDetails(vrow) : null;
+    Reports.RouteChartExcel(vh, "V014 • demo vehicle", "Movement history", Path.Combine(args[tri + 1], "XV-Route.xlsx"), manual, vdet);
+    Reports.RouteChartPdf(vh, "V014 • demo vehicle", "Movement history", Path.Combine(args[tri + 1], "XV-Route.pdf"), manual, vdet);
     Console.WriteLine("Transit reports written to " + args[tri + 1]);
     return;
 }
