@@ -195,13 +195,14 @@ public static class GuideContent
         new("16. Backup, restore, lock and administrator password",
             "Protect and recover your data.",
             [
-                "Import / Export > ENCRYPTED BACKUP & RESTORE > Create encrypted backup... Choose a file and a password. The file holds the whole database and settings, encrypted.",
-                "Restore from backup... asks for the same password and replaces the data on this PC. Do this only on purpose.",
+                "Two backup methods:",
+                "ENCRYPTED FULL BACKUP: Create encrypted backup... Choose a file and a password. It holds the whole database and settings, encrypted. Restore from backup... asks for the same password and replaces all data. Do this only on purpose.",
+                "GRANULAR BACKUPS: Export and import individual data types (personnel, vehicles, accounts, devices, settings) as JSON files. Useful for selective recovery, migration, or replication to other systems.",
                 "Set an administrator password in Settings. It is then asked before exports, manual records and other sensitive actions.",
                 "Press the lock button at the top to lock the screen. The gate server keeps running. Enter the administrator password to unlock.",
                 "Auto-lock locks the screen after the idle time set in Settings.",
             ],
-            ["Keep the backup password safe. Without it the backup cannot be opened."],
+            ["Keep backup passwords safe. Without them the backups cannot be opened."],
             []),
 
         new("17. Cloud Link (phones over the internet)",
