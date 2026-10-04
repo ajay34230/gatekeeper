@@ -294,6 +294,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO + appErrors) {
             val r = api.resolveTransit(trip.transitId, kind, minutes, placeName, placeId, config.locationId)
             if (r.isSuccess) {
+                incomingTrips = incomingTrips.filter { it.transitId != trip.transitId }
                 refreshIncoming()
                 withContext(Dispatchers.Main) { onDone(true) }
             } else {

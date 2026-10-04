@@ -45,18 +45,20 @@ data class MovementEventDto(
     val gateId: String, val deviceId: String, val operatorId: String, val eventTimestamp: Long, val createdAt: Long,
     val syncStatus: String, val syncAttempts: Int, val lastError: String?, val syncUpdatedAt: Long, val sourceType: String,
     val sourceId: String?, val locationMismatch: Boolean, val scannedLocation: String, val reason: String,
-    val remarks: String, val expectedReturn: Long, val comingFrom: String = ""
+    val remarks: String, val expectedReturn: Long, val comingFrom: String = "",
+    val destinationId: String = "", val destinationName: String = "", val transitMinutes: Int = 0
 ) {
     fun toEntity() = MovementEventEntity(
         eventId, entityType, entityId, eventType, locationId, gateId, deviceId, operatorId, eventTimestamp, createdAt,
         syncStatus, syncAttempts, lastError, syncUpdatedAt, sourceType, sourceId, locationMismatch, scannedLocation,
-        reason, remarks, expectedReturn, comingFrom
+        reason, remarks, expectedReturn, comingFrom, destinationId, destinationName, transitMinutes
     )
     companion object {
         fun of(e: MovementEventEntity) = MovementEventDto(
             e.eventId, e.entityType, e.entityId, e.eventType, e.locationId, e.gateId, e.deviceId, e.operatorId,
             e.eventTimestamp, e.createdAt, e.syncStatus, e.syncAttempts, e.lastError, e.syncUpdatedAt, e.sourceType,
-            e.sourceId, e.locationMismatch, e.scannedLocation, e.reason, e.remarks, e.expectedReturn, e.comingFrom
+            e.sourceId, e.locationMismatch, e.scannedLocation, e.reason, e.remarks, e.expectedReturn, e.comingFrom,
+            e.destinationId, e.destinationName, e.transitMinutes
         )
     }
 }
