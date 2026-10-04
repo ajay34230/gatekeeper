@@ -256,4 +256,33 @@ public sealed partial class Store
         }
         return true;
     }
+
+    // ================================================================== granular import for backup/restore
+
+    public void ImportPersonnel(string id, string name, string rank, string company, string platoon, string section, string mobile, string status, string notes)
+    {
+        Exec("INSERT OR REPLACE INTO persons (id, name, rank, company, platoon, section, mobile, status, notes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+            id, name, rank, company, platoon, section, mobile, status, notes);
+        Notify();
+    }
+
+    public void ImportVehicle(string id, string plate, string milReg, string type, string model, string company, string status)
+    {
+        Exec("INSERT OR REPLACE INTO vehicles (id, plate, mil_reg, type, model, company, status) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            id, plate, milReg, type, model, company, status);
+        Notify();
+    }
+
+    public void ImportAccount(string id, string name, string role, string status)
+    {
+        Exec("INSERT OR REPLACE INTO accounts (id, name, role, status) VALUES ($1, $2, $3, $4)", id, name, role, status);
+        Notify();
+    }
+
+    public void ImportDevice(string deviceId, string name, string model, string locationId, string gateId, string operatorId)
+    {
+        Exec("INSERT OR REPLACE INTO devices (device_id, name, model, location_id, gate_id, operator_id, active) VALUES ($1, $2, $3, $4, $5, $6, 1)",
+            deviceId, name, model, locationId, gateId, operatorId);
+        Notify();
+    }
 }

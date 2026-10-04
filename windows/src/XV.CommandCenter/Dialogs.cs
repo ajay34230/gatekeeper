@@ -628,19 +628,27 @@ public static class Dialogs
 
     sealed class ImportExportWindow : DarkWindow
     {
-        public ImportExportWindow() : base("Import / Export", "Move registry data in and out as CSV files (open directly in Excel). Imports add new records and update existing IDs.", 620, 560)
+        public ImportExportWindow() : base("Import / Export", "Move registry data in and out as CSV files (open directly in Excel). Imports add new records and update existing IDs.", 700, 720)
         {
             Section("SOLDIER REGISTER (EXCEL • CSV)",
                 ("Import Excel / CSV", () => SoldierRegister.Import(this), "BtnEmerald"), ("Export…", () => SoldierRegister.Export(this), "BtnBase"),
                 ("Blank template", () => SoldierRegister.Template(this), "BtnBase"), ("Import photos from folder", () => SoldierRegister.ImportPhotos(this), "BtnBase"));
             Section("VEHICLE FLEET",
                 ("Import CSV", () => Import(false), "BtnEmerald"), ("Export CSV", () => SaveCsv("xv-vehicles.csv", Csv.Build(App.Store.Vehicles(), VehicleCols)), "BtnBase"),
-                ("Blank template", () => SaveCsv("xv-vehicles-template.csv", Csv.Build([], VehicleCols), containsData: false), "BtnBase"));
+                ("Blank template", () => SaveCsv("xv-vehicles-template.csv", Csv.Build([], VehicleCols), containsData: false), "BtnBase"),
+                ("Export JSON", () => ExportVehiclesBackup(this), "BtnBase"), ("Import JSON", () => ImportVehiclesBackup(this), "BtnEmerald"));
+            Section("PERSONNEL JSON BACKUP",
+                ("Export personnel", () => ExportPersonnelBackup(this), "BtnBase"), ("Import personnel", () => ImportPersonnelBackup(this), "BtnEmerald"));
+            Section("ACCOUNTS & DEVICES",
+                ("Export accounts", () => ExportAccountsBackup(this), "BtnBase"), ("Import accounts", () => ImportAccountsBackup(this), "BtnEmerald"),
+                ("Export devices", () => ExportDevicesBackup(this), "BtnBase"), ("Import devices", () => ImportDevicesBackup(this), "BtnEmerald"));
+            Section("SERVER SETTINGS & CONFIG",
+                ("Export settings backup", () => ExportSettingsBackup(this), "BtnBase"), ("Import settings backup", () => ImportSettingsBackup(this), "BtnEmerald"));
             Section("REPORTS (EXCEL • PDF • CSV)", ("Company-wise report…", () => Report(this, "ALL", []), "BtnAmber"));
             Section("GATE RECORDS & AUDIT", ("Export gate records", () => ExportEvents(this), "BtnBase"), ("Export audit trail", () => ExportAudit(this), "BtnBase"));
             Section("ENCRYPTED BACKUP & RESTORE", ("Create encrypted backup…", () => BackupUi.Create(this), "BtnAmber"), ("Restore from backup…", () => BackupUi.Restore(this), "BtnDanger"),
                 ("Open data folder", () => System.Diagnostics.Process.Start("explorer.exe", Paths.DataDir), "BtnBase"));
-            Body.Children.Add(Para("The database key is protected by Windows for this PC only. A password-protected backup (.xvbackup) is the way to recover everything — registry, records, photos, accounts, paired terminals, Comms and settings — on a new PC."));
+            Body.Children.Add(Para("The database key is protected by Windows for this PC only. A password-protected backup (.xvbackup) is the way to recover everything — registry, records, photos, accounts, paired terminals, Comms and settings — on a new PC. Use granular backups to selectively export/import specific data types."));
             AddButton("Close", Close, "BtnAmber");
         }
 
@@ -659,6 +667,84 @@ public static class Dialogs
             var text = File.ReadAllText(dlg.FileName);
             var (ok, errors) = persons ? RegistryImport.Persons(App.Store, text) : RegistryImport.Vehicles(App.Store, text);
             MessageBox.Show($"Imported {ok} record(s)." + (errors.Count > 0 ? $"\n\n{errors.Count} row(s) skipped:\n" + string.Join("\n", errors.Take(15)) : ""), "Import finished");
+        }
+
+        void ExportPersonnelBackup(Window owner) => SaveJson($"xv-personnel-backup-{DateTime.Now:yyyyMMdd-HHmm}.json", GranularBackup.ExportPersonnelAsJson(App.Store));
+
+        void ImportPersonnelBackup(Window owner)
+        {
+            var dlg = new OpenFileDialog { Filter = "JSON|*.json" };
+            if (dlg.ShowDialog() != true) return;
+            try
+            {
+                var imported = GranularBackup.ImportPersonnelFromJson(App.Store, File.ReadAllText(dlg.FileName));
+                MessageBox.Show(owner, $"Imported {imported} personnel record(s).", "Import successful");
+            }
+            catch (Exception ex) { MessageBox.Show(owner, $"Error: {ex.Message}", "Import failed"); }
+        }
+
+        void ExportVehiclesBackup(Window owner) => SaveJson($"xv-vehicles-backup-{DateTime.Now:yyyyMMdd-HHmm}.json", GranularBackup.ExportVehiclesAsJson(App.Store));
+
+        void ImportVehiclesBackup(Window owner)
+        {
+            var dlg = new OpenFileDialog { Filter = "JSON|*.json" };
+            if (dlg.ShowDialog() != true) return;
+            try
+            {
+                var imported = GranularBackup.ImportVehiclesFromJson(App.Store, File.ReadAllText(dlg.FileName));
+                MessageBox.Show(owner, $"Imported {imported} vehicle(s).", "Import successful");
+            }
+            catch (Exception ex) { MessageBox.Show(owner, $"Error: {ex.Message}", "Import failed"); }
+        }
+
+        void ExportAccountsBackup(Window owner) => SaveJson($"xv-accounts-backup-{DateTime.Now:yyyyMMdd-HHmm}.json", GranularBackup.ExportAccountsAsJson(App.Store));
+
+        void ImportAccountsBackup(Window owner)
+        {
+            var dlg = new OpenFileDialog { Filter = "JSON|*.json" };
+            if (dlg.ShowDialog() != true) return;
+            try
+            {
+                var imported = GranularBackup.ImportAccountsFromJson(App.Store, File.ReadAllText(dlg.FileName));
+                MessageBox.Show(owner, $"Imported {imported} account(s).", "Import successful");
+            }
+            catch (Exception ex) { MessageBox.Show(owner, $"Error: {ex.Message}", "Import failed"); }
+        }
+
+        void ExportDevicesBackup(Window owner) => SaveJson($"xv-devices-backup-{DateTime.Now:yyyyMMdd-HHmm}.json", GranularBackup.ExportDevicesAsJson(App.Store));
+
+        void ImportDevicesBackup(Window owner)
+        {
+            var dlg = new OpenFileDialog { Filter = "JSON|*.json" };
+            if (dlg.ShowDialog() != true) return;
+            try
+            {
+                var imported = GranularBackup.ImportDevicesFromJson(App.Store, File.ReadAllText(dlg.FileName));
+                MessageBox.Show(owner, $"Imported {imported} device(s).", "Import successful");
+            }
+            catch (Exception ex) { MessageBox.Show(owner, $"Error: {ex.Message}", "Import failed"); }
+        }
+
+        void ExportSettingsBackup(Window owner) => SaveJson($"xv-settings-backup-{DateTime.Now:yyyyMMdd-HHmm}.json", GranularBackup.ExportSettingsAsJson());
+
+        void ImportSettingsBackup(Window owner)
+        {
+            var dlg = new OpenFileDialog { Filter = "JSON|*.json" };
+            if (dlg.ShowDialog() != true) return;
+            try
+            {
+                GranularBackup.ImportSettingsFromJson(File.ReadAllText(dlg.FileName));
+                MessageBox.Show(owner, "Settings imported. Please restart the Command Center for changes to take effect.", "Import successful");
+            }
+            catch (Exception ex) { MessageBox.Show(owner, $"Error: {ex.Message}", "Import failed"); }
+        }
+
+        void SaveJson(string filename, string json)
+        {
+            var dlg = new SaveFileDialog { FileName = filename, Filter = "JSON|*.json" };
+            if (dlg.ShowDialog() != true) return;
+            File.WriteAllText(dlg.FileName, json);
+            MessageBox.Show($"Backup saved:\n{dlg.FileName}", "Export successful");
         }
     }
 
