@@ -41,7 +41,9 @@ data class MovementEventEntity(
     /** Vehicle EXIT only: the destination the guard entered and the approximate minutes (0 = not entered). */
     val destinationId: String = "",
     val destinationName: String = "",
-    val transitMinutes: Int = 0
+    val transitMinutes: Int = 0,
+    val serverSeq: Long = 0L,
+    val serverRecordedAt: Long = 0L
 )
 
 @Entity(tableName = "presence_sessions", indices = [

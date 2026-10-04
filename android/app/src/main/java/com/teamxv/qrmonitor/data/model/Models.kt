@@ -43,7 +43,10 @@ data class MovementEvent(
     /** Vehicle EXIT only: where the vehicle is going (a known location id, or a typed place) and the approximate minutes. */
     val destinationId: String = "",
     val destinationName: String = "",
-    val transitMinutes: Int = 0
+    val transitMinutes: Int = 0,
+    /** Set when the Command Center has stored the record: its server sequence number and the time it recorded it (0 = not recorded yet). */
+    val serverSeq: Long = 0L,
+    val serverRecordedAt: Long = 0L
 )
 
 data class NetworkStatus(

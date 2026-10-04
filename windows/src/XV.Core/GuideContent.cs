@@ -44,7 +44,7 @@ public static class GuideContent
                 "A red Location Flag means the person or vehicle was scanned at a location other than the one it was expected at.",
                 "Press Export CSV to save the feed as a spreadsheet.",
             ],
-            ["Every card shows a green line 'Recorded by server' with the time the server stored it and its sequence number. The phone shows the same words once the server has it. Every card is also written to the Audit Trail and cannot be edited."],
+            ["Every card shows a green line 'Recorded by server' with the time the server stored it and its sequence number. The phone shows RECORDED BY SERVER with the server number only after the server confirms the entry; until then it says NOT RECORDED YET and keeps retrying. Every card is also written to the Audit Trail and cannot be edited."],
             ["01-live-feed"]),
 
         new("4. Personnel Registry and soldiers",

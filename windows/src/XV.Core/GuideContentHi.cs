@@ -40,7 +40,7 @@ public static class GuideContentHi
                 "Laal Location Flag ka matlab hai ki person ya gaadi us location par scan hui jahan use hona chahiye tha uske alawa kisi aur jagah.",
                 "Feed ko spreadsheet mein save karne ke liye Export CSV dabaiye.",
             ],
-            ["Har card par hara line 'Recorded by server' dikhta hai, jisme server ne kab save kiya aur uska sequence number hota hai. Server ke paas aate hi phone par bhi yahi shabd dikhte hain. Har card Audit Trail mein bhi likha jata hai aur badla nahi ja sakta."]),
+            ["Har card par hara line 'Recorded by server' dikhta hai, jisme server ne kab save kiya aur uska sequence number hota hai. Phone par RECORDED BY SERVER aur server number tabhi dikhta hai jab server entry confirm kar de; tab tak NOT RECORDED YET likha rehta hai aur phone dobara koshish karta rehta hai. Har card Audit Trail mein bhi likha jata hai aur badla nahi ja sakta."]),
 
         H(3, "4. Personnel Registry aur soldiers",
             "Sabhi soldiers aur staff ki list: rank, number, unit, photo aur card ka status.",

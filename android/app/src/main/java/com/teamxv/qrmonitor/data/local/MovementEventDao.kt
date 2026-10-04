@@ -35,6 +35,9 @@ interface MovementEventDao {
     @Query("UPDATE movement_events SET syncStatus=:status, syncAttempts=:attempts, lastError=:error, syncUpdatedAt=:updatedAt WHERE eventId=:eventId")
     suspend fun updateSync(eventId: String, status: String, attempts: Int, error: String?, updatedAt: Long)
 
+    @Query("UPDATE movement_events SET serverSeq=:seq, serverRecordedAt=:recordedAt WHERE eventId=:eventId")
+    suspend fun markRecorded(eventId: String, seq: Long, recordedAt: Long)
+
     @Query("UPDATE movement_events SET syncStatus='PENDING', lastError=NULL WHERE syncStatus='SYNCING' AND syncUpdatedAt < :cutoff")
     suspend fun recoverStaleSyncing(cutoff: Long)
 

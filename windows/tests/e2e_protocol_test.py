@@ -56,6 +56,8 @@ def ev(eid, etype, ent, typ, extra=None):
 code, st, _ = rpc("stations.list"); assert code == 200 and "Proceeding on Leave" in st["reasons"], st
 assert "TD" in boot["reasons"], boot.get("reasons")
 e1 = ev("EVT-1", "PERSON", "P001", "ENTRY", {"reason": "Rejoining from Leave", "remarks": "Pass no. 42"})
+r1 = rpc("events.create", e1, tok)
+assert r1[1].get("serverSequence", 0) > 0 and r1[1].get("recordedAt", 0) > 1_600_000_000_000, "the reply tells the phone the server number and when it was recorded: " + str(r1[1])
 print("entry", rpc("events.create", e1, tok)[:2])
 print("dup  ", rpc("events.create", e1, tok)[:2])
 print("again", rpc("events.create", ev("EVT-2", "PERSON", "P001", "ENTRY"), tok)[:2])

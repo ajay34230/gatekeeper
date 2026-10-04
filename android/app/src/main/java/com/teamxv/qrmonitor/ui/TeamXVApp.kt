@@ -195,7 +195,7 @@ fun TeamXVApp(vm: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel
             settingsOpen -> SettingsScreen(vm, onBack = { settingsOpen = false })
             vm.showSuccess && vm.completedEvent != null -> SuccessScreen(
                 vm = vm,
-                event = vm.completedEvent!!,
+                completed = vm.completedEvent!!,
                 vehicle = vm.completedVehicle,
                 durationMs = vm.completedDurationMs
             )
@@ -1102,7 +1102,7 @@ private fun ActivityRow(event: MovementEvent, title: String) {
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
                 Text(title.ifBlank { "${event.entityType.name} ${displayId(event.entityId)}" } + "  " + displayId(event.entityId), fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = UiInk, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${event.locationId} • ${event.gateId}" + (if (event.locationMismatch) " • ⚠ LOC FLAG" else "") + " • ${event.syncStatus.name}", fontFamily = Mono, fontSize = 8.sp, color = UiFaint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("${event.locationId} • ${event.gateId}" + (if (event.locationMismatch) " • ⚠ LOC FLAG" else "") + " • ${if (event.syncStatus == SyncStatus.SYNCED) "RECORDED BY SERVER" + (if (event.serverSeq > 0) " #${event.serverSeq}" else "") else deliveryLabel(event.syncStatus).uppercase()}", fontFamily = Mono, fontSize = 8.sp, color = UiFaint, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.width(7.dp))
             StatusPill(event.eventType.name, if (isEntry) StatusTone.Success else StatusTone.Warning, compact = true)
@@ -1143,6 +1143,8 @@ private fun ActivityDetailSheet(event: MovementEvent, stayMs: Long? = null, onDi
                     ReviewRow("Device", event.deviceId)
                     ReviewRow("Source", "${event.sourceType.name} • ${event.sourceId}")
                     ReviewRow("Status", deliveryLabel(event.syncStatus))
+                    if (event.serverSeq > 0) ReviewRow("Server number", "#${event.serverSeq}")
+                    if (event.serverRecordedAt > 0) ReviewRow("Recorded by server at", SimpleDateFormat("dd MMM yyyy HH:mm:ss", Locale.getDefault()).format(Date(event.serverRecordedAt)))
                     ReviewRow("Event ID", event.eventId)
                 }
             }
@@ -2397,10 +2399,12 @@ private fun UnknownResultScreen(vm: MainViewModel, message: String, offerManualV
 @Composable
 private fun SuccessScreen(
     vm: MainViewModel,
-    event: MovementEvent,
+    completed: MovementEvent,
     vehicle: CompletedVehicleDisplay?,
     durationMs: Long
 ) {
+    // the record changes state while this screen is open (saved on the phone, then recorded by the server): follow the live copy
+    val event = vm.events.firstOrNull { it.eventId == completed.eventId } ?: completed
     val exit = event.eventType == EventType.EXIT
     Column(
         Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState())
@@ -2411,7 +2415,7 @@ private fun SuccessScreen(
                 Icon(Icons.Default.Check, null, tint = UiSuccess, modifier = Modifier.size(34.dp))
             }
             Spacer(Modifier.height(9.dp))
-            StatusPill(deliveryLabel(event.syncStatus).uppercase(), if (event.syncStatus == SyncStatus.SYNCED) StatusTone.Success else StatusTone.Warning)
+            RecordedBanner(event)
             Spacer(Modifier.height(7.dp))
             Text("${event.eventType.name} CONFIRMED", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 23.sp, color = UiInk)
             Text("Gate movement record generated", fontFamily = Sans, fontSize = 10.sp, color = UiMuted)
@@ -3272,6 +3276,29 @@ private fun ResolveTripSheet(vm: MainViewModel, trip: TransitTrip, initialKind: 
     }
 }
 
+
+/** The answer to "did my entry get recorded?": says so only when the Command Center has confirmed it. */
+@Composable
+private fun RecordedBanner(e: MovementEvent) {
+    val (tone, title) = when (e.syncStatus) {
+        SyncStatus.SYNCED -> StatusTone.Success to "RECORDED BY SERVER"
+        SyncStatus.REJECTED, SyncStatus.CONFLICT -> StatusTone.Error to "NOT RECORDED - REFUSED BY SERVER"
+        SyncStatus.FAILED -> StatusTone.Warning to "NOT RECORDED YET - WILL RETRY"
+        SyncStatus.SYNCING -> StatusTone.Warning to "SENDING TO SERVER..."
+        SyncStatus.PENDING -> StatusTone.Warning to "NOT RECORDED YET - SAVED ON PHONE"
+    }
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        StatusPill(title, tone)
+        val detail = when {
+            e.syncStatus == SyncStatus.SYNCED && e.serverSeq > 0 ->
+                "Server number #${e.serverSeq}" + (if (e.serverRecordedAt > 0) " - " + SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(e.serverRecordedAt)) else "")
+            e.syncStatus == SyncStatus.SYNCED -> "The Command Center has this entry"
+            e.syncStatus == SyncStatus.REJECTED || e.syncStatus == SyncStatus.CONFLICT -> "Tell the Command Center operator. This entry is not in the server records."
+            else -> "The entry is safe on this phone and is sent as soon as the server is reachable. This screen updates by itself."
+        }
+        Text(detail, fontFamily = Sans, fontSize = 11.sp, color = UiMuted, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
+    }
+}
 
 /** What happened to a record sent from this phone, in plain words: saved on the phone, in transit, or received by the server. */
 private fun deliveryLabel(s: SyncStatus): String = when (s) {

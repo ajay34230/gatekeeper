@@ -387,6 +387,7 @@ class EventRepository(
                     val result = api.submitManualVehicleSighting(baseUrl(), event)
                     if (result.isSuccess) {
                         events.updateSync(event.eventId, SyncStatus.SYNCED.name, attempts, null, System.currentTimeMillis())
+                        markRecorded(event.eventId, result.getOrNull())
                         synced++
                     } else {
                         val f = result.exceptionOrNull()
@@ -421,6 +422,7 @@ class EventRepository(
                 ))
                 if (result.isSuccess) {
                     events.updateSync(event.eventId, SyncStatus.SYNCED.name, eventEntity.syncAttempts + 1, null, now)
+                    markRecorded(event.eventId, result.getOrNull())
                     manifests.updateSync(manifest.manifestId, SyncStatus.SYNCED.name, now, null)
                     synced++
                 } else {
@@ -437,6 +439,7 @@ class EventRepository(
                 val result = api.submitEvent(baseUrl(), event)
                 if (result.isSuccess) {
                     events.updateSync(event.eventId, SyncStatus.SYNCED.name, attempts, null, System.currentTimeMillis())
+                    markRecorded(event.eventId, result.getOrNull())
                     synced++
                 } else {
                     val f = result.exceptionOrNull()
@@ -455,7 +458,7 @@ class EventRepository(
         e.locationId, e.gateId, e.deviceId, e.operatorId, e.eventTimestamp,
         e.createdAt, e.syncStatus.name, 0, null, e.createdAt,
         e.sourceType.name, e.sourceId, e.locationMismatch, e.scannedLocation, e.reason, e.remarks, e.expectedReturn, e.comingFrom,
-        e.destinationId, e.destinationName, e.transitMinutes
+        e.destinationId, e.destinationName, e.transitMinutes, e.serverSeq, e.serverRecordedAt
     )
 
     private fun toModel(e: MovementEventEntity) = MovementEvent(
@@ -464,8 +467,20 @@ class EventRepository(
         e.deviceId, e.operatorId, e.eventTimestamp, e.createdAt,
         SyncStatus.valueOf(e.syncStatus), PresenceSource.valueOf(e.sourceType), e.sourceId,
         e.locationMismatch, e.scannedLocation, e.reason, e.remarks, e.expectedReturn, e.comingFrom,
-        e.destinationId, e.destinationName, e.transitMinutes
+        e.destinationId, e.destinationName, e.transitMinutes, e.serverSeq, e.serverRecordedAt
     )
+
+    /** The server sequence number and recording time from the Command Center's reply to an accepted record. */
+    private fun recordedBy(body: String?): Pair<Long, Long> = try {
+        val o = kotlinx.serialization.json.Json.parseToJsonElement(body ?: "").let { it as kotlinx.serialization.json.JsonObject }
+        ((o["serverSequence"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toLongOrNull() ?: 0L) to
+            ((o["recordedAt"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toLongOrNull() ?: 0L)
+    } catch (_: Exception) { 0L to 0L }
+
+    private suspend fun markRecorded(eventId: String, body: String?) {
+        val (seq, at) = recordedBy(body)
+        if (seq > 0L) events.markRecorded(eventId, seq, at)
+    }
 
     private fun newEventId() = "EVT-" + UUID.randomUUID().toString().replace("-", "").take(12).uppercase()
     private fun newSessionId() = "SES-" + UUID.randomUUID().toString().replace("-", "").take(12).uppercase()

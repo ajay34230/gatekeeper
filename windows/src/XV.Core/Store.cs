@@ -616,11 +616,11 @@ public sealed partial class Store : IDisposable
         var result = Tx(() =>
         {
             var hash = Hash(e);
-            var existing = One("SELECT payload_hash, seq FROM events WHERE event_id=$1", T(e, "eventId"));
+            var existing = One("SELECT payload_hash, seq, received_at FROM events WHERE event_id=$1", T(e, "eventId"));
             if (existing != null)
             {
                 if (S(existing["payload_hash"]) != hash) throw new StoreException("EVENT_ID_REUSED", "Event id reused with different content");
-                return new JsonObject { ["status"] = "duplicate", ["eventId"] = T(e, "eventId"), ["serverSequence"] = Convert.ToInt64(existing["seq"]) };
+                return new JsonObject { ["status"] = "duplicate", ["eventId"] = T(e, "eventId"), ["serverSequence"] = Convert.ToInt64(existing["seq"]), ["recordedAt"] = Convert.ToInt64(existing.GetValueOrDefault("received_at") ?? NowMs) };
             }
             if (Upper(T(e, "entityType")) != "PERSON") throw new StoreException("VEHICLE_TRANSACTION_REQUIRED", "Vehicles use the vehicle transaction", 400);
             var pid = CanonId(T(e, "entityId"));
@@ -648,7 +648,7 @@ public sealed partial class Store : IDisposable
             else
                 Exec("UPDATE presence SET status='CLOSED', exit_event_id=$1, exit_at=$2 WHERE session_id=$3", T(e, "eventId"), (long)e["eventTimestamp"]!, current!["session_id"]);
             Audit(operatorId, "PERSON_" + type, "PERSON", pid, T(e, "eventId"));
-            return new JsonObject { ["status"] = "accepted", ["eventId"] = T(e, "eventId"), ["serverSequence"] = seq };
+            return new JsonObject { ["status"] = "accepted", ["eventId"] = T(e, "eventId"), ["serverSequence"] = seq, ["recordedAt"] = NowMs };
         });
         Notify();
         return result;
@@ -664,18 +664,18 @@ public sealed partial class Store : IDisposable
         var result = Tx(() =>
         {
             var hash = Hash(e);
-            var existing = One("SELECT payload_hash, seq FROM events WHERE event_id=$1", T(e, "eventId"));
+            var existing = One("SELECT payload_hash, seq, received_at FROM events WHERE event_id=$1", T(e, "eventId"));
             if (existing != null)
             {
                 if (S(existing["payload_hash"]) != hash) throw new StoreException("EVENT_ID_REUSED", "Event id reused with different content");
-                return new JsonObject { ["status"] = "duplicate", ["eventId"] = T(e, "eventId"), ["serverSequence"] = Convert.ToInt64(existing["seq"]) };
+                return new JsonObject { ["status"] = "duplicate", ["eventId"] = T(e, "eventId"), ["serverSequence"] = Convert.ToInt64(existing["seq"]), ["recordedAt"] = Convert.ToInt64(existing.GetValueOrDefault("received_at") ?? NowMs) };
             }
             if (Upper(T(e, "entityType")) != "VEHICLE") throw new StoreException("INVALID_EVENT_TYPE", "Manual sighting must be a vehicle event", 400);
             var vid = CanonId(T(e, "entityId"));
             var seq = NextSeq();
             InsertEvent(e, "VEHICLE", vid, Upper(T(e, "eventType")), seq, hash, null);
             Audit(operatorId, "VEHICLE_MANUAL_SIGHTING", "VEHICLE", vid, T(e, "eventId"));
-            return new JsonObject { ["status"] = "accepted", ["eventId"] = T(e, "eventId"), ["serverSequence"] = seq };
+            return new JsonObject { ["status"] = "accepted", ["eventId"] = T(e, "eventId"), ["serverSequence"] = seq, ["recordedAt"] = NowMs };
         });
         Notify();
         return result;
@@ -692,11 +692,11 @@ public sealed partial class Store : IDisposable
             var vid = CanonId(T(e, "entityId"));
             var type = Upper(T(e, "eventType"));
             var manifestId = T(m, "manifestId");
-            var existing = One("SELECT payload_hash, seq FROM events WHERE event_id=$1", T(e, "eventId"));
+            var existing = One("SELECT payload_hash, seq, received_at FROM events WHERE event_id=$1", T(e, "eventId"));
             if (existing != null)
             {
                 if (S(existing["payload_hash"]) != hash) throw new StoreException("EVENT_ID_REUSED", "Event id reused with different content");
-                return new JsonObject { ["status"] = "duplicate", ["eventId"] = T(e, "eventId"), ["manifestId"] = manifestId, ["serverSequence"] = Convert.ToInt64(existing["seq"]) };
+                return new JsonObject { ["status"] = "duplicate", ["eventId"] = T(e, "eventId"), ["manifestId"] = manifestId, ["serverSequence"] = Convert.ToInt64(existing["seq"]), ["recordedAt"] = Convert.ToInt64(existing.GetValueOrDefault("received_at") ?? NowMs) };
             }
             if (CanonId(T(m, "vehicleId")) != vid) throw new StoreException("EVENT_MANIFEST_MISMATCH", "Manifest vehicle does not match event");
             var vehicle = One("SELECT status FROM vehicles WHERE id=$1", vid) ?? throw new StoreException("VEHICLE_NOT_FOUND", "Vehicle is not in the fleet registry");
@@ -738,7 +738,7 @@ public sealed partial class Store : IDisposable
                 Exec("UPDATE presence SET status='CLOSED', exit_event_id=$1, exit_at=$2 WHERE source_type='VEHICLE' AND source_id=$3 AND status='ACTIVE'", T(e, "eventId"), ts, manifestId);
             }
             Audit(operatorId, "VEHICLE_" + type, "VEHICLE", vid, manifestId);
-            return new JsonObject { ["status"] = "accepted", ["eventId"] = T(e, "eventId"), ["manifestId"] = manifestId, ["serverSequence"] = seq };
+            return new JsonObject { ["status"] = "accepted", ["eventId"] = T(e, "eventId"), ["manifestId"] = manifestId, ["serverSequence"] = seq, ["recordedAt"] = NowMs };
         });
         Notify();
         return result;
