@@ -13,12 +13,14 @@ public partial class MainWindow
     static string AppVersion => Assembly.GetExecutingAssembly().GetName().Version is { } v ? $"{v.Major}.{v.Minor}.{v.Build}" : "1.0";
 
     /// <summary>Writes the PDF guide (with the bundled sample screenshots) and returns its path, or null when it could not be written.</summary>
+    static bool _helpHinglish;
+
     static string? WriteGuide(string path, Window owner)
     {
         try
         {
             var shots = Path.Combine(AppContext.BaseDirectory, "guide-shots");
-            Reports.GuidePdf(path, Directory.Exists(shots) ? shots : null, AppVersion, App.Settings.ServerName);
+            Reports.GuidePdf(path, Directory.Exists(shots) ? shots : null, AppVersion, App.Settings.ServerName, _helpHinglish);
             return path;
         }
         catch (Exception ex) { MessageBox.Show(owner, "The guide could not be created: " + ex.Message, "User guide"); return null; }
@@ -27,6 +29,8 @@ public partial class MainWindow
     void RenderHelp()
     {
         Header("HELP • HOW TO USE THE SOFTWARE", "", "Every function of the server and the gate phones, with the steps to follow. The full guide with pictures is a PDF.");
+        SectionActions.Children.Add(Btn("English", (_, _) => { _helpHinglish = false; RenderTab(); }, _helpHinglish ? "BtnBase" : "BtnAmber"));
+        SectionActions.Children.Add(Btn("Hinglish", (_, _) => { _helpHinglish = true; RenderTab(); }, _helpHinglish ? "BtnAmber" : "BtnBase"));
         SectionActions.Children.Add(Btn("Open full guide (PDF)", (_, _) =>
         {
             var path = WriteGuide(Path.Combine(Path.GetTempPath(), "XV-User-Guide.pdf"), this);
@@ -40,7 +44,7 @@ public partial class MainWindow
 
         var q = Query.ToLowerInvariant();
         var panel = new StackPanel();
-        foreach (var s in GuideContent.Sections)
+        foreach (var s in _helpHinglish ? GuideContentHi.Sections : GuideContent.Sections)
         {
             if (q.Length > 0 && !(s.Title + " " + s.Intro + " " + string.Join(" ", s.Steps)).ToLowerInvariant().Contains(q)) continue;
             var body = new StackPanel();
@@ -52,7 +56,7 @@ public partial class MainWindow
                 body.Children.Add(Card(T("Note:  " + tip, 11, "#92400E").Wrap(), "#FEF3C7", "#FDE68A", 8).M(0, 6, 0, 0));
             panel.Children.Add(Card(body, "#FFFFFF").M(0, 0, 0, 10));
         }
-        if (panel.Children.Count == 0) panel.Children.Add(Empty("No help topic matches the search."));
+        if (panel.Children.Count == 0) panel.Children.Add(Empty(_helpHinglish ? "Search se koi help topic nahi mila." : "No help topic matches the search."));
         ContentHost.Content = panel;
     }
 
