@@ -523,7 +523,6 @@ public sealed partial class Store : IDisposable
             ["manifests"] = new JsonArray(!shareRegistry ? [] : ActiveManifests().ToArray()),
             ["reasons"] = new JsonArray(Settings.MovementReasons.Select(r => (JsonNode)JsonValue.Create(r)!).ToArray()),
             ["returnReasons"] = new JsonArray(Settings.ReturnDateReasons.Select(r => (JsonNode)JsonValue.Create(r)!).ToArray()),
-            ["transitRoutes"] = TransitRoutesJson(),
         };
     }
 

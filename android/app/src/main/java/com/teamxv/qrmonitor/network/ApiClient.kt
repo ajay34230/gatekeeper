@@ -51,13 +51,11 @@ class HttpFailure(val code: Int, val bodyText: String) : Exception(
     val reason: String = "", val remarks: String = "", val expectedReturn: Long = 0L, val comingFrom: String = "",
     val destinationId: String = "", val destinationName: String = "", val transitMinutes: Int = 0
 )
-/** Standard time between two locations, set on the PC (Transit Times tab). */
-@Serializable data class TransitRoute(val from: String, val to: String, val minutes: Int)
-/** A vehicle that left another location for this terminal's location and has not been recorded as arrived. */
+/** A vehicle that left another location for this terminal's location and has not reached it in time. Only this is shared with the phone. */
 @Serializable data class TransitTrip(
-    val transitId: String, val vehicleId: String, val plate: String = "", val vehicleType: String = "",
-    val fromId: String = "", val fromName: String = "", val destId: String = "", val destName: String = "",
-    val leftAt: Long = 0L, val expectedMin: Long = 0L, val dueAt: Long = 0L, val overdue: Boolean = false, val rpSnoozeUntil: Long = 0L
+    val transitId: String, val vehicleId: String, val plate: String = "",
+    val fromName: String = "", val destId: String = "", val destName: String = "",
+    val leftAt: Long = 0L, val dueAt: Long = 0L, val overdue: Boolean = false
 )
 @Serializable data class TransitList(val serverTime: Long = 0L, val locationId: String = "", val trips: List<TransitTrip> = emptyList())
 @Serializable data class VehicleManifestPayload(
@@ -95,7 +93,7 @@ class HttpFailure(val code: Int, val bodyText: String) : Exception(
     val version: String = "", val persons: List<MasterPerson> = emptyList(), val vehicles: List<MasterVehicle> = emptyList(),
     val locations: List<NamedItem> = emptyList(), val gates: List<NamedItem> = emptyList(),
     val presence: List<PresenceItem> = emptyList(), val serverTime: Long = 0L, val reasons: List<String> = emptyList(),
-    val returnReasons: List<String> = emptyList(), val transitRoutes: List<TransitRoute> = emptyList()
+    val returnReasons: List<String> = emptyList()
 )
 
 /** Contents of the pairing QR shown by the PC Command Center ("XVGK1:" + base64url JSON). */

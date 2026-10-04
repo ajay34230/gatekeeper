@@ -3104,7 +3104,7 @@ private fun TransitDestinationCard(
                 when (id) {
                     "NONE" -> onChange("", "", false, "")
                     "OTHER" -> onChange("", "", true, "")
-                    else -> { val std = vm.standardMinutes(id); onChange(id, name, false, if (std > 0) std.toString() else "") }
+                    else -> onChange(id, name, false, minutes)
                 }
             }
             if (other) {
@@ -3115,15 +3115,9 @@ private fun TransitDestinationCard(
                 OutlinedTextField(minutes, { v -> if (v.length <= 4 && v.all { it.isDigit() }) onChange(destId, destName, other, v) }, Modifier.fillMaxWidth(), singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     label = { Text("Approximate time to reach (minutes)", fontFamily = Sans, fontSize = 12.sp) }, shape = RoundedCornerShape(10.dp))
-                val std = if (destId.isNotBlank()) vm.standardMinutes(destId) else 0
                 Text(
-                    if (std > 0) "Standard time for this route is $std min (set on the PC). Change it only if this trip is different."
-                    else "No standard time is saved for this route. Enter the approximate minutes so the server can alert if the vehicle is late.",
+                    "Optional. If you leave this blank, the Command Center uses the time it has saved for this route.",
                     fontFamily = Sans, fontSize = 11.sp, color = UiMuted
-                )
-                Text(
-                    "The vehicle is not recorded as arrived by itself. If it has not arrived by then, the server and the destination RP are alerted until someone records that it reached, stopped, or went to another location.",
-                    fontFamily = Sans, fontSize = 11.sp, color = UiFaint
                 )
             }
         }
@@ -3142,12 +3136,8 @@ private fun IncomingVehiclesCard(vm: MainViewModel) {
             Icon(Icons.Default.LocalShipping, null, tint = tint, modifier = Modifier.size(26.dp))
             Spacer(Modifier.width(11.dp))
             Column(Modifier.weight(1f)) {
-                Text("VEHICLES ON THE WAY (${vm.incomingTrips.size})", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = tint)
-                Text(
-                    if (late > 0) "$late not reached in time. Tap to record when it arrived, or that it stopped or went elsewhere."
-                    else "Heading to this location. Tap to see them.",
-                    fontFamily = Sans, fontSize = 11.sp, color = UiMuted
-                )
+                Text("VEHICLE NOT REACHED (${vm.incomingTrips.size})", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = tint)
+                Text("Tap to record when it arrived, or that it stopped or went elsewhere.", fontFamily = Sans, fontSize = 11.sp, color = UiMuted)
             }
             Icon(Icons.Default.ArrowForward, null, tint = tint, modifier = Modifier.size(18.dp))
         }
@@ -3157,20 +3147,17 @@ private fun IncomingVehiclesCard(vm: MainViewModel) {
 @Composable
 private fun TripSummary(vm: MainViewModel, t: TransitTrip) {
     val late = vm.isLate(t)
+    val sameDay = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).let { it.format(Date(t.leftAt)) == it.format(Date()) }
+    val leftAt = SimpleDateFormat(if (sameDay) "HH:mm" else "dd MMM HH:mm", Locale.getDefault()).format(Date(t.leftAt))
     Surface(Modifier.fillMaxWidth(), color = if (late) UiErrorBg else UiSurfaceSubtle, shape = SmallShape, border = BorderStroke(1.dp, if (late) UiError else UiBorder)) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(t.plate.ifBlank { displayId(t.vehicleId) }, fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = UiInk, modifier = Modifier.weight(1f))
-                Text(
-                    if (late) "LATE ${minutesText(((vm.serverNow() - t.dueAt) / 60_000L).coerceAtLeast(0))}" else "ON THE WAY",
-                    fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = if (late) UiError else UiWarning
-                )
+                Text(t.plate.ifBlank { displayId(t.vehicleId) }, fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = UiInk, modifier = Modifier.weight(1f))
+                if (late && t.dueAt > 0) Text("${minutesText(((vm.serverNow() - t.dueAt) / 60_000L).coerceAtLeast(0))} late", fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = UiError)
             }
-            Text("${t.fromName.ifBlank { t.fromId }}  →  ${t.destName.ifBlank { "this location" }}", fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = UiInk)
-            Text(
-                "Left ${clockOf(t.leftAt)}" + if (t.dueAt > 0) " • expected by ${clockOf(t.dueAt)} (${minutesText(t.expectedMin)})" else " • approx time not set",
-                fontFamily = Mono, fontSize = 10.5.sp, color = UiMuted
-            )
+            Text("Vehicle ID ${displayId(t.vehicleId)}", fontFamily = Mono, fontSize = 10.5.sp, color = UiMuted)
+            Text("Left ${t.fromName.ifBlank { "its starting location" }} at $leftAt", fontFamily = Sans, fontSize = 13.sp, color = UiInk)
+            Text("Has not reached ${t.destName.ifBlank { "this location" }}", fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = UiError)
         }
     }
 }
@@ -3216,9 +3203,9 @@ private fun TransitAlertHost(vm: MainViewModel) {
 private fun TransitListSheet(vm: MainViewModel, onClose: () -> Unit, onResolve: (TransitTrip, String) -> Unit) {
     ModalBottomSheet(onDismissRequest = onClose, containerColor = UiSurface, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).navigationBarsPadding().padding(bottom = 14.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("VEHICLES ON THE WAY", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = UiInk, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+            Text("VEHICLE NOT REACHED", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = UiInk, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
             Text("A vehicle is only recorded as arrived when its entry is scanned here, or when you record it below.", fontFamily = Sans, fontSize = 12.sp, color = UiMuted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-            if (vm.incomingTrips.isEmpty()) Text("No vehicle is on the way to this location.", fontFamily = Sans, fontSize = 13.sp, color = UiMuted, modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp), textAlign = TextAlign.Center)
+            if (vm.incomingTrips.isEmpty()) Text("No vehicle is late for this location.", fontFamily = Sans, fontSize = 13.sp, color = UiMuted, modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp), textAlign = TextAlign.Center)
             vm.incomingTrips.sortedByDescending { vm.isLate(it) }.forEach { t ->
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     TripSummary(vm, t)

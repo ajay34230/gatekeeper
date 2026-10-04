@@ -154,14 +154,6 @@ class AppConfig(context: Context) : ConnectionProfile {
         get() = decodePairs(prefs.getString("cachedLocations", "") ?: "")
         set(value) = prefs.edit().putString("cachedLocations", encodePairs(value)).apply()
 
-    /** Standard minutes between two locations (from, to, minutes), set on the PC. Used to pre-fill the approximate time on a vehicle exit. */
-    var transitRoutes: List<Triple<String, String, Int>>
-        get() = (prefs.getString("transitRoutes", "") ?: "").split('\n').mapNotNull { line ->
-            val p = line.split('|')
-            if (p.size == 3) p[2].toIntOrNull()?.let { Triple(p[0], p[1], it) } else null
-        }
-        set(value) = prefs.edit().putString("transitRoutes", value.joinToString("\n") { "${it.first}|${it.second}|${it.third}" }).apply()
-
     var cachedGates: List<Pair<String, String>>
         get() = decodePairs(prefs.getString("cachedGates", "") ?: "")
         set(value) = prefs.edit().putString("cachedGates", encodePairs(value)).apply()

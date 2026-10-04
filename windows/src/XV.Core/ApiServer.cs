@@ -238,7 +238,7 @@ public sealed class ApiServer : IAsyncDisposable
             {
                 // Trips heading to the location this terminal is assigned to (the destination RP's list).
                 var loc = _store.TerminalLocation(deviceId, data["locationId"]?.ToString());
-                var trips = loc.Length == 0 ? [] : _store.OpenTransitsTo(loc);
+                var trips = loc.Length == 0 ? [] : _store.OpenTransitsTo(loc).Where(t => t["overdue"] is true).ToList();
                 return (200, new JsonObject { ["serverTime"] = Store.NowMs, ["locationId"] = loc, ["trips"] = new JsonArray(trips.Select(t => (JsonNode)_store.TransitJson(t)).ToArray()) });
             }
             case "transit.resolve":

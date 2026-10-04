@@ -257,9 +257,7 @@ public static class TransitMonitor
     {
         foreach (var t in App.Store.TransitsDueForRpAlert())
         {
-            var text = $"VEHICLE NOT REACHED: {S(t["plate"])} left {S(t["from_name"])} at {Time(L(t["left_at"]), "HH:mm")} for {S(t["dest_name"])}. " +
-                       $"It was expected by {Time(L(t["due_at"]), "HH:mm")} and is {Duration(L(t["late_ms"]))} late. " +
-                       "Open 'Vehicles on the way' in this app and record when it arrived, that it stopped, or that it went to another location.";
+            var text = TransitText.RpAlert(t, Store.NowMs);
             foreach (var dev in App.Store.TerminalsAt(S(t["dest_loc"])))
             {
                 try { App.Comms.Send(dev, "ALERT", text, "Command Center"); } catch { /* terminal offline: the next round tries again */ }

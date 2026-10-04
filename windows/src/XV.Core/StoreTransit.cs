@@ -40,11 +40,6 @@ public sealed partial class Store
         ORDER BY from_name, to_name
         """);
 
-    public JsonArray TransitRoutesJson() => new(TransitRoutes().Select(r => (JsonNode)new JsonObject
-    {
-        ["from"] = S(r["from_loc"]), ["to"] = S(r["to_loc"]), ["minutes"] = Convert.ToInt64(r["minutes"]),
-    }).ToArray());
-
     long RouteMinutes(string from, string to) =>
         from.Length == 0 || to.Length == 0 ? 0 : Convert.ToInt64(Scalar("SELECT minutes FROM transit_routes WHERE from_loc=$1 AND to_loc=$2", from, to) ?? 0L);
 
@@ -253,12 +248,13 @@ public sealed partial class Store
         return rows;
     }
 
+    /// <summary>What a terminal is told about a late vehicle: which vehicle, where it left from, when, and where it was going.
+    /// No route times, approximate minutes or vehicle details are shared with the phone.</summary>
     public JsonObject TransitJson(Dictionary<string, object?> r) => new()
     {
-        ["transitId"] = S(r["transit_id"]), ["vehicleId"] = S(r["vehicle_id"]), ["plate"] = S(r["plate"]), ["vehicleType"] = S(r["vehicle_type"]),
-        ["fromId"] = S(r["from_loc"]), ["fromName"] = S(r["from_name"]), ["destId"] = S(r["dest_loc"]), ["destName"] = S(r["dest_name"]),
-        ["leftAt"] = Convert.ToInt64(r["left_at"]), ["expectedMin"] = Convert.ToInt64(r["expected_min"]), ["dueAt"] = Convert.ToInt64(r["due_at"]),
-        ["overdue"] = r["overdue"] is true, ["rpSnoozeUntil"] = Convert.ToInt64(r["rp_snooze_until"]),
+        ["transitId"] = S(r["transit_id"]), ["vehicleId"] = S(r["vehicle_id"]), ["plate"] = S(r["plate"]),
+        ["fromName"] = S(r["from_name"]), ["destId"] = S(r["dest_loc"]), ["destName"] = S(r["dest_name"]),
+        ["leftAt"] = Convert.ToInt64(r["left_at"]), ["dueAt"] = Convert.ToInt64(r["due_at"]), ["overdue"] = r["overdue"] is true,
     };
 
     /// <summary>Overdue trips whose server-side alert is not snoozed.</summary>

@@ -184,7 +184,9 @@ rpc("heartbeat", {"locationId": "LOC08", "gateId": "G02", "operatorId": "GK-01",
 code, op, _ = rpc("transit.open", {}, tok)
 assert code == 200 and len(op["trips"]) == 1, (code, op)
 trip = op["trips"][0]
-assert trip["overdue"] is True and trip["expectedMin"] == 30 and trip["destId"] == "LOC08" and trip["fromId"] == "LOC07", trip
+assert trip["overdue"] is True and trip["destId"] == "LOC08" and trip["fromName"] == "Location 07" and trip["plate"], trip
+assert not {"expectedMin", "vehicleType", "fromId"} & set(trip), "the phone is not told route times or vehicle details"
+assert "transitRoutes" not in boot, "standard route times are not shared with terminals"
 tid = trip["transitId"]
 assert rpc("transit.snooze", {"transitId": tid}, tok)[0] == 200
 code, body, _ = rpc("transit.resolve", {"transitId": tid, "kind": "REACHED", "minutes": 0}, tok); assert code == 400 and body["reason"] == "INVALID_MINUTES", (code, body)

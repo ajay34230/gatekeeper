@@ -28,6 +28,24 @@ public static class TransitText
         _ => "",
     };
 
+    static string Dash(string id) => id.Length > 1 && char.IsLetter(id[0]) && char.IsDigit(id[1]) ? id[0] + "-" + id[1..] : id;
+
+    static string When(long ms)
+    {
+        var d = DateTimeOffset.FromUnixTimeMilliseconds(ms).LocalDateTime;
+        return d.Date == DateTime.Today ? d.ToString("HH:mm") : d.ToString("dd MMM HH:mm");
+    }
+
+    /// <summary>The notice sent to the destination RP: which vehicle, where and when it left, and that it has not reached its location.</summary>
+    public static string RpAlert(IReadOnlyDictionary<string, object?> t, long nowMs)
+    {
+        var plate = G(t, "plate"); var id = Dash(G(t, "vehicle_id"));
+        var vehicle = plate.Length > 0 && !plate.Equals(G(t, "vehicle_id"), StringComparison.OrdinalIgnoreCase) ? $"{plate} ({id})" : id;
+        var due = N(t, "due_at");
+        var late = due > 0 && nowMs > due ? $" It is {Mins((nowMs - due) / 60_000)} late." : "";
+        return $"Vehicle {vehicle} left {G(t, "from_name")} at {When(N(t, "left_at"))} and has not reached {G(t, "dest_name")}.{late}";
+    }
+
     /// <summary>True when the trip is still open and past its approximate time.</summary>
     public static bool IsOverdue(IReadOnlyDictionary<string, object?> r, string prefix = "", long? nowMs = null)
     {

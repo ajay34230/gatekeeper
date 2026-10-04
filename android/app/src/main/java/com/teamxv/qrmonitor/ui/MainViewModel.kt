@@ -268,10 +268,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val alertTrips: List<com.teamxv.qrmonitor.network.TransitTrip>
         get() = incomingTrips.filter { isLate(it) && (transitHidden[it.transitId] ?: 0L) <= serverNow() }
 
-    /** Standard minutes from this terminal's location to [destinationId]; 0 when the PC has no time saved for that pair. */
-    fun standardMinutes(destinationId: String): Int =
-        config.transitRoutes.firstOrNull { it.first == config.locationId && it.second == destinationId }?.third ?: 0
-
     fun refreshIncoming() {
         transitClock = System.currentTimeMillis()
         if (!config.paired || !config.hasValidOnlineToken() || config.locationId.isBlank()) { if (incomingTrips.isNotEmpty()) incomingTrips = emptyList(); return }
