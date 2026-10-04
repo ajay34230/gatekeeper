@@ -224,7 +224,8 @@ public partial class App : Application
         foreach (var (tab, name) in w.ScreenshotTabs()) { tab(); await Snap(w, name); }
         foreach (var (make, name) in Dialogs.ScreenshotWindows(w))
         {
-            var win = make(); win.Show(); await Snap(win, name); win.Close();
+            try { var win = make(); win.Show(); await Snap(win, name); win.Close(); }
+            catch (Exception ex) { XV.Core.Diag.Error("Screenshot " + name, ex); }
         }
         await CardStudioWindow.CaptureForCiAsync(w, Path.Combine(dir, "17-id-card-studio.png"));
         Current.Shutdown();

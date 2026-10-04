@@ -92,7 +92,6 @@ public sealed class CloudLinkWindow : DarkWindow
         var cidrs = Field("Allowed internet address ranges, one per line — e.g. 203.0.113.0/24 (blank = allow any address)",
             string.Join(Environment.NewLine, s.AllowedInternetCidrs));
         cidrs.AcceptsReturn = true; cidrs.MinHeight = 60; cidrs.TextWrapping = TextWrapping.Wrap;
-        Body.Children.Add(cidrs);
         Body.Children.Add(Para("Only affects connections from outside the local network / VPN — LAN terminals are never blocked by this. Leave blank unless you know the exact networks your remote terminals connect from.", "#94A3B8"));
 
         var host = Field("Public host (DDNS name, public IP or VPN IP)", s.PublicHost, mono: true);
