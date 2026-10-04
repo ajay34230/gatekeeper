@@ -77,9 +77,9 @@ public sealed class VisitorsWindow : DarkWindow
             var id = S(v["id"]);
             var (text, fg, bg, border) = State(v);
             var info = Col(
-                Row(T(S(v["name"]), 14, "#F4F4F5", bold: true), Pill(text, fg, bg, border, 9).M(10)),
-                T(Parts(id, S(v["unit"]), Labeled("ID proof", S(v["id_proof"])), Labeled("Mobile", S(v["mobile"]))), 11, "#A1A1AA", mono: true).Wrap().M(0, 3),
-                T(Parts(Labeled("Purpose", S(v["pass_purpose"])), Labeled("Visiting", S(v["pass_host"]))), 11.5, "#D4D4D8").Wrap().M(0, 3),
+                Row(T(S(v["name"]), 14, "#0F172A", bold: true), Pill(text, fg, bg, border, 9).M(10)),
+                T(Parts(id, S(v["unit"]), Labeled("ID proof", S(v["id_proof"])), Labeled("Mobile", S(v["mobile"]))), 11, "#64748B", mono: true).Wrap().M(0, 3),
+                T(Parts(Labeled("Purpose", S(v["pass_purpose"])), Labeled("Visiting", S(v["pass_host"]))), 11.5, "#475569").Wrap().M(0, 3),
                 T($"Valid {Time(L(v["valid_from"]), "dd MMM yyyy HH:mm")} → {Time(L(v["valid_to"]), "dd MMM yyyy HH:mm")}" +
                   (v["inside_since"] != null ? $"   •   inside since {Time(L(v["inside_since"]), "HH:mm")}" : ""), 11, "#FCD34D", mono: true).M(0, 3));
             var actions = Row(
@@ -266,13 +266,13 @@ public sealed class LeaveWindow : DarkWindow
             var pill = overdue ? Pill("OVERDUE " + Late(now - due), "#FDA4AF", "#2A0F14", "#9F1239", 9)
                      : dueToday ? Pill("DUE TODAY", "#FCD34D", "#2A1F08", "#92400E", 9) : Pill("OUT", "#6EE7B7", "#062F23", "#047857", 9);
             var info = Col(
-                Row(T($"{S(a["rank"])} {S(a["name"])}".Trim(), 14, "#F4F4F5", bold: true), pill.M(10)),
-                T($"{DisplayId(S(a["person_id"]))}  •  {S(a["service_no"])}  •  {S(a["company"])} {S(a["platoon"])} {S(a["section"])}  •  Mobile {S(a["mobile"])}", 11, "#A1A1AA", mono: true).M(0, 3),
-                T($"{S(a["reason"])}{(S(a["remarks"]).Length > 0 ? " — " + S(a["remarks"]) : "")}", 12, "#D4D4D8").M(0, 3),
+                Row(T($"{S(a["rank"])} {S(a["name"])}".Trim(), 14, "#0F172A", bold: true), pill.M(10)),
+                T($"{DisplayId(S(a["person_id"]))}  •  {S(a["service_no"])}  •  {S(a["company"])} {S(a["platoon"])} {S(a["section"])}  •  Mobile {S(a["mobile"])}", 11, "#64748B", mono: true).M(0, 3),
+                T($"{S(a["reason"])}{(S(a["remarks"]).Length > 0 ? " — " + S(a["remarks"]) : "")}", 12, "#475569").M(0, 3),
                 T($"{(S(a["kind"]) == "VISITOR_OVERSTAY" ? "Inside since" : "Left")} {Time(L(a["left_at"]), "dd MMM yyyy HH:mm")}   →   {(S(a["kind"]) == "VISITOR_OVERSTAY" ? "pass ended" : "expected back")} {Time(due, "dd MMM yyyy HH:mm")}",
                   11, overdue ? "#FB7185" : "#FCD34D", mono: true).M(0, 3));
             var id = S(a["person_id"]);
-            _list.Children.Add(Card(Spread(info, Row(Btn("History", (_, _) => Dialogs.History(this, "PERSON", id)))), pad: 12, border: overdue ? "#9F1239" : "#27272A").M(0, 0, 0, 8));
+            _list.Children.Add(Card(Spread(info, Row(Btn("History", (_, _) => Dialogs.History(this, "PERSON", id)))), pad: 12, border: overdue ? "#9F1239" : "#E2E8F0").M(0, 0, 0, 8));
         }
     }
 
@@ -392,6 +392,7 @@ public sealed class CardRegisterWindow : DarkWindow
     internal CardRegisterWindow() : base("ID Card Register",
         "Every card's issue, re-issue, print and loss history. Personnel QR codes never expire — a code changes only when the card is reported lost or re-issued, and then the old card is refused at every gate.", 1060, 860)
     {
+        Body.Children.Add(T("SEARCH  (ID, army no, name, company)", 10, "#64748B", bold: true).M(0, 0, 0, 4));
         Body.Children.Add(_search.M(0, 0, 0, 10));
         Body.Children.Add(_list);
         _search.TextChanged += (_, _) => Fill();
@@ -431,13 +432,13 @@ public sealed class CardRegisterWindow : DarkWindow
             var id = S(r["id"]);
             var issued = r["issued_at"] != null ? L(r["issued_at"]) : L(r["created_at"]);
             var info = Col(
-                Row(T($"{S(r["rank"])} {S(r["name"])}".Trim(), 13.5, "#F4F4F5", bold: true),
+                Row(T($"{S(r["rank"])} {S(r["name"])}".Trim(), 13.5, "#0F172A", bold: true),
                     Pill($"CARD #{Math.Max(1, L(r["issues"]))}", "#FCD34D", "#2A1F08", "#92400E", 9).M(10),
                     L(r["lost"]) > 0 ? Pill($"LOST ×{L(r["lost"])}", "#FDA4AF", "#2A0F14", "#9F1239", 9).M(6) : new TextBlock(),
                     S(r["status"]) != "ACTIVE" ? Pill(S(r["status"]), "#FDA4AF", "#2A0F14", "#9F1239", 9).M(6) : new TextBlock()),
-                T(Parts(DisplayId(id), Labeled("Army No", S(r["service_no"])), $"{S(r["company"])} {S(r["platoon"])} {S(r["section"])}".Trim(), Labeled("Card ref", S(r["card_serial"]))), 11, "#A1A1AA", mono: true).Wrap().M(0, 3),
+                T(Parts(DisplayId(id), Labeled("Army No", S(r["service_no"])), $"{S(r["company"])} {S(r["platoon"])} {S(r["section"])}".Trim(), Labeled("Card ref", S(r["card_serial"]))), 11, "#64748B", mono: true).Wrap().M(0, 3),
                 T($"Issued {Time(issued, "dd MMM yyyy")}" + (r["reissued_at"] != null ? $"   •   last re-issued {Time(L(r["reissued_at"]), "dd MMM yyyy HH:mm")}" : "") +
-                  $"   •   last printed {(r["printed_at"] != null ? Time(L(r["printed_at"]), "dd MMM yyyy HH:mm") : "never")}   •   QR: no expiry", 11, "#D4D4D8", mono: true).Wrap().M(0, 3));
+                  $"   •   last printed {(r["printed_at"] != null ? Time(L(r["printed_at"]), "dd MMM yyyy HH:mm") : "never")}   •   QR: no expiry", 11, "#475569", mono: true).Wrap().M(0, 3));
             var actions = Row(
                 Btn("History", (_, _) => History(id)),
                 Btn("Open in ID Card Studio", (_, _) => CardStudioWindow.Show(Owner, [id]), "BtnGold").M(6),
