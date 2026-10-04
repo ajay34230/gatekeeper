@@ -3277,7 +3277,7 @@ private fun ResolveTripSheet(vm: MainViewModel, trip: TransitTrip, initialKind: 
 private fun deliveryLabel(s: SyncStatus): String = when (s) {
     SyncStatus.PENDING -> "Saved on phone, not sent yet"
     SyncStatus.SYNCING -> "In transit to server"
-    SyncStatus.SYNCED -> "Received by server"
+    SyncStatus.SYNCED -> "Recorded by server"
     SyncStatus.FAILED -> "Send failed, will retry"
     SyncStatus.REJECTED -> "Received, rejected by server"
     SyncStatus.CONFLICT -> "Received, conflict at server"

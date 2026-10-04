@@ -46,6 +46,15 @@ public static class TransitText
         return $"Vehicle {vehicle} left {G(t, "from_name")} at {When(N(t, "left_at"))} and has not reached {G(t, "dest_name")}.{late}";
     }
 
+    /// <summary>The stamp on every gate record once the server has stored it: when the server recorded it and its server sequence number.</summary>
+    public static string ServerStamp(IReadOnlyDictionary<string, object?> e)
+    {
+        var at = N(e, "received_at");
+        if (at == 0) return "";
+        var how = G(e, "source") == "PC" ? " (entered at the Command Center)" : "";
+        return $"Recorded by server {Clock(at, "dd MMM HH:mm:ss")} • Seq #{N(e, "seq")}{how}";
+    }
+
     /// <summary>What happened to the "not reached" notice sent to the destination RP: sent, in transit, received by the phone, seen by the RP.</summary>
     public static string NoticeStatus(IReadOnlyDictionary<string, object?> t)
     {

@@ -205,6 +205,7 @@ public partial class MainWindow : Window
                 var done = S(r["tr_state"]) != Store.TransitEnRoute;
                 body.Children.Add(Card(T("🚚  " + tripLine, 10.5, late ? "#9F1239" : done ? "#065F46" : "#92400E", bold: true).Wrap(), late ? "#FFF1F2" : done ? "#ECFDF5" : "#FFFBEB", late ? "#FDA4AF" : done ? "#A7F3D0" : "#FDE68A", 7).M(0, 8));
             }
+            if (TransitText.ServerStamp(r) is { Length: > 0 } stamp) body.Children.Add(T("✓ " + stamp, 10, "#047857", bold: true, mono: true).Wrap().M(0, 6, 0, 0));
             if (flag)
                 body.Children.Add(Card(Spread(T("⚠ LOCATION MISMATCH", 10, "#B45309", bold: true, mono: true), T("QR: " + (S(r["scanned_loc"]) is { Length: > 0 } q ? q : "Diff Loc"), 10, "#B45309", mono: true)), "#FEF3C7", "#B45309", 7).M(0, 8));
             if (S(r["occupants"]).Length > 2)

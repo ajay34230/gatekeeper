@@ -340,6 +340,7 @@ public static class Dialogs
                         T($"   {S(r["location_name"])} • {S(r["gate_name"])}", 11.5, "#64748B")),
                     Row(L(r["loc_mismatch"]) == 1 ? T("⚠ LOC FLAG  ", 10.5, "#B45309", bold: true, mono: true) : new TextBlock(),
                         T(Note(r, "  •  ") + (L(r["stay_ms"]) > 0 ? "Stayed " + Duration(L(r["stay_ms"])) : "Op " + S(r["operator_id"])), 11, "#334155", mono: true))), "#FFFFFF", pad: 10).M(0, 0, 0, 6));
+                if (TransitText.ServerStamp(r) is { Length: > 0 } stamp) Body.Children.Add(T("✓ " + stamp, 10, "#047857", bold: true, mono: true).Wrap().M(10, 0, 0, 6));
                 if (TransitText.Line(r, "tr_") is { Length: > 0 } tripLine)
                 {
                     var overdue = TransitText.IsOverdue(r, "tr_");
@@ -607,7 +608,7 @@ public static class Dialogs
     }
 
     public static void ExportEvents(Window o) => SaveCsv($"xv-gate-records-{DateTime.Now:yyyyMMdd-HHmm}.csv", Csv.Build(
-        App.Store.RecentEvents(1_000_000).Select(r => { r["time"] = Time(L(r["event_ts"]), "yyyy-MM-dd HH:mm:ss"); r["stay"] = L(r["stay_ms"]) > 0 ? Duration(L(r["stay_ms"])) : "";
+        App.Store.RecentEvents(1_000_000).Select(r => { r["time"] = Time(L(r["event_ts"]), "yyyy-MM-dd HH:mm:ss"); r["recorded_by_server"] = L(r["received_at"]) > 0 ? Time(L(r["received_at"]), "yyyy-MM-dd HH:mm:ss") : ""; r["stay"] = L(r["stay_ms"]) > 0 ? Duration(L(r["stay_ms"])) : "";
             r["occupants"] = S(r["occupants"]).Length > 2 ? string.Join(", ", (System.Text.Json.JsonSerializer.Deserialize<List<string>>(S(r["occupants"])) ?? []).Select(DisplayId)) : "";
             r["loc_mismatch"] = L(r["loc_mismatch"]) == 1 ? "YES" : "";
             var st = S(r["tr_state"]); r["trip_status"] = st.Length == 0 ? "" : TransitText.StateLabel(st, TransitText.IsOverdue(r, "tr_"));
@@ -616,7 +617,7 @@ public static class Dialogs
         ("Time", "time"), ("Action", "event_type"), ("Type", "entity_type"), ("ID", "entity_id"), ("Name / Plate", "title"), ("Location", "location_name"), ("Gate", "gate_name"),
         ("Operator", "operator_id"), ("Terminal", "device_id"), ("Stay", "stay"), ("Location flag", "loc_mismatch"), ("QR location", "scanned_loc"), ("Occupants", "occupants"), ("Driver", "driver_label"), ("Co-driver", "co_driver_label"),
         ("Destination", "tr_dest_name"), ("Approx time (min)", "trip_approx"), ("Trip status", "trip_status"), ("Ended at (place)", "tr_end_name"), ("Time taken (min)", "trip_taken"), ("Trip recorded", "trip_how"),
-        ("Event ID", "event_id"), ("Server seq", "seq")));
+        ("Event ID", "event_id"), ("Server seq", "seq"), ("Recorded by server at", "recorded_by_server")));
 
     public static void ExportAudit(Window o) => SaveCsv($"xv-audit-{DateTime.Now:yyyyMMdd-HHmm}.csv", Csv.Build(
         App.Store.AuditLog(1_000_000).Select(r => { r["time"] = Time(L(r["created_at"]), "yyyy-MM-dd HH:mm:ss"); return r; }),

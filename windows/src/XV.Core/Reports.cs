@@ -151,7 +151,7 @@ public static partial class Reports
             {
                 r += 2;
                 Section(ws, r, width, "GATE & HISTORY RECORDS", color);
-                string[] recHead = ["Date", "Time", "ID", "Name", "Rank", "Record", "Reason", "Location", "Gate", "Stay", "Location flag", "Operator", "Source", "Remarks"];
+                string[] recHead = ["Date", "Time", "ID", "Name", "Rank", "Record", "Reason", "Location", "Gate", "Stay", "Location flag", "Operator", "Source", "Recorded by server", "Remarks"];
                 Header(ws, r + 1, recHead);
                 var start = r + 1;
                 r += 2;
@@ -162,7 +162,8 @@ public static partial class Reports
                     var t = Local(L(e["event_ts"]));
                     object[] vals = [t.ToString("dd MMM yyyy"), t.ToString("HH:mm:ss"), Id(S(e["entity_id"])), S(p["name"]), S(p["rank"]), S(e["event_type"]), S(e["reason"]),
                         S(e["location_name"]), S(e["gate_name"]), Duration(L(e["stay_ms"])), L(e["loc_mismatch"]) == 1 ? "⚠ QR: " + S(e["scanned_loc"]) : "",
-                        S(e["operator_id"]), S(e["source"]) == "PC" ? "Command Center" : "Gate terminal " + S(e["device_id"]), S(e["remarks"])];
+                        S(e["operator_id"]), S(e["source"]) == "PC" ? "Command Center" : "Gate terminal " + S(e["device_id"]),
+                        L(e["received_at"]) > 0 ? Local(L(e["received_at"])).ToString("dd MMM yyyy HH:mm:ss") + " • Seq #" + L(e["seq"]) : "", S(e["remarks"])];
                     for (var i = 0; i < vals.Length; i++) ws.Cell(r, i + 1).Value = S(vals[i]);
                     if (r % 2 == 1) ws.Range(r, 1, r, recHead.Length).Style.Fill.SetBackgroundColor(XLColor.FromHtml(Band));
                     RecordCell(ws.Cell(r, 6), S(e["event_type"]));
