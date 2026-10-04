@@ -327,7 +327,12 @@ public static class OverdueMonitor
         {
             var s = App.Settings;
             var devices = App.Store.TerminalsForAlert(s.AbsenceAlertLocations, s.AbsenceAlertOperators);
-            foreach (var a in fresh)
+            if (devices.Count == 0) return;
+            var unsent = fresh.Where(a => !s.AbsenceAlertsSent.Contains($"{S(a["person_id"])}|{L(a["expected_return"])}")).ToList();
+            foreach (var a in unsent) s.AbsenceAlertsSent.Add($"{S(a["person_id"])}|{L(a["expected_return"])}");
+            if (s.AbsenceAlertsSent.Count > 500) s.AbsenceAlertsSent.RemoveRange(0, s.AbsenceAlertsSent.Count - 500);
+            if (unsent.Count > 0) s.Save();
+            foreach (var a in unsent)
             {
                 var text = AbsenceText.PhoneAlert(a, Store.NowMs);
                 foreach (var d in devices)
@@ -335,7 +340,7 @@ public static class OverdueMonitor
                     try { App.Comms.Send(d, "ALERT", text, "Command Center"); } catch { /* terminal unreachable: Comms keeps it for the next connection */ }
                 }
             }
-            if (devices.Count > 0) App.Store.AdminAudit("OVERDUE_ALERT_SENT", $"{fresh.Count} alert(s) to {devices.Count} terminal(s)");
+            if (unsent.Count > 0) App.Store.AdminAudit("OVERDUE_ALERT_SENT", $"{unsent.Count} alert(s) to {devices.Count} terminal(s)");
         }
         catch { /* the alert on the PC has already been shown */ }
     }

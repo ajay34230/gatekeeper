@@ -119,6 +119,9 @@ public sealed class Settings
     /// <summary>Operators (RPs) whose terminals also receive the "has not returned" alert, chosen separately from the locations.</summary>
     public List<string> AbsenceAlertOperators { get; set; } = [];
 
+    /// <summary>Absences already sent to terminals ("person|expected return"), so restarting the Command Center does not send them again.</summary>
+    public List<string> AbsenceAlertsSent { get; set; } = [];
+
     /// <summary>Exit reasons for which the terminal asks the expected return date (tracked for overdue alerts).</summary>
     public List<string> ReturnDateReasons { get; set; } = ["TD", "Proceeding on Leave", "Local Work"];
 

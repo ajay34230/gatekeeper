@@ -3104,7 +3104,7 @@ private fun TransitDestinationCard(
                 when (id) {
                     "NONE" -> onChange("", "", false, "")
                     "OTHER" -> onChange("", "", true, "")
-                    else -> onChange(id, name, false, minutes)
+                    else -> onChange(id, name, false, if (id == destId) minutes else "")
                 }
             }
             if (other) {
