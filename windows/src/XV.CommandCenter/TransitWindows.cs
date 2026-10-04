@@ -169,6 +169,9 @@ public static class TransitDialogs
         }
     }
 
+    public static Window ResolveWindow(Dictionary<string, object?> trip, string kind) => new ResolveTripDialog(trip, kind);
+    public static Window ManualTripWindow() => new ManualTripDialog();
+
     public static bool Resolve(Window owner, Dictionary<string, object?> trip, string kind) =>
         new ResolveTripDialog(trip, kind) { Owner = owner }.ShowDialog() == true;
 

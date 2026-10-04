@@ -316,9 +316,10 @@ public static class Dialogs
         public HistoryWindow(string type, string id) : base("Movement History • " + DisplayId(id), "Every entry and exit recorded for this credential, newest first.", 900, 800)
         {
             var rows = App.Store.EventsForEntity(type, id);
-            if (rows.Count == 0) { Body.Children.Add(Para("No gate activity has been recorded yet.")); goto buttons; }
+            if (rows.Count == 0 && !(type == "VEHICLE" && App.Store.Transits("", id).Count > 0)) { Body.Children.Add(Para("No gate activity has been recorded yet.")); goto buttons; }
 
-            var routePanel = BuildRouteChart(rows);
+            var manualTrips = type == "VEHICLE" ? App.Store.Transits("", id).Where(t => S(t["exit_event_id"]).Length == 0).ToList() : [];
+            var routePanel = BuildRouteChart(rows, manualTrips);
             if (routePanel != null) Body.Children.Add(routePanel);
 
             Body.Children.Add(Label("DETAILED RECORDS"));
@@ -356,9 +357,9 @@ public static class Dialogs
             AddButton("Close", Close, "BtnAmber");
         }
 
-        static Border? BuildRouteChart(List<Dictionary<string, object?>> newestFirst)
+        static Border? BuildRouteChart(List<Dictionary<string, object?>> newestFirst, List<Dictionary<string, object?>> manualTrips)
         {
-            var steps = RouteModel.Build(newestFirst);
+            var steps = RouteModel.Build(newestFirst, manualTrips);
             if (steps.Count < 2) return null;
             var timeline = Col();
             foreach (var st in steps)
@@ -408,6 +409,7 @@ public static class Dialogs
                 try
                 {
                     if (!AdminGate.Require(this, "Export route chart")) return;
+                    var manual = type == "VEHICLE" ? App.Store.Transits("", id).Where(t => S(t["exit_event_id"]).Length == 0).ToList() : new List<Dictionary<string, object?>>();
                     var fmt = format.SelectedIndex == 0 ? "xlsx" : "pdf";
                     var ext = fmt == "xlsx" ? ".xlsx" : ".pdf";
                     var name = $"XV-Route-{DisplayId(id)}-{DateTime.Now:yyyyMMdd-HHmm}{ext}";
@@ -420,11 +422,11 @@ public static class Dialogs
 
                     if (fmt == "xlsx")
                     {
-                        XV.Core.Reports.RouteChartExcel(events, title, "Movement history", dlg.FileName);
+                        XV.Core.Reports.RouteChartExcel(events, title, "Movement history", dlg.FileName, manual);
                     }
                     else
                     {
-                        XV.Core.Reports.RouteChartPdf(events, title, "Movement history", dlg.FileName);
+                        XV.Core.Reports.RouteChartPdf(events, title, "Movement history", dlg.FileName, manual);
                     }
 
                     if (MessageBox.Show("Route exported. Open it now?", "Export finished", MessageBoxButton.YesNo) == MessageBoxResult.Yes)
@@ -652,5 +654,14 @@ public static class Dialogs
         yield return (() => new CardRegisterWindow(), "16-card-register");
         var first = App.Store.Persons().FirstOrDefault();
         if (first != null) yield return (() => new AddRecordDialog(S(first["id"])), "11-add-history-record");
+        var veh = App.Store.Vehicles().FirstOrDefault();
+        if (veh != null) yield return (() => new HistoryWindow("VEHICLE", S(veh["id"])), "17-vehicle-history-route");
+        var onWay = App.Store.Transits(Store.TransitEnRoute).FirstOrDefault();
+        if (onWay != null)
+        {
+            yield return (() => TransitDialogs.ResolveWindow(onWay, Store.TransitReached), "18-close-trip");
+            yield return (() => new TransitAlertWindow(App.Store.Transits(Store.TransitEnRoute).Where(t => t["overdue"] is true).ToList()), "19-transit-alert");
+        }
+        yield return (() => TransitDialogs.ManualTripWindow(), "20-add-trip");
     }
 }

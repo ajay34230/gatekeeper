@@ -71,8 +71,11 @@ public static class RouteModel
     static long L(object? o) => o == null ? 0 : Convert.ToInt64(o, CultureInfo.InvariantCulture);
     static string Dur(long ms) => ms < 60_000 ? "under 1 min" : Reports.Duration(ms);
 
-    /// <summary>Builds the route from the records of one person or vehicle (newest first, as the History window loads them).</summary>
-    public static List<RouteStep> Build(IEnumerable<Dictionary<string, object?>> newestFirst, long? nowMs = null)
+    /// <summary>
+    /// Builds the route from the records of one person or vehicle (newest first, as the History window loads them).
+    /// <paramref name="manualTrips"/> are trips the server operator entered by hand (no gate record), merged in by time.
+    /// </summary>
+    public static List<RouteStep> Build(IEnumerable<Dictionary<string, object?>> newestFirst, IEnumerable<Dictionary<string, object?>>? manualTrips = null, long? nowMs = null)
     {
         var now = nowMs ?? Store.NowMs;
         var ev = newestFirst.Reverse().OrderBy(x => L(x["event_ts"])).ToList();
@@ -117,6 +120,15 @@ public static class RouteModel
             }
             else steps.Add(new RouteStep("NOTE", ts, type.ToUpperInvariant(), place, note, ""));
         }
+        foreach (var t in manualTrips ?? [])
+        {
+            var left = L(t["left_at"]);
+            steps.Add(new RouteStep("LEFT", left, "LEFT", S(t["from_name"]), "Trip entered by the server operator", ""));
+            var state = S(t["state"]);
+            var went = state is Store.TransitDiverted or Store.TransitStopped && S(t["end_name"]).Length > 0 ? S(t["end_name"]) : S(t["dest_name"]);
+            steps.Add(new RouteStep("TRAVEL", left, "TRAVEL", went, TransitText.Line(t, "", now), TransitText.StateLabel(state, TransitText.IsOverdue(t, "", now))));
+        }
+        if (manualTrips != null) steps = steps.OrderBy(x => x.Ts).ToList();
         return steps;
     }
 }

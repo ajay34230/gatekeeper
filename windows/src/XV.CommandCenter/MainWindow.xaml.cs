@@ -885,6 +885,7 @@ public partial class MainWindow : Window
         yield return (() => { TabFeed.IsChecked = true; Refresh(); }, "01-live-feed");
         yield return (() => { TabPersons.IsChecked = true; Refresh(); }, "02-personnel");
         yield return (() => { TabVehicles.IsChecked = true; Refresh(); }, "03-vehicles");
+        yield return (() => { TabTransit.IsChecked = true; Refresh(); }, "03b-transit-times");
         yield return (() => { TabAccounts.IsChecked = true; Refresh(); }, "04-accounts-devices");
         yield return (() => { TabAudit.IsChecked = true; Refresh(); }, "05-audit");
         yield return (() => { TabExport.IsChecked = true; Refresh(); }, "06-export");

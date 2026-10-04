@@ -36,9 +36,9 @@ public static partial class Reports
 
     // ------------------------------------------------------------------ route chart: Excel
 
-    public static void RouteChartExcel(List<Dictionary<string, object?>> newestFirst, string title, string subtitle, string path)
+    public static void RouteChartExcel(List<Dictionary<string, object?>> newestFirst, string title, string subtitle, string path, IEnumerable<Dictionary<string, object?>>? manualTrips = null)
     {
-        var steps = RouteModel.Build(newestFirst);
+        var steps = RouteModel.Build(newestFirst, manualTrips);
         var (arrivals, trips, onSite) = RouteTotals(newestFirst);
         using var wb = new XLWorkbook();
         wb.Properties.Title = "Route chart - " + title;
@@ -147,10 +147,10 @@ public static partial class Reports
 
     // ------------------------------------------------------------------ route chart: PDF (one page)
 
-    public static void RouteChartPdf(List<Dictionary<string, object?>> newestFirst, string title, string subtitle, string path)
+    public static void RouteChartPdf(List<Dictionary<string, object?>> newestFirst, string title, string subtitle, string path, IEnumerable<Dictionary<string, object?>>? manualTrips = null)
     {
         EnsureFonts();
-        var all = RouteModel.Build(newestFirst);
+        var all = RouteModel.Build(newestFirst, manualTrips);
         // One printed page: shrink type for longer routes, and keep only the latest steps beyond what a page can hold.
         var size = all.Count <= 22 ? 9.0 : all.Count <= 34 ? 8.0 : all.Count <= 46 ? 7.0 : 6.2;
         var pad = all.Count <= 22 ? 4.0 : all.Count <= 34 ? 3.0 : all.Count <= 46 ? 2.2 : 1.6;

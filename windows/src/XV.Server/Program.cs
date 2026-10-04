@@ -46,6 +46,10 @@ for (var i = 0; i + 1 < args.Length; i++)
 for (var i = 0; i + 3 < args.Length; i++)
     if (args[i] == "--add-record")
         store.AddManualRecord(args[i + 1], args[i + 2], Store.NowMs - (i * 3_600_000L), "LOC07", "G02", args[i + 3]);
+// --add-trip VEHICLE FROM_LOC DEST MINUTES_AGO APPROX_MIN TAKEN_MIN : a vehicle trip entered by the server operator (CI test data); TAKEN 0 = still on the way
+for (var i = 0; i + 6 < args.Length; i++)
+    if (args[i] == "--add-trip")
+        store.AddManualTransit(args[i + 1], args[i + 2], args[i + 3], Store.NowMs - long.Parse(args[i + 4]) * 60_000L, int.Parse(args[i + 5]), int.Parse(args[i + 6]));
 // --add-visitor NAME FROM_MINUTES TO_MINUTES : visitor pass valid from now+FROM to now+TO (CI test data)
 for (var i = 0; i + 3 < args.Length; i++)
     if (args[i] == "--add-visitor")
