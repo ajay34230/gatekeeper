@@ -871,7 +871,12 @@ public partial class MainWindow : Window
             Add(T(S(r["actor"]), 11, "#B45309", bold: true, mono: true), 1);
             Add(T(S(r["action"]), 11, "#0F172A", mono: true), 2);
             Add(T($"{S(r["entity_type"])} {S(r["entity_id"])}", 11, "#334155", mono: true), 3);
-            Add(T(S(r["detail"]), 11, "#94A3B8", mono: true), 4);
+            if (S(r["detail"]).Length > 0)
+            {
+                g.RowDefinitions.Add(new RowDefinition()); g.RowDefinitions.Add(new RowDefinition());
+                var dt = T(S(r["detail"]), 10.5, "#64748B", mono: true).Wrap().M(0, 2, 0, 0);
+                Grid.SetRow(dt, 1); Grid.SetColumnSpan(dt, 5); g.Children.Add(dt);
+            }
             sp.Children.Add(new Border { Child = g, Padding = new Thickness(10, 7, 10, 7), BorderBrush = B("#F1F5F9"), BorderThickness = new Thickness(0, 0, 0, 1) });
         }
         ContentHost.Content = Card(sp, "#FFFFFF", pad: 4);

@@ -81,7 +81,7 @@ public sealed class VisitorsWindow : DarkWindow
                 T(Parts(id, S(v["unit"]), Labeled("ID proof", S(v["id_proof"])), Labeled("Mobile", S(v["mobile"]))), 11, "#64748B", mono: true).Wrap().M(0, 3),
                 T(Parts(Labeled("Purpose", S(v["pass_purpose"])), Labeled("Visiting", S(v["pass_host"]))), 11.5, "#475569").Wrap().M(0, 3),
                 T($"Valid {Time(L(v["valid_from"]), "dd MMM yyyy HH:mm")} → {Time(L(v["valid_to"]), "dd MMM yyyy HH:mm")}" +
-                  (v["inside_since"] != null ? $"   •   inside since {Time(L(v["inside_since"]), "HH:mm")}" : ""), 11, "#FCD34D", mono: true).M(0, 3));
+                  (v["inside_since"] != null ? $"   •   inside since {Time(L(v["inside_since"]), "HH:mm")}" : ""), 11, "#B45309", mono: true).M(0, 3));
             var actions = Row(
                 Btn("Print pass", (_, _) => VisitorPassCard.Show(this, id), "BtnGold"),
                 Btn("History", (_, _) => Dialogs.History(this, "PERSON", id)).M(6),
@@ -270,7 +270,7 @@ public sealed class LeaveWindow : DarkWindow
                 T($"{DisplayId(S(a["person_id"]))}  •  {S(a["service_no"])}  •  {S(a["company"])} {S(a["platoon"])} {S(a["section"])}  •  Mobile {S(a["mobile"])}", 11, "#64748B", mono: true).M(0, 3),
                 T($"{S(a["reason"])}{(S(a["remarks"]).Length > 0 ? " — " + S(a["remarks"]) : "")}", 12, "#475569").M(0, 3),
                 T($"{(S(a["kind"]) == "VISITOR_OVERSTAY" ? "Inside since" : "Left")} {Time(L(a["left_at"]), "dd MMM yyyy HH:mm")}   →   {(S(a["kind"]) == "VISITOR_OVERSTAY" ? "pass ended" : "expected back")} {Time(due, "dd MMM yyyy HH:mm")}",
-                  11, overdue ? "#FB7185" : "#FCD34D", mono: true).M(0, 3));
+                  11, overdue ? "#BE123C" : "#B45309", mono: true).M(0, 3));
             var id = S(a["person_id"]);
             _list.Children.Add(Card(Spread(info, Row(Btn("History", (_, _) => Dialogs.History(this, "PERSON", id)))), pad: 12, border: overdue ? "#9F1239" : "#E2E8F0").M(0, 0, 0, 8));
         }

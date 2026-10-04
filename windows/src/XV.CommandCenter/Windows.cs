@@ -184,10 +184,12 @@ public sealed class StationsWindow : DarkWindow
         Body.Children.Add(Label("Locations"));
         Body.Children.Add(_locs);
         var lid = new TextBox { Width = 110, FontFamily = Mono, ToolTip = "e.g. LOC07" }; var lname = new TextBox { Width = 330, ToolTip = "e.g. Location 07 (Main Hub)" };
+        Body.Children.Add(T("Add a location:  ID (e.g. LOC07)   then   name (e.g. Location 07 Main Hub)", 10.5, "#64748B").M(0, 4, 0, 4));
         Body.Children.Add(Row(lid, lname.M(8), Btn("Add / Update", (_, _) => { try { App.Store.UpsertLocation(lid.Text, lname.Text); lid.Text = lname.Text = ""; Fill(); } catch (Exception ex) { Fail(ex); } }, "BtnAmber").M(8)).M(0, 4));
         Body.Children.Add(Label("Gates"));
         Body.Children.Add(_gates);
         var gid = new TextBox { Width = 110, FontFamily = Mono, ToolTip = "e.g. G02" }; var gname = new TextBox { Width = 330, ToolTip = "e.g. Gate 02 (Primary)" };
+        Body.Children.Add(T("Add a gate:  ID (e.g. G02)   then   name (e.g. Gate 02 Primary)", 10.5, "#64748B").M(0, 4, 0, 4));
         Body.Children.Add(Row(gid, gname.M(8), Btn("Add / Update", (_, _) => { try { App.Store.UpsertGate(gid.Text, gname.Text); gid.Text = gname.Text = ""; Fill(); } catch (Exception ex) { Fail(ex); } }, "BtnAmber").M(8)).M(0, 4));
 
         Body.Children.Add(Label("Server"));
