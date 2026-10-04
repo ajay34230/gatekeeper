@@ -151,6 +151,14 @@ if (ci2 >= 0 && ci2 + 1 < args.Length)
     Console.WriteLine("Connection details written to " + args[ci2 + 1]);
     return;
 }
+var gdi = Array.IndexOf(args, "--guide");
+if (gdi >= 0 && gdi + 1 < args.Length)
+{
+    var shots = gdi + 2 < args.Length ? args[gdi + 2] : null;
+    var n = Reports.GuidePdf(args[gdi + 1], shots, "test");
+    Console.WriteLine($"GUIDE written with {n} screenshot(s)");
+    return;
+}
 var dri = Array.IndexOf(args, "--demo-route");
 if (dri >= 0 && dri + 1 < args.Length) { DemoRoute.Write(args[dri + 1]); Console.WriteLine("Demo route charts written to " + args[dri + 1]); return; }
 var tri = Array.IndexOf(args, "--transit-report");

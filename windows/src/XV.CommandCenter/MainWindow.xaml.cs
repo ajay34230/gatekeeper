@@ -148,6 +148,8 @@ public partial class MainWindow : Window
         else if (TabAccounts.IsChecked == true) RenderAccounts();
         else if (TabSettings.IsChecked == true) RenderSettings();
         else if (TabExport.IsChecked == true) RenderExport();
+        else if (TabHelp.IsChecked == true) RenderHelp();
+        else if (TabAbout.IsChecked == true) RenderAbout();
         else RenderAudit();
     }
 
@@ -947,6 +949,8 @@ public partial class MainWindow : Window
         yield return (() => { TabPersons.IsChecked = true; Refresh(); }, "02-personnel");
         yield return (() => { TabVehicles.IsChecked = true; Refresh(); }, "03-vehicles");
         yield return (() => { TabTransit.IsChecked = true; Refresh(); }, "03b-transit-times");
+        yield return (() => { TabHelp.IsChecked = true; Refresh(); }, "22-help");
+        yield return (() => { TabAbout.IsChecked = true; Refresh(); }, "23-about");
         yield return (() => { TabAccounts.IsChecked = true; Refresh(); }, "04-accounts-devices");
         yield return (() => { TabAudit.IsChecked = true; Refresh(); }, "05-audit");
         yield return (() => { TabExport.IsChecked = true; Refresh(); }, "06-export");

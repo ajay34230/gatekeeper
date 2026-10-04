@@ -92,6 +92,17 @@ jobs:
           }
           if (Test-Path "$env:XV_DATA_DIR\error.log") { Get-Content "$env:XV_DATA_DIR\error.log" }
 
+      - name: Bundle guide screenshots and build the PDF guide
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          if (Test-Path "screenshots/*.png") {
+            New-Item -ItemType Directory -Force -Path "windows/dist/app/guide-shots" | Out-Null
+            Copy-Item "screenshots/*.png" "windows/dist/app/guide-shots"
+            $env:XV_DATA_DIR = "$env:RUNNER_TEMP\xvguide"
+            dotnet windows/src/XV.Server/bin/Release/net8.0/XV.Server.dll --setup-only --guide screenshots/XV-User-Guide.pdf screenshots
+          }
+
       - name: Build installer
         shell: pwsh
         run: |

@@ -219,6 +219,8 @@
                                 <RadioButton x:Name="TabAudit" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked" Content="Audit Trail"/>
                                 <RadioButton x:Name="TabExport" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked" Content="Export"/>
                                 <RadioButton x:Name="TabSettings" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked" Content="Settings"/>
+                                <RadioButton x:Name="TabHelp" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked" Content="Help"/>
+                                <RadioButton x:Name="TabAbout" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked" Content="About"/>
                             </StackPanel>
                         </Border>
                         <Grid Grid.Column="1" HorizontalAlignment="Right" MaxWidth="330" MinWidth="170" Margin="12,0,0,0">
