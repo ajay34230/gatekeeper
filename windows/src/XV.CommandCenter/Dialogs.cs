@@ -313,10 +313,17 @@ public static class Dialogs
 
     sealed class HistoryWindow : DarkWindow
     {
-        public HistoryWindow(string type, string id) : base("Movement History • " + DisplayId(id), "Every entry and exit recorded for this credential, newest first.", 760, 640)
+        public HistoryWindow(string type, string id) : base("Movement History • " + DisplayId(id), "Every entry and exit recorded for this credential, newest first.", 900, 800)
         {
             var rows = App.Store.EventsForEntity(type, id);
-            if (rows.Count == 0) Body.Children.Add(Para("No gate activity has been recorded yet."));
+            if (rows.Count == 0) { Body.Children.Add(Para("No gate activity has been recorded yet.")); goto buttons; }
+
+            // Build route chart from chronological events (reverse the DESC order to get ASC)
+            var chronoEvents = rows.AsEnumerable().Reverse().ToList();
+            var routePanel = BuildRouteChart(chronoEvents);
+            if (routePanel != null) Body.Children.Add(routePanel);
+
+            Body.Children.Add(Label("DETAILED RECORDS"));
             long? total = 0;
             foreach (var r in rows)
             {
@@ -330,12 +337,76 @@ public static class Dialogs
                         T(Note(r, "  •  ") + (L(r["stay_ms"]) > 0 ? "Stayed " + Duration(L(r["stay_ms"])) : "Op " + S(r["operator_id"])), 11, "#334155", mono: true))), "#FFFFFF", pad: 10).M(0, 0, 0, 6));
             }
             if (rows.Count > 0) Body.Children.Insert(0, Para($"{rows.Count} records • total recorded time on site: {Duration(total ?? 0)}", "#B45309"));
+
+            buttons:
             if (type == "PERSON")
             {
                 AddButton("+ Add Record", () => { Close(); AddRecord(Owner, id); History(Owner, type, id); }, "BtnBlue");
                 AddButton("Export…", () => Report(this, "ALL", [id]), "BtnEmerald");
             }
             AddButton("Close", Close, "BtnAmber");
+        }
+
+        private Border? BuildRouteChart(List<Dictionary<string, object?>> chronoEvents)
+        {
+            if (chronoEvents.Count < 2) return null;
+
+            var routePanel = Col();
+            routePanel.Children.Add(T("ROUTE VISUALIZATION", 11, "#64748B", bold: true).M(0, 4, 0, 8));
+
+            var timeline = Col();
+            var prevTs = 0L;
+            var prevLoc = "";
+
+            foreach (var evt in chronoEvents)
+            {
+                var ts = L(evt["event_ts"]);
+                var locName = S(evt["location_name"]);
+                var gateName = S(evt["gate_name"]);
+                var eventType = S(evt["event_type"]);
+                var stay = L(evt["stay_ms"]);
+                var isEntry = eventType == "ENTRY";
+
+                // Show travel time from previous event if there was one
+                if (prevTs > 0 && prevLoc != locName)
+                {
+                    var travelMs = ts - prevTs;
+                    var travelTime = travelMs > 0 ? Duration(travelMs) : "same time";
+                    timeline.Children.Add(
+                        new TextBlock {
+                            Text = $"↓ Travelled to {locName} ({travelTime})",
+                            Foreground = B("#94A3B8"),
+                            FontSize = 10,
+                            Margin = new Thickness(8, 4, 0, 4),
+                            FontStyle = FontStyles.Italic
+                        }
+                    );
+                }
+
+                // Location card with entry/exit
+                var locBlock = new Border
+                {
+                    BorderBrush = B(isEntry ? "#059669" : "#B45309"),
+                    BorderThickness = new Thickness(3, 0, 0, 0),
+                    Padding = new Thickness(12, 8, 12, 8),
+                    Background = B(isEntry ? "#F0FDF4" : "#FFFBEB"),
+                    Margin = new Thickness(0, 0, 0, 6),
+                    Child = Col(
+                        Row(
+                            T(isEntry ? "📍 ARRIVED" : "🚪 LEFT", 10, isEntry ? "#059669" : "#B45309", bold: true),
+                            new TextBlock { Text = "  " + Time(ts, "HH:mm"), Foreground = B("#334155"), FontSize = 11, FontFamily = Mono, Margin = new Thickness(0, 0, 0, 0) }
+                        ),
+                        T($"{locName} • {gateName}", 11.5, "#0F172A", bold: true).M(0, 4, 0, 0),
+                        stay > 0 ? T($"⏱ Stayed {Duration(stay)}", 10.5, "#64748B") : new TextBlock()
+                    )
+                };
+                timeline.Children.Add(locBlock);
+                prevTs = ts + stay;
+                prevLoc = locName;
+            }
+
+            routePanel.Children.Add(Card(timeline, "#FFFFFF", pad: 12));
+            return new Border { Child = routePanel, Padding = new Thickness(0, 0, 0, 16) };
         }
     }
 
