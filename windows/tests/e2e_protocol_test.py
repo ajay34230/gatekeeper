@@ -188,7 +188,20 @@ assert trip["overdue"] is True and trip["destId"] == "LOC08" and trip["fromName"
 assert not {"expectedMin", "vehicleType", "fromId"} & set(trip), "the phone is not told route times or vehicle details"
 assert "transitRoutes" not in boot, "standard route times are not shared with terminals"
 tid = trip["transitId"]
+def notice():
+    if not os.environ.get("XV_SERVER_DLL"): return ""
+    r = subprocess.run(["dotnet", os.environ["XV_SERVER_DLL"], "--setup-only", "--notice-status"], capture_output=True, text=True, env=dict(os.environ))
+    return " ".join(l for l in r.stdout.splitlines() if l.startswith("NOTICE V014"))
+def notice_send():
+    if os.environ.get("XV_SERVER_DLL"): subprocess.run(["dotnet", os.environ["XV_SERVER_DLL"], "--setup-only", "--notice-send"], capture_output=True, text=True, env=dict(os.environ))
+if os.environ.get("XV_SERVER_DLL"):
+    assert "not sent yet" in notice(), notice()
+    notice_send()
+    assert "IN TRANSIT" in notice(), notice()
+    code, op2, _ = rpc("transit.open", {}, tok)
+    assert "RECEIVED" in notice(), notice()
 assert rpc("transit.snooze", {"transitId": tid}, tok)[0] == 200
+if os.environ.get("XV_SERVER_DLL"): assert "SEEN" in notice(), notice(); print("notice status ok")
 code, body, _ = rpc("transit.resolve", {"transitId": tid, "kind": "REACHED", "minutes": 0}, tok); assert code == 400 and body["reason"] == "INVALID_MINUTES", (code, body)
 code, body, _ = rpc("transit.resolve", {"transitId": tid, "kind": "DIVERTED", "minutes": 50}, tok); assert code == 400 and body["reason"] == "PLACE_REQUIRED", (code, body)
 code, body, _ = rpc("transit.resolve", {"transitId": tid, "kind": "REACHED", "minutes": 300}, tok); assert code == 400 and body["reason"] == "INVALID_MINUTES", (code, body)

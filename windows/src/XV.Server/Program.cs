@@ -151,6 +151,10 @@ if (ci2 >= 0 && ci2 + 1 < args.Length)
     Console.WriteLine("Connection details written to " + args[ci2 + 1]);
     return;
 }
+if (args.Contains("--notice-send"))
+    foreach (var t in store.TransitsDueForRpAlert()) { store.MarkRpNoticeSent(t["transit_id"]!.ToString()!); }
+if (args.Contains("--notice-status"))
+    foreach (var t in store.Transits(Store.TransitEnRoute)) Console.WriteLine($"NOTICE {t["vehicle_id"]} {TransitText.NoticeStatus(t)}");
 var gdi = Array.IndexOf(args, "--guide");
 if (gdi >= 0 && gdi + 1 < args.Length)
 {

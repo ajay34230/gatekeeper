@@ -239,6 +239,7 @@ public sealed class ApiServer : IAsyncDisposable
                 // Trips heading to the location this terminal is assigned to (the destination RP's list).
                 var loc = _store.TerminalLocation(deviceId, data["locationId"]?.ToString());
                 var trips = loc.Length == 0 ? [] : _store.OpenTransitsTo(loc).Where(t => t["overdue"] is true).ToList();
+                _store.MarkRpNoticeReceived(trips.Select(t => t["transit_id"]?.ToString() ?? ""));
                 return (200, new JsonObject { ["serverTime"] = Store.NowMs, ["locationId"] = loc, ["trips"] = new JsonArray(trips.Select(t => (JsonNode)_store.TransitJson(t)).ToArray()) });
             }
             case "transit.resolve":
@@ -254,7 +255,7 @@ public sealed class ApiServer : IAsyncDisposable
             case "transit.snooze":
             {
                 var id = data["transitId"]?.ToString() ?? "";
-                if (_store.OpenTransitsTo(_store.TerminalLocation(deviceId, data["locationId"]?.ToString())).Any(t => t["transit_id"]?.ToString() == id)) _store.SnoozeTransitRp(id);
+                if (_store.OpenTransitsTo(_store.TerminalLocation(deviceId, data["locationId"]?.ToString())).Any(t => t["transit_id"]?.ToString() == id)) { _store.SnoozeTransitRp(id); _store.MarkRpNoticeSeen(id); }
                 return (200, new JsonObject { ["status"] = "ok" });
             }
             case "vehicle.manualSighting": { var r = _store.ManualVehicleSighting(data, deviceId, operatorId); return (r["status"]!.ToString() == "duplicate" ? 200 : 201, r); }

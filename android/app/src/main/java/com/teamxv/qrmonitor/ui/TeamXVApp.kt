@@ -1142,7 +1142,7 @@ private fun ActivityDetailSheet(event: MovementEvent, stayMs: Long? = null, onDi
                     ReviewRow("Operator", event.operatorId)
                     ReviewRow("Device", event.deviceId)
                     ReviewRow("Source", "${event.sourceType.name} • ${event.sourceId}")
-                    ReviewRow("Sync State", event.syncStatus.name)
+                    ReviewRow("Status", deliveryLabel(event.syncStatus))
                     ReviewRow("Event ID", event.eventId)
                 }
             }
@@ -2411,7 +2411,7 @@ private fun SuccessScreen(
                 Icon(Icons.Default.Check, null, tint = UiSuccess, modifier = Modifier.size(34.dp))
             }
             Spacer(Modifier.height(9.dp))
-            StatusPill(if (event.syncStatus == SyncStatus.SYNCED) "SYNCHRONIZED" else "LOCAL BUFFER STORED", StatusTone.Success)
+            StatusPill(deliveryLabel(event.syncStatus).uppercase(), if (event.syncStatus == SyncStatus.SYNCED) StatusTone.Success else StatusTone.Warning)
             Spacer(Modifier.height(7.dp))
             Text("${event.eventType.name} CONFIRMED", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 23.sp, color = UiInk)
             Text("Gate movement record generated", fontFamily = Sans, fontSize = 10.sp, color = UiMuted)
@@ -2466,7 +2466,7 @@ private fun SuccessScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.CheckCircle, null, tint = UiSuccess, modifier = Modifier.size(14.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text(if (event.syncStatus == SyncStatus.SYNCED) "Synchronized" else "Buffered Offline", fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = UiSuccess)
+                            Text(deliveryLabel(event.syncStatus), fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 9.sp, color = UiSuccess)
                         }
                     }
                 }
@@ -3072,7 +3072,7 @@ private fun CommsBubble(m: com.teamxv.qrmonitor.comms.CommsMessageEntity) {
                 Spacer(Modifier.height(3.dp))
                 Text(m.body, fontFamily = Sans, fontSize = 14.sp, color = if (mine && !alert) UiOnInk else UiInk)
                 Spacer(Modifier.height(4.dp))
-                val tick = if (!mine) "" else when (m.state) { "READ" -> " • read"; "DELIVERED" -> " • delivered"; "SENT" -> " • sent"; else -> " • waiting for link" }
+                val tick = if (!mine) "" else when (m.state) { "READ" -> " • seen"; "DELIVERED" -> " • received"; "SENT" -> " • sent, in transit"; else -> " • not sent yet (waiting for link)" }
                 Text(
                     SimpleDateFormat("dd MMM HH:mm", Locale.getDefault()).format(Date(m.createdAt)) + tick,
                     fontFamily = Mono, fontSize = 10.sp, color = if (mine && !alert) tc(0xFFA1A1AA) else UiMuted
@@ -3270,4 +3270,15 @@ private fun ResolveTripSheet(vm: MainViewModel, trip: TransitTrip, initialKind: 
             }
         }
     }
+}
+
+
+/** What happened to a record sent from this phone, in plain words: saved on the phone, in transit, or received by the server. */
+private fun deliveryLabel(s: SyncStatus): String = when (s) {
+    SyncStatus.PENDING -> "Saved on phone, not sent yet"
+    SyncStatus.SYNCING -> "In transit to server"
+    SyncStatus.SYNCED -> "Received by server"
+    SyncStatus.FAILED -> "Send failed, will retry"
+    SyncStatus.REJECTED -> "Received, rejected by server"
+    SyncStatus.CONFLICT -> "Received, conflict at server"
 }

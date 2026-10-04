@@ -46,6 +46,17 @@ public static class TransitText
         return $"Vehicle {vehicle} left {G(t, "from_name")} at {When(N(t, "left_at"))} and has not reached {G(t, "dest_name")}.{late}";
     }
 
+    /// <summary>What happened to the "not reached" notice sent to the destination RP: sent, in transit, received by the phone, seen by the RP.</summary>
+    public static string NoticeStatus(IReadOnlyDictionary<string, object?> t)
+    {
+        long sent = N(t, "rp_sent_at"), got = N(t, "rp_received_at"), seen = N(t, "rp_seen_at");
+        if (G(t, "dest_loc").Length == 0) return "No notice: the destination is not a known location";
+        if (sent == 0) return "RP notice: not sent yet";
+        if (seen >= sent && seen > 0) return $"RP notice: SEEN {Clock(seen, "HH:mm")} (sent {Clock(sent, "HH:mm")}, received {Clock(got, "HH:mm")})";
+        if (got >= sent && got > 0) return $"RP notice: RECEIVED by the phone {Clock(got, "HH:mm")} (sent {Clock(sent, "HH:mm")}) - not seen yet";
+        return $"RP notice: SENT {Clock(sent, "HH:mm")} - IN TRANSIT, the phone has not received it yet";
+    }
+
     /// <summary>The vehicle's details for the top of a route chart: registration, id, military registration, type, model, company, status.</summary>
     public static List<(string Label, string Value)> VehicleDetails(IReadOnlyDictionary<string, object?> v)
     {

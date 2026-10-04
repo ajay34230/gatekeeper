@@ -101,6 +101,7 @@ public sealed partial class Store : IDisposable
         foreach (var (_, col) in ExtraPersonFields) Ensure("persons", col, "TEXT NOT NULL DEFAULT ''");
         MigrateFeatures(Ensure);
         MigrateTransit();
+        MigrateTransitNotice();
         Exec("CREATE TABLE IF NOT EXISTS person_media(person_id TEXT PRIMARY KEY, photo BLOB, signature BLOB, updated_at INTEGER NOT NULL)");
         Ensure("person_media", "photo_at", "INTEGER NOT NULL DEFAULT 0");
         Ensure("person_media", "signed_at", "INTEGER NOT NULL DEFAULT 0");

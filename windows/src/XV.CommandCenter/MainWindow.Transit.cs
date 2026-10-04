@@ -114,6 +114,7 @@ public partial class MainWindow
             Kv("Left at", Time(L(t["left_at"]), "dd MMM HH:mm")),
             Kv("Approx. time", L(t["expected_min"]) > 0 ? Mins(L(t["expected_min"])) : "not set"),
             Kv("Expected by", hasDue ? Time(L(t["due_at"]), "dd MMM HH:mm") : "—"),
+            overdue ? T(TransitText.NoticeStatus(t), 10.5, "#9F1239").Wrap().M(0, 6, 0, 0) : new TextBlock(),
             Wrap(actions.ToArray()).M(0, 10, 0, 0));
         return Card(body, overdue ? "#FFF1F2" : "#FFFFFF", overdue ? "#9F1239" : "#E2E8F0");
     }

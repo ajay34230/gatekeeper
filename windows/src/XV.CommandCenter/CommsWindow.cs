@@ -193,7 +193,7 @@ public sealed class CommsWindow : Window
     {
         var mine = m.Direction == "OUT";
         var alert = m.Kind == "ALERT";
-        var state = !mine ? "" : m.ReadAt > 0 ? "  ✓✓ read" : m.DeliveredAt > 0 ? "  ✓✓ delivered" : "  ✓ queued";
+        var state = !mine ? "" : m.ReadAt > 0 ? "  ✓✓ seen" : m.DeliveredAt > 0 ? "  ✓✓ received" : "  ✓ sent, in transit";
         var body = new TextBlock { Text = m.Body, TextWrapping = TextWrapping.Wrap, Foreground = B(alert ? "#FECDD3" : "#F4F4F5"), FontSize = 13, LineHeight = 19 };
         var col = Col(
             T((alert ? "⚠ ALERT  •  " : "") + (mine ? "You" : m.Sender), 10.5, alert ? "#FB7185" : mine ? "#FCD34D" : "#93C5FD", bold: true),

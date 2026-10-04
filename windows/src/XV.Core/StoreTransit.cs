@@ -29,6 +29,24 @@ public sealed partial class Store
         CREATE INDEX IF NOT EXISTS ix_transits_vehicle ON transits(vehicle_id, left_at);
         """);
 
+    /// <summary>Delivery state of the "not reached" notice to the destination RP: when it was sent, when the phone fetched it, when the RP closed or answered it.</summary>
+    void MigrateTransitNotice()
+    {
+        var have = Query("PRAGMA table_info(transits)").Select(r => S(r["name"])).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var c in new[] { "rp_sent_at", "rp_received_at", "rp_seen_at" })
+            if (!have.Contains(c)) Exec($"ALTER TABLE transits ADD COLUMN {c} INTEGER NOT NULL DEFAULT 0");
+    }
+
+    /// <summary>The server sent (or re-sent) the notice to the destination RP's phones: received and seen start again from nothing.</summary>
+    public void MarkRpNoticeSent(string transitId) =>
+        Exec("UPDATE transits SET rp_sent_at=$1, rp_received_at=0, rp_seen_at=0 WHERE transit_id=$2 AND state='EN_ROUTE'", NowMs, transitId);
+
+    /// <summary>The destination phone fetched its list of trips and this trip was in it: the notice reached the phone.</summary>
+    public void MarkRpNoticeReceived(IEnumerable<string> transitIds)
+    {
+        foreach (var id in transitIds) Exec("UPDATE transits SET rp_received_at=$1 WHERE transit_id=$2 AND rp_sent_at>0 AND rp_received_at<rp_sent_at", NowMs, id);
+    }
+
     string LocationName(string id) => S(Scalar("SELECT name FROM locations WHERE id=$1", id)) is { Length: > 0 } n ? n : id;
 
     // ------------------------------------------------------------------ standard times between locations (the Transit Times tab)
@@ -296,6 +314,10 @@ public sealed partial class Store
 
     public void SnoozeTransitRp(string transitId) =>
         Exec("UPDATE transits SET rp_snooze_until=$1 WHERE transit_id=$2 AND state='EN_ROUTE'", NowMs + TransitSnoozeMinutes * 60_000L, transitId);
+
+    /// <summary>The RP on the phone closed or answered the notice: it was seen by a person.</summary>
+    public void MarkRpNoticeSeen(string transitId) =>
+        Exec("UPDATE transits SET rp_seen_at=$1 WHERE transit_id=$2 AND rp_sent_at>0 AND rp_seen_at<rp_sent_at", NowMs, transitId);
 
     /// <summary>Average real time between two locations across all vehicles (trips that actually arrived at a known place).</summary>
     public List<Dictionary<string, object?>> TransitAverages(long fromMs = 0, long toMs = long.MaxValue)

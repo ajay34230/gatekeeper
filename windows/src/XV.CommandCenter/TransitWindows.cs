@@ -262,6 +262,7 @@ public static class TransitMonitor
             {
                 try { App.Comms.Send(dev, "ALERT", text, "Command Center"); } catch { /* terminal offline: the next round tries again */ }
             }
+            App.Store.MarkRpNoticeSent(S(t["transit_id"]));
             App.Store.SnoozeTransitRp(S(t["transit_id"]));
         }
     }
