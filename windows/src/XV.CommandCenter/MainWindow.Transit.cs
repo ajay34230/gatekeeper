@@ -23,7 +23,8 @@ public partial class MainWindow
         var averages = App.Store.TransitAverages();
         var late = open.Count(t => t["overdue"] is true);
 
-        Header("VEHICLE TRANSIT TIMES", late > 0 ? $"{late} NOT REACHED" : $"{open.Count} on the way",
+        var noTime = open.Count(t => L(t["due_at"]) == 0);
+        Header("VEHICLE TRANSIT TIMES", late > 0 ? $"{late} NOT REACHED" : $"{open.Count} on the way" + (noTime > 0 ? $" • {noTime} need a time" : ""),
             "How long vehicles take between locations. A vehicle is never marked as reached by itself: only a gate scan, the destination RP or this server can record it.");
         SectionActions.Children.Add(Btn("+ Add Trip", (_, _) => TransitDialogs.AddTrip(this), "BtnAmber"));
         SectionActions.Children.Add(Btn("+ Time Between Locations", (_, _) => TransitDialogs.EditRoute(this), "BtnGold"));

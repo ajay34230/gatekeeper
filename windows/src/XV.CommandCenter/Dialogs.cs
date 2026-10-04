@@ -360,7 +360,7 @@ public static class Dialogs
         static Border? BuildRouteChart(List<Dictionary<string, object?>> newestFirst, List<Dictionary<string, object?>> manualTrips)
         {
             var steps = RouteModel.Build(newestFirst, manualTrips);
-            if (steps.Count < 2) return null;
+            if (steps.Count < 1) return null;
             var timeline = Col();
             foreach (var st in steps)
             {

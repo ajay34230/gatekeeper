@@ -65,6 +65,40 @@ for (var i = 0; i + 6 < args.Length; i++)
         var tid = store.AddManualTransit(args[i + 1], args[i + 2], args[i + 3], Store.NowMs - long.Parse(args[i + 4]) * 60_000L, int.Parse(args[i + 5]), kind.Length > 0 ? 0 : taken);
         if (kind.Length > 0) store.ResolveTransit(tid, kind, taken, place, "", "PC-ADMIN", "SERVER");
     }
+// --add-vehicle-trip VEHICLE DRIVER FROM DEST ENTRY_MIN_AGO EXIT_MIN_AGO APPROX_MIN : a real gate ENTRY then EXIT with a destination,
+// sent through the same vehicle transaction a terminal uses (CI test data)
+for (var i = 0; i + 7 < args.Length; i++)
+    if (args[i] == "--add-vehicle-trip")
+    {
+        var vid = Store.CanonId(args[i + 1]); var driver = Store.CanonId(args[i + 2]); var from = Store.CanonId(args[i + 3]);
+        var entryTs = Store.NowMs - long.Parse(args[i + 5]) * 60_000L; var exitTs = Store.NowMs - long.Parse(args[i + 6]) * 60_000L;
+        System.Text.Json.Nodes.JsonObject GateEvent(string id, string type, long ts, System.Text.Json.Nodes.JsonObject? extra = null)
+        {
+            var e = new System.Text.Json.Nodes.JsonObject
+            {
+                ["eventId"] = id, ["entityType"] = "VEHICLE", ["entityId"] = vid, ["eventType"] = type, ["locationId"] = from, ["gateId"] = "G02",
+                ["deviceId"] = "CI-TERMINAL", ["operatorId"] = "GK-01", ["eventTimestamp"] = ts, ["createdAt"] = ts, ["sourceType"] = "DIRECT",
+            };
+            if (extra != null) foreach (var kv in extra) e[kv.Key] = kv.Value?.DeepClone();
+            return e;
+        }
+        System.Text.Json.Nodes.JsonObject Manifest(string entryId, string state, long exitAt) => new()
+        {
+            ["manifestId"] = "MNF-" + entryId, ["vehicleId"] = vid, ["entryEventId"] = entryId, ["locationId"] = from, ["gateId"] = "G02", ["driverId"] = driver,
+            ["coDriverId"] = null, ["occupants"] = new System.Text.Json.Nodes.JsonArray(driver), ["createdAt"] = entryTs, ["state"] = state,
+        };
+        var entryId = "CI-ENT-" + Store.RandomCode(6);
+        store.VehicleTransaction(new System.Text.Json.Nodes.JsonObject { ["event"] = GateEvent(entryId, "ENTRY", entryTs), ["manifest"] = Manifest(entryId, "ACTIVE", 0) }, "CI-TERMINAL", "GK-01");
+        var exitId = "CI-EXT-" + Store.RandomCode(6);
+        var dest = new System.Text.Json.Nodes.JsonObject { ["destinationId"] = Store.CanonId(args[i + 4]), ["transitMinutes"] = int.Parse(args[i + 7]) };
+        store.VehicleTransaction(new System.Text.Json.Nodes.JsonObject { ["event"] = GateEvent(exitId, "EXIT", exitTs, dest), ["manifest"] = Manifest(entryId, "EXITED", exitTs) }, "CI-TERMINAL", "GK-01");
+        Console.WriteLine($"VEHICLE-TRIP {vid} {from}>{args[i + 4]}");
+    }
+// --alert-targets LOCATIONS OPERATORS (comma separated): the terminals the leave alert would also be sent to
+var ati = Array.IndexOf(args, "--alert-targets");
+if (ati >= 0 && ati + 2 < args.Length)
+    foreach (var d in store.TerminalsForAlert(args[ati + 1].Split(',', StringSplitOptions.RemoveEmptyEntries), args[ati + 2].Split(',', StringSplitOptions.RemoveEmptyEntries)))
+        Console.WriteLine("ALERT-TARGET " + d);
 // --add-visitor NAME FROM_MINUTES TO_MINUTES : visitor pass valid from now+FROM to now+TO (CI test data)
 for (var i = 0; i + 3 < args.Length; i++)
     if (args[i] == "--add-visitor")
@@ -128,8 +162,9 @@ if (tri >= 0 && tri + 1 < args.Length)
     Reports.TransitPdf(store, d0, DateTime.Today, Path.Combine(args[tri + 1], "XV-Transit.pdf"));
     Reports.TransitCsv(store, d0, DateTime.Today, Path.Combine(args[tri + 1], "XV-Transit.csv"));
     var vh = store.EventsForEntity("VEHICLE", "V014");
-    Reports.RouteChartExcel(vh, "V014 • demo vehicle", "Movement history", Path.Combine(args[tri + 1], "XV-Route.xlsx"));
-    Reports.RouteChartPdf(vh, "V014 • demo vehicle", "Movement history", Path.Combine(args[tri + 1], "XV-Route.pdf"));
+    var manual = store.Transits("", "V014").Where(t => (t["exit_event_id"]?.ToString() ?? "").Length == 0).ToList();
+    Reports.RouteChartExcel(vh, "V014 • demo vehicle", "Movement history", Path.Combine(args[tri + 1], "XV-Route.xlsx"), manual);
+    Reports.RouteChartPdf(vh, "V014 • demo vehicle", "Movement history", Path.Combine(args[tri + 1], "XV-Route.pdf"), manual);
     Console.WriteLine("Transit reports written to " + args[tri + 1]);
     return;
 }

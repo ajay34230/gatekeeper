@@ -203,6 +203,16 @@ assert vtx("EVT-T5", "ENTRY", "MNF-T3", now0 - 60 * 60_000, loc="LOC08")[0] == 2
 # scan at the planned destination closes the trip as REACHED
 assert vtx("EVT-T6", "EXIT", "MNF-T3", now0 - 30 * 60_000, {"destinationId": "LOC07", "transitMinutes": 20}, loc="LOC08")[0] == 201
 assert vtx("EVT-T7", "ENTRY", "MNF-T4", now0 - 5 * 60_000)[0] == 201
+# leave alert recipients: only terminals at a chosen location, or signed in by a chosen RP, are targeted
+srv_dll = os.environ.get("XV_SERVER_DLL")
+if srv_dll:
+    def targets(locs, ops):
+        r = subprocess.run(["dotnet", srv_dll, "--setup-only", "--alert-targets", locs, ops], capture_output=True, text=True, env=dict(os.environ))
+        return [l.split()[1] for l in r.stdout.splitlines() if l.startswith("ALERT-TARGET")]
+    assert dev in targets("LOC08", "NOBODY"), "a terminal at a chosen location is targeted"
+    assert targets("LOC99", "NOBODY") == [], "a terminal elsewhere is not targeted"
+    assert targets("", "") == [], "with nothing chosen nobody is targeted"
+    print("alert recipients ok")
 print("transit ok")
 
 # ---- security hardening
