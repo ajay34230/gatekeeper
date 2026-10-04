@@ -41,7 +41,7 @@ public sealed class VisitorsWindow : DarkWindow
         Body.Children.Add(_list);
         AddButton("Close", Close);
         AddButton("Export visitors report…", ExportReport, "BtnEmerald");
-        AddButton("+ New visitor pass", () => { var d = new VisitorPassDialog { Owner = this }; if (d.ShowDialog() == true && d.CreatedId != null) { Fill(); VisitorPassCard.Show(this, d.CreatedId); } }, "BtnAmber");
+        AddButton("+ New visitor pass", () => { var d = new VisitorPassDialog { Owner = this }; if (d.ShowDialog() == true && d.CreatedId != null) { Fill(); if (d.PrintAfter) VisitorPassCard.Show(this, d.CreatedId); } }, "BtnAmber");
         void OnChange() => Dispatcher.BeginInvoke(Fill);
         App.Store.Changed += OnChange;
         Closed += (_, _) => App.Store.Changed -= OnChange;
@@ -117,6 +117,7 @@ public sealed class VisitorsWindow : DarkWindow
 public sealed class VisitorPassDialog : DarkWindow
 {
     public string? CreatedId { get; private set; }
+    public bool PrintAfter { get; private set; }
 
     public VisitorPassDialog() : base("New Visitor Pass", "The QR on the pass works at every gate only inside the validity window.", 560, 820)
     {
@@ -145,7 +146,7 @@ public sealed class VisitorPassDialog : DarkWindow
             return new DateTimeOffset(d.SelectedDate.Value.Date + tod).ToUnixTimeMilliseconds();
         }
         AddButton("Cancel", Close);
-        AddButton("Create pass", () =>
+        void Create(bool print)
         {
             try
             {
@@ -156,10 +157,12 @@ public sealed class VisitorPassDialog : DarkWindow
                     ["accessLocations"] = access.Text.Trim(),
                 });
                 App.Comms.RequestSyncAll("new visitor pass");
-                DialogResult = true;
+                PrintAfter = print; DialogResult = true;
             }
             catch (Exception ex) { Fail(ex); }
-        }, "BtnAmber");
+        }
+        AddButton("Create pass (no print)", () => Create(false), "BtnGold");
+        AddButton("Create & print pass", () => Create(true), "BtnAmber");
     }
 }
 
