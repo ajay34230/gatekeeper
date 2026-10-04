@@ -69,7 +69,12 @@ public static class RouteModel
 {
     static string S(object? o) => o?.ToString() ?? "";
     static long L(object? o) => o == null ? 0 : Convert.ToInt64(o, CultureInfo.InvariantCulture);
-    static string Dur(long ms) => ms < 60_000 ? "under 1 min" : Reports.Duration(ms);
+    static string Dur(long ms)
+    {
+        if (ms < 60_000) return "under 1 min";
+        var t = TimeSpan.FromMilliseconds(ms);
+        return t.Days > 0 ? $"{t.Days}d {t.Hours}h {t.Minutes}m" : t.Hours > 0 ? $"{t.Hours}h {t.Minutes}m" : $"{t.Minutes}m";
+    }
 
     /// <summary>
     /// Builds the route from the records of one person or vehicle (newest first, as the History window loads them).
@@ -80,6 +85,7 @@ public static class RouteModel
         var now = nowMs ?? Store.NowMs;
         var ev = newestFirst.Reverse().OrderBy(x => L(x["event_ts"])).ToList();
         var steps = new List<RouteStep>();
+        long expectedBack = 0;
         for (var i = 0; i < ev.Count; i++)
         {
             var e = ev[i];
@@ -97,11 +103,14 @@ public static class RouteModel
             {
                 var exit = ev.Skip(i + 1).FirstOrDefault(x => S(x["event_type"]) == "EXIT");
                 var stay = exit == null ? "Still inside" : L(exit["stay_ms"]) > 0 ? "Stayed " + Dur(L(exit["stay_ms"])) : "";
-                steps.Add(new RouteStep("ARRIVED", ts, "ARRIVED", place, string.Join("  •  ", new[] { stay, note }.Where(x => x.Length > 0)), ""));
+                var back = expectedBack > 0 ? (ts > expectedBack + 3_600_000 ? "Came back " + Dur(ts - expectedBack) + " after the expected date" : "Came back on time") : "";
+                expectedBack = 0;
+                steps.Add(new RouteStep("ARRIVED", ts, "ARRIVED", place, string.Join("  •  ", new[] { stay, back, note }.Where(x => x.Length > 0)), ""));
             }
             else if (type == "EXIT")
             {
                 var back = L(e.GetValueOrDefault("expected_return"));
+                expectedBack = back;
                 var detail = string.Join("  •  ", new[] { note, back > 0 ? "Expected back " + DateTimeOffset.FromUnixTimeMilliseconds(back).LocalDateTime.ToString("dd MMM yyyy") : "" }.Where(x => x.Length > 0));
                 steps.Add(new RouteStep("LEFT", ts, "LEFT", place, detail, ""));
 
@@ -114,7 +123,7 @@ public static class RouteModel
                     steps.Add(new RouteStep("TRAVEL", ts, "TRAVEL", went, line, TransitText.StateLabel(S(e["tr_state"]), overdue)));
                 }
                 else if (next != null && S(next["event_type"]) == "ENTRY")
-                    steps.Add(new RouteStep("AWAY", ts, "AWAY", "", $"Away for {Dur(L(next["event_ts"]) - ts)} before the next entry (no destination was recorded)", ""));
+                    steps.Add(new RouteStep("AWAY", ts, "AWAY", "", $"Away for {Dur(L(next["event_ts"]) - ts)} before the next entry" + (S(e.GetValueOrDefault("entity_type")) == "VEHICLE" ? " (no destination was recorded)" : ""), ""));
                 else if (next == null)
                     steps.Add(new RouteStep("AWAY", ts, "AWAY", "", $"Outside since this exit ({Dur(now - ts)} ago)", ""));
             }

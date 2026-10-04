@@ -457,7 +457,13 @@ public static class Dialogs
             var gates = App.Store.Gates().Select(g => $"{S(g["id"])} — {S(g["name"])}").ToList();
             var loc = Choice("Location", locs, locs.FirstOrDefault() ?? "");
             var gate = Choice("Gate", gates, gates.FirstOrDefault() ?? "");
-            var remarks = Field("Remarks (reason, authority, pass number…)");
+            var reasonLabel = Label("Reason (ENTRY / EXIT)");
+            var reason = new ComboBox { IsEditable = true };
+            reason.Items.Add("");
+            foreach (var r in App.Settings.MovementReasons) reason.Items.Add(r);
+            Body.Children.Add(reasonLabel);
+            Body.Children.Add(reason);
+            var remarks = Field("Remarks (authority, pass number…)");
             var returnLabel = Label("Expected return date (optional)");
             var returnDate = new DatePicker { SelectedDate = null, DisplayDateStart = DateTime.Today };
             Body.Children.Add(returnLabel);
@@ -465,6 +471,7 @@ public static class Dialogs
             void SyncReturnVisibility()
             {
                 var show = type.Text == "EXIT";
+                reasonLabel.Visibility = reason.Visibility = type.Text is "ENTRY" or "EXIT" ? Visibility.Visible : Visibility.Collapsed;
                 returnLabel.Visibility = returnDate.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
                 if (!show) returnDate.SelectedDate = null;
             }
@@ -479,7 +486,7 @@ public static class Dialogs
                     var when = (date.SelectedDate ?? DateTime.Today).Date + tod;
                     var expectedReturn = type.Text == "EXIT" && returnDate.SelectedDate is { } rd ? new DateTimeOffset(rd.Date.AddHours(23).AddMinutes(59)).ToUnixTimeMilliseconds() : 0L;
                     App.Store.AddManualRecord(personId, type.Text, new DateTimeOffset(when).ToUnixTimeMilliseconds(),
-                        loc.Text.Split(' ')[0], gate.Text.Split(' ')[0], remarks.Text, expectedReturn: expectedReturn);
+                        loc.Text.Split(' ')[0], gate.Text.Split(' ')[0], remarks.Text, expectedReturn: expectedReturn, reason: type.Text is "ENTRY" or "EXIT" ? reason.Text : "");
                     DialogResult = true;
                 }
                 catch (Exception ex) { Fail(ex); }
@@ -663,5 +670,7 @@ public static class Dialogs
             yield return (() => new TransitAlertWindow(App.Store.Transits(Store.TransitEnRoute).Where(t => t["overdue"] is true).ToList()), "19-transit-alert");
         }
         yield return (() => TransitDialogs.ManualTripWindow(), "20-add-trip");
+        var overdueList = App.Store.Absences().Where(a => a["overdue"] is true).ToList();
+        if (overdueList.Count > 0) yield return (() => new AbsenceAlertWindow(overdueList, true, owner), "21-not-returned-alert");
     }
 }

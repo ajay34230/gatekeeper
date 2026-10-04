@@ -750,7 +750,7 @@ public sealed partial class Store : IDisposable
     /// Adds a record to a person's history from the Command Center. ENTRY / EXIT follow the same presence
     /// rules as a gate scan; any other type (Leave, Duty, Course…) is a dated history note that does not change presence.
     /// </summary>
-    public long AddManualRecord(string personId, string type, long ts, string locationId, string gateId, string remarks, string actor = "PC-ADMIN", long expectedReturn = 0)
+    public long AddManualRecord(string personId, string type, long ts, string locationId, string gateId, string remarks, string actor = "PC-ADMIN", long expectedReturn = 0, string reason = "")
     {
         personId = CanonId(personId);
         type = (type ?? "").Trim();
@@ -782,8 +782,8 @@ public sealed partial class Store : IDisposable
             var seq = NextSeq();
             Exec("""
                 INSERT INTO events(event_id,entity_type,entity_id,event_type,location_id,gate_id,device_id,operator_id,event_ts,created_at,received_at,seq,
-                  source_type,stay_ms,payload_hash,remarks,source,expected_return) VALUES($1,'PERSON',$2,$3,$4,$5,'PC',$6,$7,$8,$8,$9,'DIRECT',$10,'',$11,'PC',$12)
-                """, eventId, personId, type, Upper(locationId), Upper(gateId), actor, ts, NowMs, seq, stay, (remarks ?? "").Trim(), upper == "EXIT" && expectedReturn > 0 ? expectedReturn : 0L);
+                  source_type,stay_ms,payload_hash,remarks,source,expected_return,reason) VALUES($1,'PERSON',$2,$3,$4,$5,'PC',$6,$7,$8,$8,$9,'DIRECT',$10,'',$11,'PC',$12,$13)
+                """, eventId, personId, type, Upper(locationId), Upper(gateId), actor, ts, NowMs, seq, stay, (remarks ?? "").Trim(), upper == "EXIT" && expectedReturn > 0 ? expectedReturn : 0L, Clip((reason ?? "").Trim(), 60));
             Audit(actor, "ADD_HISTORY_RECORD", "PERSON", personId, $"{type} {(remarks ?? "").Trim()}".Trim());
             return seq;
         });

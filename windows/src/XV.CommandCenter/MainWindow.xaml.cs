@@ -698,6 +698,50 @@ public partial class MainWindow : Window
             catch (Exception ex) { MessageBox.Show(this, ex.Message, "Export"); }
         }
 
+        var routeType = new ComboBox { Width = 160 };
+        routeType.Items.Add("Person"); routeType.Items.Add("Vehicle"); routeType.SelectedIndex = 0;
+        var routePick = new ComboBox { Width = 420, IsEditable = true, IsTextSearchEnabled = true };
+        void FillRoutePick()
+        {
+            routePick.Items.Clear();
+            if (routeType.SelectedIndex == 0) foreach (var p in persons.OrderBy(p => S(p["name"]))) routePick.Items.Add($"{DisplayId(S(p["id"]))} — {S(p["rank"])} {S(p["name"])}".Trim());
+            else foreach (var v in App.Store.Vehicles()) routePick.Items.Add($"{DisplayId(S(v["id"]))} — {S(v["plate"])} — {S(v["type"])}".TrimEnd(' ', '—'));
+            if (routePick.Items.Count > 0) routePick.SelectedIndex = 0;
+        }
+        routeType.SelectionChanged += (_, _) => FillRoutePick();
+        FillRoutePick();
+        var routePeriod = new ComboBox { Width = 200 };
+        foreach (var p in new[] { "Entire history", "Last 7 days", "Last 30 days", "Last 90 days" }) routePeriod.Items.Add(p);
+        routePeriod.SelectedIndex = 0;
+
+        void ExportRouteChart(string kind)
+        {
+            try
+            {
+                if (!AdminGate.Require(this, $"Export route chart ({kind.ToUpperInvariant()})")) return;
+                var isPerson = routeType.SelectedIndex == 0;
+                var type = isPerson ? "PERSON" : "VEHICLE";
+                var entityId = Store.CanonId((routePick.Text ?? "").Split('—')[0]);
+                var entity = isPerson ? persons.FirstOrDefault(x => S(x["id"]) == entityId) : App.Store.Vehicles().FirstOrDefault(x => S(x["id"]) == entityId);
+                if (entity == null) throw new Exception("Choose a " + (isPerson ? "person" : "vehicle") + " from the list.");
+                var days = routePeriod.SelectedIndex switch { 1 => 7, 2 => 30, 3 => 90, _ => 0 };
+                var since = days == 0 ? 0 : new DateTimeOffset(DateTime.Today.AddDays(-(days - 1))).ToUnixTimeMilliseconds();
+                var rows = App.Store.EventsForEntity(type, entityId).Where(r => L(r["event_ts"]) >= since).ToList();
+                var manual = isPerson ? new List<Dictionary<string, object?>>() : App.Store.Transits("", entityId).Where(t => S(t["exit_event_id"]).Length == 0 && L(t["left_at"]) >= since).ToList();
+                if (rows.Count == 0 && manual.Count == 0) throw new Exception("There are no records for this " + (isPerson ? "person" : "vehicle") + " in that period.");
+                var title = isPerson ? $"{S(entity["rank"])} {S(entity["name"])}  •  {DisplayId(entityId)}  •  {S(entity["company"])}".Replace("   ", " ") : $"{S(entity["plate"])}  •  {DisplayId(entityId)}  •  {S(entity["type"])}";
+                var subtitle = "Movement history • " + (days == 0 ? "entire history" : $"last {days} days");
+                var ext = kind == "xlsx" ? ".xlsx" : ".pdf";
+                var dlg = new Microsoft.Win32.SaveFileDialog { FileName = $"XV-Route-{DisplayId(entityId)}-{DateTime.Now:yyyyMMdd-HHmm}{ext}", Filter = kind == "xlsx" ? "Excel workbook|*.xlsx" : "PDF document|*.pdf" };
+                if (dlg.ShowDialog(this) != true) return;
+                if (kind == "xlsx") XV.Core.Reports.RouteChartExcel(rows, title, subtitle, dlg.FileName, manual);
+                else XV.Core.Reports.RouteChartPdf(rows, title, subtitle, dlg.FileName, manual);
+                if (MessageBox.Show(this, "Route chart saved. Open it now?", "Export finished", MessageBoxButton.YesNo) == MessageBoxResult.Yes)
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dlg.FileName) { UseShellExecute = true });
+            }
+            catch (Exception ex) { MessageBox.Show(this, ex.Message, "Export"); }
+        }
+
         void ExportTransit(string kind)
         {
             try
@@ -728,6 +772,12 @@ public partial class MainWindow : Window
             Card(Col(
                 T("FILE FORMAT", 11, "#64748B", bold: true).M(0, 0, 0, 10),
                 Wrap(Btn("Export CSV", (_, _) => Export("csv"), "BtnBase"), Btn("Export PDF", (_, _) => Export("pdf"), "BtnDanger"), Btn("Export Excel", (_, _) => Export("xlsx"), "BtnEmerald"))
+            ), "#F1F5F9").M(0, 0, 0, 14),
+            Card(Col(
+                T("ROUTE CHART — PERSON OR VEHICLE", 11, "#64748B", bold: true).M(0, 0, 0, 8),
+                Prg("A separate export, not part of the personnel reports. One person or one vehicle: where they went, the time at each place, the time away and, for vehicles, each trip with its status. Excel has a colour-coded Route sheet and an All records sheet; PDF fits one page for printing.", "#94A3B8"),
+                Row(Col(Lbl("Who"), routeType), Col(Lbl("Select"), routePick).M(12, 0, 0, 0), Col(Lbl("Period"), routePeriod).M(12, 0, 0, 0)),
+                Wrap(Btn("Export Excel", (_, _) => ExportRouteChart("xlsx"), "BtnEmerald"), Btn("Export PDF (1 page)", (_, _) => ExportRouteChart("pdf"), "BtnDanger")).M(0, 10, 0, 0)
             ), "#F1F5F9").M(0, 0, 0, 14),
             Card(Col(
                 T("VEHICLE TRANSIT TIMES", 11, "#64748B", bold: true).M(0, 0, 0, 8),

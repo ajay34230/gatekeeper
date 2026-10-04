@@ -46,10 +46,25 @@ for (var i = 0; i + 1 < args.Length; i++)
 for (var i = 0; i + 3 < args.Length; i++)
     if (args[i] == "--add-record")
         store.AddManualRecord(args[i + 1], args[i + 2], Store.NowMs - (i * 3_600_000L), "LOC07", "G02", args[i + 3]);
+// --add-leave PERSON REASON DAYS_AGO RETURN_DAYS_AGO : entry a day before, then an exit with an expected return date (CI test data)
+for (var i = 0; i + 4 < args.Length; i++)
+    if (args[i] == "--add-leave")
+    {
+        var left = Store.NowMs - long.Parse(args[i + 3]) * 86_400_000L;
+        store.AddManualRecord(args[i + 1], "ENTRY", left - 86_400_000L, "LOC07", "G02", "CI test entry");
+        store.AddManualRecord(args[i + 1], "EXIT", left, "LOC07", "G02", "CI test leave", expectedReturn: Store.NowMs - long.Parse(args[i + 4]) * 86_400_000L, reason: args[i + 2]);
+    }
 // --add-trip VEHICLE FROM_LOC DEST MINUTES_AGO APPROX_MIN TAKEN_MIN : a vehicle trip entered by the server operator (CI test data); TAKEN 0 = still on the way
 for (var i = 0; i + 6 < args.Length; i++)
     if (args[i] == "--add-trip")
-        store.AddManualTransit(args[i + 1], args[i + 2], args[i + 3], Store.NowMs - long.Parse(args[i + 4]) * 60_000L, int.Parse(args[i + 5]), int.Parse(args[i + 6]));
+    {
+        // optional 8th/9th values: KIND (STOPPED / DIVERTED) and the place, closing the trip with the TAKEN minutes
+        var kind = i + 7 < args.Length && !args[i + 7].StartsWith("--") ? args[i + 7] : "";
+        var place = kind.Length > 0 && i + 8 < args.Length && !args[i + 8].StartsWith("--") ? args[i + 8] : "";
+        var taken = int.Parse(args[i + 6]);
+        var tid = store.AddManualTransit(args[i + 1], args[i + 2], args[i + 3], Store.NowMs - long.Parse(args[i + 4]) * 60_000L, int.Parse(args[i + 5]), kind.Length > 0 ? 0 : taken);
+        if (kind.Length > 0) store.ResolveTransit(tid, kind, taken, place, "", "PC-ADMIN", "SERVER");
+    }
 // --add-visitor NAME FROM_MINUTES TO_MINUTES : visitor pass valid from now+FROM to now+TO (CI test data)
 for (var i = 0; i + 3 < args.Length; i++)
     if (args[i] == "--add-visitor")
@@ -102,6 +117,8 @@ if (ci2 >= 0 && ci2 + 1 < args.Length)
     Console.WriteLine("Connection details written to " + args[ci2 + 1]);
     return;
 }
+var dri = Array.IndexOf(args, "--demo-route");
+if (dri >= 0 && dri + 1 < args.Length) { DemoRoute.Write(args[dri + 1]); Console.WriteLine("Demo route charts written to " + args[dri + 1]); return; }
 var tri = Array.IndexOf(args, "--transit-report");
 if (tri >= 0 && tri + 1 < args.Length)
 {

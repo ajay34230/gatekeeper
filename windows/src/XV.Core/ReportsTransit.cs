@@ -183,7 +183,7 @@ public static partial class Reports
         meta.Format.Font.Size = 8; meta.Format.Font.Color = C("#52525B"); meta.Format.SpaceBefore = Unit.FromPoint(5); meta.Format.SpaceAfter = Unit.FromPoint(5);
 
         var tbl = sec.AddTable();
-        foreach (var w in new[] { 2.5, 1.2, 1.9, 4.6, 6.4, 2.0 }) tbl.AddColumn(Unit.FromCentimeter(w));
+        foreach (var w in new[] { 2.4, 1.2, 1.9, 4.4, 5.9, 2.8 }) tbl.AddColumn(Unit.FromCentimeter(w));
         PdfHeader(tbl, "Date", "Time", "Step", "Location / destination", "Details", "Status");
         var n = 0;
         foreach (var s in shown)
@@ -230,6 +230,7 @@ public static partial class Reports
     static string VsApprox(Dictionary<string, object?> t)
     {
         long exp = L(t["expected_min"]), act = L(t["actual_min"]);
+        if (t["overdue"] is true) return TransitText.Mins(L(t["late_ms"]) / 60_000) + " late so far";
         if (exp <= 0 || act <= 0 || S(t["state"]) == Store.TransitStopped) return "";
         var d = act - exp;
         return d == 0 ? "on time" : d > 0 ? $"{TransitText.Mins(d)} late" : $"{TransitText.Mins(-d)} early";
