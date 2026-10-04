@@ -156,6 +156,7 @@ public partial class App : Application
         }
         OverdueMonitor.Start();
         DueSoonMonitor.Start();
+        TransitMonitor.Start();
         AutoLock.Start();
         // First start: protect the Command Center before it is used (auto-lock, restore, exports need this password).
         if (!Settings.HasAdminPassword && Current.MainWindow is Window mw)

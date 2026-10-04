@@ -100,6 +100,7 @@ public sealed partial class Store : IDisposable
         Ensure("events", "coming_from", "TEXT NOT NULL DEFAULT ''");
         foreach (var (_, col) in ExtraPersonFields) Ensure("persons", col, "TEXT NOT NULL DEFAULT ''");
         MigrateFeatures(Ensure);
+        MigrateTransit();
         Exec("CREATE TABLE IF NOT EXISTS person_media(person_id TEXT PRIMARY KEY, photo BLOB, signature BLOB, updated_at INTEGER NOT NULL)");
         Ensure("person_media", "photo_at", "INTEGER NOT NULL DEFAULT 0");
         Ensure("person_media", "signed_at", "INTEGER NOT NULL DEFAULT 0");
@@ -522,6 +523,7 @@ public sealed partial class Store : IDisposable
             ["manifests"] = new JsonArray(!shareRegistry ? [] : ActiveManifests().ToArray()),
             ["reasons"] = new JsonArray(Settings.MovementReasons.Select(r => (JsonNode)JsonValue.Create(r)!).ToArray()),
             ["returnReasons"] = new JsonArray(Settings.ReturnDateReasons.Select(r => (JsonNode)JsonValue.Create(r)!).ToArray()),
+            ["transitRoutes"] = TransitRoutesJson(),
         };
     }
 
@@ -724,12 +726,14 @@ public sealed partial class Store : IDisposable
                 foreach (var pid in people)
                     Exec("INSERT INTO presence(session_id,person_id,vehicle_id,source_type,source_id,entry_event_id,entry_at,location_id,gate_id) VALUES($1,$2,$3,'VEHICLE',$4,$5,$6,$7,$8)",
                         $"SES-{manifestId}-{++i}", pid, vid, manifestId, T(e, "eventId"), ts, Upper(T(e, "locationId")), Upper(T(e, "gateId")));
+                CloseTransitOnEntry(vid, Upper(T(e, "locationId")), ts, operatorId);
             }
             else
             {
                 if (active == null) throw new StoreException("VEHICLE_NOT_INSIDE", "Vehicle is not recorded inside");
                 if (S(active["manifest_id"]) != manifestId) throw new StoreException("ACTIVE_MANIFEST_MISMATCH", "Manifest does not match the vehicle's entry");
                 InsertEvent(e, "VEHICLE", vid, "EXIT", seq, hash, ts - Convert.ToInt64(active["created_at"]));
+                OpenTransitFromExit(e, vid, ts, operatorId);
                 Exec("UPDATE manifests SET state='EXITED', exit_event_id=$1, exit_at=$2 WHERE manifest_id=$3", T(e, "eventId"), ts, manifestId);
                 Exec("UPDATE presence SET status='CLOSED', exit_event_id=$1, exit_at=$2 WHERE source_type='VEHICLE' AND source_id=$3 AND status='ACTIVE'", T(e, "eventId"), ts, manifestId);
             }
@@ -807,12 +811,15 @@ public sealed partial class Store : IDisposable
     public List<Dictionary<string, object?>> RecentEvents(int limit = 300, string q = "", string type = "ALL") => Query("""
         SELECT e.*, COALESCE(p.name, v.plate, e.entity_id) AS title,
                CASE WHEN e.entity_type='PERSON' THEN TRIM(COALESCE(p.rank,'') || ' ' || COALESCE(p.unit,'')) ELSE COALESCE(v.type,'') END AS subtitle,
-               COALESCE(l.name, e.location_id) AS location_name, COALESCE(g.name, e.gate_id) AS gate_name, m.occupants
+               COALESCE(l.name, e.location_id) AS location_name, COALESCE(g.name, e.gate_id) AS gate_name, m.occupants,
+               tr.transit_id AS tr_transit_id, tr.dest_name AS tr_dest_name, tr.state AS tr_state, tr.expected_min AS tr_expected_min, tr.due_at AS tr_due_at,
+               tr.actual_min AS tr_actual_min, tr.resolved_via AS tr_resolved_via, tr.resolved_by AS tr_resolved_by, tr.end_name AS tr_end_name, tr.note AS tr_note, tr.left_at AS tr_left_at
         FROM events e
         LEFT JOIN persons p ON e.entity_type='PERSON' AND p.id=e.entity_id
         LEFT JOIN vehicles v ON e.entity_type='VEHICLE' AND v.id=e.entity_id
         LEFT JOIN locations l ON l.id=e.location_id LEFT JOIN gates g ON g.id=e.gate_id
         LEFT JOIN manifests m ON m.entry_event_id=e.event_id OR m.exit_event_id=e.event_id
+        LEFT JOIN transits tr ON tr.exit_event_id=e.event_id
         WHERE ($2='ALL' OR e.entity_type=$2 OR e.event_type=$2 OR ($2='FLAGS' AND e.loc_mismatch=1))
           AND ($3='' OR e.entity_id LIKE $4 OR p.name LIKE $4 OR v.plate LIKE $4 OR e.location_id LIKE $4 OR l.name LIKE $4 OR e.operator_id LIKE $4)
         ORDER BY e.seq DESC LIMIT $1
@@ -824,12 +831,15 @@ public sealed partial class Store : IDisposable
     public List<Dictionary<string, object?>> EventsForEntity(string type, string id) => Query("""
         SELECT e.*, COALESCE(p.name, v.plate, e.entity_id) AS title,
                CASE WHEN e.entity_type='PERSON' THEN TRIM(COALESCE(p.rank,'') || ' ' || COALESCE(p.unit,'')) ELSE COALESCE(v.type,'') END AS subtitle,
-               COALESCE(l.name, e.location_id) AS location_name, COALESCE(g.name, e.gate_id) AS gate_name, m.occupants
+               COALESCE(l.name, e.location_id) AS location_name, COALESCE(g.name, e.gate_id) AS gate_name, m.occupants,
+               tr.transit_id AS tr_transit_id, tr.dest_name AS tr_dest_name, tr.state AS tr_state, tr.expected_min AS tr_expected_min, tr.due_at AS tr_due_at,
+               tr.actual_min AS tr_actual_min, tr.resolved_via AS tr_resolved_via, tr.resolved_by AS tr_resolved_by, tr.end_name AS tr_end_name, tr.note AS tr_note, tr.left_at AS tr_left_at
         FROM events e
         LEFT JOIN persons p ON e.entity_type='PERSON' AND p.id=e.entity_id
         LEFT JOIN vehicles v ON e.entity_type='VEHICLE' AND v.id=e.entity_id
         LEFT JOIN locations l ON l.id=e.location_id LEFT JOIN gates g ON g.id=e.gate_id
         LEFT JOIN manifests m ON m.entry_event_id=e.event_id OR m.exit_event_id=e.event_id
+        LEFT JOIN transits tr ON tr.exit_event_id=e.event_id
         WHERE e.entity_type=$1 AND e.entity_id=$2
         ORDER BY e.seq DESC
         """, type, id);
@@ -865,7 +875,7 @@ public sealed partial class Store : IDisposable
     /// <summary>Removes all movement records and presence. Registry, accounts and devices are kept.</summary>
     public void PurgeRecords()
     {
-        Tx(() => { Exec("DELETE FROM events"); Exec("DELETE FROM manifests"); Exec("DELETE FROM presence"); Audit("PC-ADMIN", "PURGE_RECORDS"); return 0; });
+        Tx(() => { Exec("DELETE FROM events"); Exec("DELETE FROM manifests"); Exec("DELETE FROM presence"); Exec("DELETE FROM transits"); Audit("PC-ADMIN", "PURGE_RECORDS"); return 0; });
         Notify();
     }
 }

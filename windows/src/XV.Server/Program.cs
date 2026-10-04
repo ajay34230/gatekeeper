@@ -60,6 +60,13 @@ for (var i = 0; i + 3 < args.Length; i++)
 if (args.Contains("--absences"))
     foreach (var a in store.Absences())
         Console.WriteLine($"ABSENCE {a["person_id"]} {a["kind"]} reason={a["reason"]} overdue={a["overdue"]}");
+if (args.Contains("--transits"))
+{
+    foreach (var t in store.Transits())
+        Console.WriteLine($"TRANSIT {t["vehicle_id"]} {t["from_loc"]}>{(t["dest_loc"]?.ToString() is { Length: > 0 } d ? d : t["dest_name"])} {t["state"]} via={t["resolved_via"]} min={t["actual_min"]} end={t["end_loc"]}{t["end_name"]}");
+    foreach (var r in store.TransitRoutes()) Console.WriteLine($"ROUTE {r["from_loc"]}>{r["to_loc"]} {r["minutes"]} {r["source"]}");
+    foreach (var a in store.TransitAverages()) Console.WriteLine($"AVG {a["from_loc"]}>{a["to_key"]} trips={a["trips"]} avg={Math.Round(Convert.ToDouble(a["avg_min"]))}");
+}
 if (args.Contains("--card-register"))
     foreach (var c in store.CardRegister())
         Console.WriteLine($"CARD {c["id"]} issues={c["issues"]} lost={c["lost"]}");
@@ -89,6 +96,20 @@ if (ci2 >= 0 && ci2 + 1 < args.Length)
     ConnectionSheet.Txt(settings, fp, Path.Combine(args[ci2 + 1], "XV-Connection.txt"));
     ConnectionSheet.Json(settings, fp, Path.Combine(args[ci2 + 1], "XV-Connection.json"));
     Console.WriteLine("Connection details written to " + args[ci2 + 1]);
+    return;
+}
+var tri = Array.IndexOf(args, "--transit-report");
+if (tri >= 0 && tri + 1 < args.Length)
+{
+    Directory.CreateDirectory(args[tri + 1]);
+    var d0 = DateTime.Today.AddDays(-30);
+    Reports.TransitExcel(store, d0, DateTime.Today, Path.Combine(args[tri + 1], "XV-Transit.xlsx"));
+    Reports.TransitPdf(store, d0, DateTime.Today, Path.Combine(args[tri + 1], "XV-Transit.pdf"));
+    Reports.TransitCsv(store, d0, DateTime.Today, Path.Combine(args[tri + 1], "XV-Transit.csv"));
+    var vh = store.EventsForEntity("VEHICLE", "V014");
+    Reports.RouteChartExcel(vh, "V014 • demo vehicle", "Movement history", Path.Combine(args[tri + 1], "XV-Route.xlsx"));
+    Reports.RouteChartPdf(vh, "V014 • demo vehicle", "Movement history", Path.Combine(args[tri + 1], "XV-Route.pdf"));
+    Console.WriteLine("Transit reports written to " + args[tri + 1]);
     return;
 }
 var ri = Array.IndexOf(args, "--report");

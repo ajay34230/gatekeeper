@@ -214,6 +214,7 @@
                                 <RadioButton x:Name="TabFeed" Style="{StaticResource TabPill}" GroupName="tabs" IsChecked="True" Checked="Tab_Checked" Content="Live Feed"/>
                                 <RadioButton x:Name="TabPersons" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked" Content="Personnel Registry"/>
                                 <RadioButton x:Name="TabVehicles" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked" Content="Vehicle Fleet"/>
+                                <RadioButton x:Name="TabTransit" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked" Content="Transit Times"/>
                                 <RadioButton x:Name="TabAccounts" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked" Content="Accounts &amp; Devices"/>
                                 <RadioButton x:Name="TabAudit" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked" Content="Audit Trail"/>
                                 <RadioButton x:Name="TabExport" Style="{StaticResource TabPill}" GroupName="tabs" Checked="Tab_Checked" Content="Export"/>

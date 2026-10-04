@@ -29,7 +29,7 @@ jobs:
           XV_DATA_DIR=/tmp/xv dotnet $GITHUB_WORKSPACE/windows/src/XV.Server/bin/Release/net8.0/XV.Server.dll \
             --create-operator "Test Operator" GK-01 "Operator#1" \
             --import-persons $GITHUB_WORKSPACE/windows/tests/sample/persons.csv --import-vehicles $GITHUB_WORKSPACE/windows/tests/sample/vehicles.csv \
-            --add-location LOC07 "Location 07" --add-gate G02 "Gate 02" \
+            --add-location LOC07 "Location 07" --add-location LOC08 "Location 08" --add-gate G02 "Gate 02" \
             --add-visitor "CI Visitor" -5 120 --add-visitor "CI Expired Visitor" -120 -60 \
             --pair --comms-test-echo --ci-control > srv.log 2>&1 &
           for i in $(seq 1 60); do grep -q PAIRQR srv.log && break; sleep 1; done; cat srv.log
@@ -38,6 +38,12 @@ jobs:
           XV_DATA_DIR=/tmp/xv dotnet $GITHUB_WORKSPACE/windows/src/XV.Server/bin/Release/net8.0/XV.Server.dll --setup-only --absences --verify-audit | tee abs.txt
           grep -q "ABSENCE P001 RETURN reason=TD overdue=True" abs.txt
           grep -q "AUDIT .* 0 problem" abs.txt
+          # Vehicle transit: the destination RP's trip was closed only by the RP's entry, never assumed; scans close the others
+          XV_DATA_DIR=/tmp/xv dotnet $GITHUB_WORKSPACE/windows/src/XV.Server/bin/Release/net8.0/XV.Server.dll --setup-only --transits | tee tr.txt
+          grep -q "TRANSIT V014 LOC07>LOC08 REACHED via=RP min=45" tr.txt
+          grep -q "TRANSIT V014 LOC07>Ammo Depot DIVERTED via=SCAN" tr.txt
+          grep -q "TRANSIT V014 LOC08>LOC07 REACHED via=SCAN min=25" tr.txt
+          grep -q "ROUTE LOC07>LOC08 30 RP" tr.txt
       - name: Cloud Link test through a free Cloudflare tunnel (terminal reaches the PC only via the internet)
         continue-on-error: true
         run: |

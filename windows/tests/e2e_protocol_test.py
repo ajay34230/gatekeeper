@@ -169,6 +169,40 @@ code, body, _ = rpc("events.create", ev("EVT-L1", "PERSON", "P001", "EXIT", {"re
 assert code == 201, (code, body)
 print("leave ok")
 
+# ---- vehicle transit: destination on exit, alerts for the destination RP, nothing is ever assumed reached
+H = 3_600_000
+now0 = int(time.time() * 1000)
+def vtx(eid, typ, mid, ts, extra=None, loc="LOC07"):
+    e = ev(eid, "VEHICLE", "V014", typ, dict({"eventTimestamp": ts, "createdAt": ts, "locationId": loc}, **(extra or {})))
+    m = {"manifestId": mid, "vehicleId": "V014", "entryEventId": eid, "locationId": loc, "gateId": "G02", "driverId": "P001",
+         "coDriverId": None, "occupants": ["P001"], "createdAt": ts, "state": "ACTIVE"}
+    if typ == "EXIT": m = dict(m, state="EXITED", exitEventId=eid, exitAt=ts)
+    return rpc("vehicle.transaction", {"event": e, "manifest": m}, tok)
+assert vtx("EVT-T1", "ENTRY", "MNF-T1", now0 - 3 * H)[0] == 201
+assert vtx("EVT-T2", "EXIT", "MNF-T1", now0 - 2 * H, {"destinationId": "LOC08", "transitMinutes": 30})[0] == 201
+rpc("heartbeat", {"locationId": "LOC08", "gateId": "G02", "operatorId": "GK-01", "pending": 0, "appVersion": "ci"}, tok)
+code, op, _ = rpc("transit.open", {}, tok)
+assert code == 200 and len(op["trips"]) == 1, (code, op)
+trip = op["trips"][0]
+assert trip["overdue"] is True and trip["expectedMin"] == 30 and trip["destId"] == "LOC08" and trip["fromId"] == "LOC07", trip
+tid = trip["transitId"]
+assert rpc("transit.snooze", {"transitId": tid}, tok)[0] == 200
+code, body, _ = rpc("transit.resolve", {"transitId": tid, "kind": "REACHED", "minutes": 0}, tok); assert code == 400 and body["reason"] == "INVALID_MINUTES", (code, body)
+code, body, _ = rpc("transit.resolve", {"transitId": tid, "kind": "DIVERTED", "minutes": 50}, tok); assert code == 400 and body["reason"] == "PLACE_REQUIRED", (code, body)
+code, body, _ = rpc("transit.resolve", {"transitId": tid, "kind": "REACHED", "minutes": 300}, tok); assert code == 400 and body["reason"] == "INVALID_MINUTES", (code, body)
+assert rpc("transit.open", {}, tok)[1]["trips"][0]["overdue"] is True, "still not reached: nothing is assumed"
+code, body, _ = rpc("transit.resolve", {"transitId": tid, "kind": "REACHED", "minutes": 45}, tok); assert code == 200, (code, body)
+assert rpc("transit.open", {}, tok)[1]["trips"] == []
+# unknown destination: only the server can close it; a gate scan elsewhere closes it as DIVERTED
+assert vtx("EVT-T3", "ENTRY", "MNF-T2", now0 - 100 * 60_000)[0] == 201
+assert vtx("EVT-T4", "EXIT", "MNF-T2", now0 - 90 * 60_000, {"destinationName": "Ammo Depot"})[0] == 201
+assert rpc("transit.open", {}, tok)[1]["trips"] == [], "a trip to an unknown place is not shown to any RP"
+assert vtx("EVT-T5", "ENTRY", "MNF-T3", now0 - 60 * 60_000, loc="LOC08")[0] == 201
+# scan at the planned destination closes the trip as REACHED
+assert vtx("EVT-T6", "EXIT", "MNF-T3", now0 - 30 * 60_000, {"destinationId": "LOC07", "transitMinutes": 20}, loc="LOC08")[0] == 201
+assert vtx("EVT-T7", "ENTRY", "MNF-T4", now0 - 5 * 60_000)[0] == 201
+print("transit ok")
+
 # ---- security hardening
 # forged requests (wrong key) are refused and do not consume nonces of the real terminal
 ts, n = int(time.time() * 1000), base64.urlsafe_b64encode(os.urandom(16)).decode().rstrip("=")

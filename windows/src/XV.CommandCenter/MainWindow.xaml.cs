@@ -63,6 +63,8 @@ public partial class MainWindow : Window
         TabFeed.Content = $"Live Feed ({st.total})";
         TabPersons.Content = $"Personnel Registry ({st.inside + st.outside})";
         TabVehicles.Content = $"Vehicle Fleet ({st.fleet})";
+        TabTransit.Content = TransitMonitor.OverdueCount > 0 ? $"Transit Times ({TransitMonitor.OverdueCount} late)"
+            : TransitMonitor.OpenCount > 0 ? $"Transit Times ({TransitMonitor.OpenCount} on the way)" : "Transit Times";
         var pending = s.Accounts().Count(a => S(a["status"]) == "PENDING");
         TabAccounts.Content = pending > 0 ? $"Accounts & Devices ({pending} pending)" : "Accounts & Devices";
 
@@ -142,6 +144,7 @@ public partial class MainWindow : Window
         if (TabFeed.IsChecked == true) RenderFeed();
         else if (TabPersons.IsChecked == true) RenderPersons();
         else if (TabVehicles.IsChecked == true) RenderVehicles();
+        else if (TabTransit.IsChecked == true) RenderTransit();
         else if (TabAccounts.IsChecked == true) RenderAccounts();
         else if (TabSettings.IsChecked == true) RenderSettings();
         else if (TabExport.IsChecked == true) RenderExport();
@@ -194,6 +197,12 @@ public partial class MainWindow : Window
                 Spread(T($"⌖ {S(r["location_name"])} • {S(r["gate_name"])}", 10.5, "#64748B", mono: true),
                        L(r["stay_ms"]) > 0 ? T("Stayed: " + Duration(L(r["stay_ms"])), 10.5, "#334155", mono: true) : T(S(r["entity_type"]) == "VEHICLE" ? "VEHICLE" : "PERSON", 10, "#94A3B8", mono: true)).M(0, 10),
                 T((other ? S(r["event_type"]).ToUpperInvariant() + " • " : "") + Note(r, " • ") + $"Op {S(r["operator_id"])} • {(S(r["source"]) == "PC" ? "Command Center" : "Terminal " + S(r["device_id"]))} • Seq #{L(r["seq"])}", 10, other ? "#1D4ED8" : "#94A3B8", mono: true).M(0, 5));
+            if (TransitText.Line(r, "tr_") is { Length: > 0 } tripLine)
+            {
+                var late = TransitText.IsOverdue(r, "tr_");
+                var done = S(r["tr_state"]) != Store.TransitEnRoute;
+                body.Children.Add(Card(T("🚚  " + tripLine, 10.5, late ? "#9F1239" : done ? "#065F46" : "#92400E", bold: true).Wrap(), late ? "#FFF1F2" : done ? "#ECFDF5" : "#FFFBEB", late ? "#FDA4AF" : done ? "#A7F3D0" : "#FDE68A", 7).M(0, 8));
+            }
             if (flag)
                 body.Children.Add(Card(Spread(T("⚠ LOCATION MISMATCH", 10, "#B45309", bold: true, mono: true), T("QR: " + (S(r["scanned_loc"]) is { Length: > 0 } q ? q : "Diff Loc"), 10, "#B45309", mono: true)), "#FEF3C7", "#B45309", 7).M(0, 8));
             if (S(r["occupants"]).Length > 2)
@@ -496,6 +505,7 @@ public partial class MainWindow : Window
         sortPick.SelectionChanged += (_, _) => { _vehicleSort = VehicleSorts[sortPick.SelectedIndex].Key; RenderTab(); };
         FilterChips.Children.Add(Row(T("Sort by  ", 11.5, "#64748B", bold: true), sortPick));
         if (rows.Count == 0) { ContentHost.Content = Empty("No vehicles registered.\nUse '+ Register Vehicle' or import a CSV file."); return; }
+        var onWay = App.Store.Transits(Store.TransitEnRoute).GroupBy(t => S(t["vehicle_id"])).ToDictionary(g => g.Key, g => g.First());
         var grid = CardGrid();
         foreach (var v in rows)
         {
@@ -506,7 +516,9 @@ public partial class MainWindow : Window
                        StatusPill(status)),
                 Divider(),
                 Kv("Military Reg", S(v["mil_reg"])), Kv("Assigned Company", S(v["company"])),
-                Spread(T("Presence", 11, "#94A3B8"), inside ? Pill("IN YARD • " + Duration(Store.NowMs - L(v["inside_since"])), "#B45309", "#FEF3C7", "#B45309", 9.5) : Pill("DISPATCHED / OUT", "#64748B", "#E2E8F0", "#CBD5E1", 9.5)).M(0, 3),
+                Spread(T("Presence", 11, "#94A3B8"), inside ? Pill("IN YARD • " + Duration(Store.NowMs - L(v["inside_since"])), "#B45309", "#FEF3C7", "#B45309", 9.5)
+                    : onWay.TryGetValue(id, out var trip) ? Pill(trip["overdue"] is true ? "NOT REACHED " + S(trip["dest_name"]) : "ON THE WAY TO " + S(trip["dest_name"]), trip["overdue"] is true ? "#9F1239" : "#B45309", trip["overdue"] is true ? "#FFF1F2" : "#FEF3C7", trip["overdue"] is true ? "#FDA4AF" : "#FDE68A", 9.5)
+                    : Pill("DISPATCHED / OUT", "#64748B", "#E2E8F0", "#CBD5E1", 9.5)).M(0, 3),
                 Wrap(Btn("Edit", (_, _) => Dialogs.EditVehicle(this, id)), Btn("Windshield QR", (_, _) => Dialogs.Credential(this, "VEHICLE", id), "BtnGold"),
                      Btn("History", (_, _) => Dialogs.History(this, "VEHICLE", id)),
                      Btn(status == "ACTIVE" ? "Suspend" : "Activate", (_, _) => Dialogs.SetVehicleStatus(this, id, status == "ACTIVE" ? "SUSPENDED" : "ACTIVE")),
@@ -686,6 +698,25 @@ public partial class MainWindow : Window
             catch (Exception ex) { MessageBox.Show(this, ex.Message, "Export"); }
         }
 
+        void ExportTransit(string kind)
+        {
+            try
+            {
+                if (!AdminGate.Require(this, $"Export vehicle transit report ({kind.ToUpperInvariant()})")) return;
+                var (from, to) = ResolveDates();
+                if (from > to) throw new Exception("'From' must be before 'To'.");
+                var (filter, ext) = kind switch { "xlsx" => ("Excel workbook|*.xlsx", ".xlsx"), "pdf" => ("PDF document|*.pdf", ".pdf"), _ => ("CSV|*.csv", ".csv") };
+                var dlg = new Microsoft.Win32.SaveFileDialog { FileName = $"XV-Vehicle-Transit-{from:yyyyMMdd}-{to:yyyyMMdd}{ext}", Filter = filter };
+                if (dlg.ShowDialog(this) != true) return;
+                if (kind == "xlsx") XV.Core.Reports.TransitExcel(App.Store, from, to, dlg.FileName);
+                else if (kind == "pdf") XV.Core.Reports.TransitPdf(App.Store, from, to, dlg.FileName);
+                else XV.Core.Reports.TransitCsv(App.Store, from, to, dlg.FileName);
+                if (MessageBox.Show(this, "Report saved. Open it now?", "Export finished", MessageBoxButton.YesNo) == MessageBoxResult.Yes)
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dlg.FileName) { UseShellExecute = true });
+            }
+            catch (Exception ex) { MessageBox.Show(this, ex.Message, "Export"); }
+        }
+
         var panel = Col(
             Card(Col(T("WHO", 11, "#64748B", bold: true).M(0, 0, 0, 8), scopeBox, valuePanel), "#F1F5F9").M(0, 0, 0, 14),
             Card(Col(T("WHEN", 11, "#64748B", bold: true).M(0, 0, 0, 8), rangeBox, customPanel, withRecords), "#F1F5F9").M(0, 0, 0, 14),
@@ -697,6 +728,11 @@ public partial class MainWindow : Window
             Card(Col(
                 T("FILE FORMAT", 11, "#64748B", bold: true).M(0, 0, 0, 10),
                 Wrap(Btn("Export CSV", (_, _) => Export("csv"), "BtnBase"), Btn("Export PDF", (_, _) => Export("pdf"), "BtnDanger"), Btn("Export Excel", (_, _) => Export("xlsx"), "BtnEmerald"))
+            ), "#F1F5F9").M(0, 0, 0, 14),
+            Card(Col(
+                T("VEHICLE TRANSIT TIMES", 11, "#64748B", bold: true).M(0, 0, 0, 8),
+                Prg("Every vehicle trip with its destination, approximate and actual time, status (reached / stopped / moved elsewhere / not reached) and who recorded it, plus the average time between locations. Uses the period chosen under WHEN.", "#94A3B8"),
+                Wrap(Btn("Export CSV", (_, _) => ExportTransit("csv"), "BtnBase"), Btn("Export PDF", (_, _) => ExportTransit("pdf"), "BtnDanger"), Btn("Export Excel", (_, _) => ExportTransit("xlsx"), "BtnEmerald"))
             ), "#F1F5F9")
         );
         ContentHost.Content = panel;

@@ -318,9 +318,7 @@ public static class Dialogs
             var rows = App.Store.EventsForEntity(type, id);
             if (rows.Count == 0) { Body.Children.Add(Para("No gate activity has been recorded yet.")); goto buttons; }
 
-            // Build route chart from chronological events (reverse the DESC order to get ASC)
-            var chronoEvents = rows.AsEnumerable().Reverse().ToList();
-            var routePanel = BuildRouteChart(chronoEvents);
+            var routePanel = BuildRouteChart(rows);
             if (routePanel != null) Body.Children.Add(routePanel);
 
             Body.Children.Add(Label("DETAILED RECORDS"));
@@ -335,6 +333,12 @@ public static class Dialogs
                         T($"   {S(r["location_name"])} • {S(r["gate_name"])}", 11.5, "#64748B")),
                     Row(L(r["loc_mismatch"]) == 1 ? T("⚠ LOC FLAG  ", 10.5, "#B45309", bold: true, mono: true) : new TextBlock(),
                         T(Note(r, "  •  ") + (L(r["stay_ms"]) > 0 ? "Stayed " + Duration(L(r["stay_ms"])) : "Op " + S(r["operator_id"])), 11, "#334155", mono: true))), "#FFFFFF", pad: 10).M(0, 0, 0, 6));
+                if (TransitText.Line(r, "tr_") is { Length: > 0 } tripLine)
+                {
+                    var overdue = TransitText.IsOverdue(r, "tr_");
+                    var closed = S(r["tr_state"]) != Store.TransitEnRoute;
+                    Body.Children.Add(Card(T("🚚  " + tripLine, 11.5, overdue ? "#9F1239" : closed ? "#065F46" : "#92400E", bold: true).Wrap(), overdue ? "#FFF1F2" : closed ? "#ECFDF5" : "#FFFBEB", overdue ? "#FDA4AF" : closed ? "#A7F3D0" : "#FDE68A", 8).M(24, -2, 0, 8));
+                }
             }
             if (rows.Count > 0) Body.Children.Insert(0, Para($"{rows.Count} records • total recorded time on site: {Duration(total ?? 0)}", "#B45309"));
 
@@ -352,66 +356,27 @@ public static class Dialogs
             AddButton("Close", Close, "BtnAmber");
         }
 
-        private Border? BuildRouteChart(List<Dictionary<string, object?>> chronoEvents)
+        static Border? BuildRouteChart(List<Dictionary<string, object?>> newestFirst)
         {
-            if (chronoEvents.Count < 2) return null;
-
-            var routePanel = Col();
-            routePanel.Children.Add(T("ROUTE VISUALIZATION", 11, "#64748B", bold: true).M(0, 4, 0, 8));
-
+            var steps = RouteModel.Build(newestFirst);
+            if (steps.Count < 2) return null;
             var timeline = Col();
-            var prevTs = 0L;
-            var prevLoc = "";
-
-            foreach (var evt in chronoEvents)
+            foreach (var st in steps)
             {
-                var ts = L(evt["event_ts"]);
-                var locName = S(evt["location_name"]);
-                var gateName = S(evt["gate_name"]);
-                var eventType = S(evt["event_type"]);
-                var stay = L(evt["stay_ms"]);
-                var isEntry = eventType == "ENTRY";
-
-                // Show travel time from previous event if there was one
-                if (prevTs > 0 && prevLoc != locName)
+                var (bg, fg) = XV.Core.Reports.RouteColors(st);
+                var travel = st.Kind is "TRAVEL" or "AWAY";
+                var head = Row(Pill(st.Title, fg, bg, bg, 10), T("   " + Time(st.Ts, "ddd dd MMM  HH:mm"), 11, "#334155", mono: true));
+                if (st.Status.Length > 0) head.Children.Add(T("   " + st.Status, 10.5, fg, bold: true, mono: true));
+                var block = Col(head);
+                if (st.Place.Length > 0) block.Children.Add(T(travel ? "→ " + st.Place : st.Place, 12, "#0F172A", bold: true).M(0, 4, 0, 0));
+                if (st.Detail.Length > 0) block.Children.Add(T(st.Detail, 10.5, "#64748B").Wrap().M(0, 2, 0, 0));
+                timeline.Children.Add(new Border
                 {
-                    var travelMs = ts - prevTs;
-                    var travelTime = travelMs > 0 ? Duration(travelMs) : "same time";
-                    timeline.Children.Add(
-                        new TextBlock {
-                            Text = $"↓ Travelled to {locName} ({travelTime})",
-                            Foreground = B("#94A3B8"),
-                            FontSize = 10,
-                            Margin = new Thickness(8, 4, 0, 4),
-                            FontStyle = FontStyles.Italic
-                        }
-                    );
-                }
-
-                // Location card with entry/exit
-                var locBlock = new Border
-                {
-                    BorderBrush = B(isEntry ? "#059669" : "#B45309"),
-                    BorderThickness = new Thickness(3, 0, 0, 0),
-                    Padding = new Thickness(12, 8, 12, 8),
-                    Background = B(isEntry ? "#F0FDF4" : "#FFFBEB"),
-                    Margin = new Thickness(0, 0, 0, 6),
-                    Child = Col(
-                        Row(
-                            T(isEntry ? "📍 ARRIVED" : "🚪 LEFT", 10, isEntry ? "#059669" : "#B45309", bold: true),
-                            new TextBlock { Text = "  " + Time(ts, "HH:mm"), Foreground = B("#334155"), FontSize = 11, FontFamily = Mono, Margin = new Thickness(0, 0, 0, 0) }
-                        ),
-                        T($"{locName} • {gateName}", 11.5, "#0F172A", bold: true).M(0, 4, 0, 0),
-                        stay > 0 ? T($"⏱ Stayed {Duration(stay)}", 10.5, "#64748B") : new TextBlock()
-                    )
-                };
-                timeline.Children.Add(locBlock);
-                prevTs = ts + stay;
-                prevLoc = locName;
+                    BorderBrush = B(fg), BorderThickness = new Thickness(travel ? 1 : 0, 0, 0, 0), Padding = new Thickness(travel ? 24 : 12, 7, 12, 7),
+                    Background = B(travel ? "#FAFAFA" : bg), Margin = new Thickness(travel ? 14 : 0, 0, 0, 5), CornerRadius = new CornerRadius(6), Child = block,
+                });
             }
-
-            routePanel.Children.Add(Card(timeline, "#FFFFFF", pad: 12));
-            return new Border { Child = routePanel, Padding = new Thickness(0, 0, 0, 16) };
+            return new Border { Child = Col(T("ROUTE CHART", 11, "#64748B", bold: true).M(0, 4, 0, 8), Card(timeline, "#FFFFFF", pad: 12)), Padding = new Thickness(0, 0, 0, 16) };
         }
     }
 
@@ -442,6 +407,7 @@ public static class Dialogs
             {
                 try
                 {
+                    if (!AdminGate.Require(this, "Export route chart")) return;
                     var fmt = format.SelectedIndex == 0 ? "xlsx" : "pdf";
                     var ext = fmt == "xlsx" ? ".xlsx" : ".pdf";
                     var name = $"XV-Route-{DisplayId(id)}-{DateTime.Now:yyyyMMdd-HHmm}{ext}";
@@ -454,11 +420,11 @@ public static class Dialogs
 
                     if (fmt == "xlsx")
                     {
-                        XV.Core.Reports.RouteChartExcel(events, title, $"Movement history • {DateTime.Now:dd MMM yyyy}", dlg.FileName);
+                        XV.Core.Reports.RouteChartExcel(events, title, "Movement history", dlg.FileName);
                     }
                     else
                     {
-                        XV.Core.Reports.RouteChartPdf(events, title, $"Movement history • {DateTime.Now:dd MMM yyyy}", App.Store, dlg.FileName);
+                        XV.Core.Reports.RouteChartPdf(events, title, "Movement history", dlg.FileName);
                     }
 
                     if (MessageBox.Show("Route exported. Open it now?", "Export finished", MessageBoxButton.YesNo) == MessageBoxResult.Yes)
@@ -521,6 +487,44 @@ public static class Dialogs
 
     public static void AddRecord(Window owner, string personId) => new AddRecordDialog(personId) { Owner = owner }.ShowDialog();
 
+    sealed class TransitReportDialog : DarkWindow
+    {
+        public TransitReportDialog() : base("Vehicle transit report",
+            "Every vehicle trip in the period: where it went, the approximate and actual time, whether it reached, stopped or moved elsewhere, and who recorded it. Excel and PDF also include the average time between locations.", 600, 560)
+        {
+            Body.Children.Add(Label("From"));
+            var from = new DatePicker { SelectedDate = DateTime.Today.AddDays(-30) };
+            Body.Children.Add(from);
+            Body.Children.Add(Label("To"));
+            var to = new DatePicker { SelectedDate = DateTime.Today };
+            Body.Children.Add(to);
+            void Export(string kind)
+            {
+                try
+                {
+                    if (!AdminGate.Require(this, $"Export vehicle transit report ({kind.ToUpperInvariant()})")) return;
+                    var f = from.SelectedDate ?? DateTime.Today.AddDays(-30); var t = to.SelectedDate ?? DateTime.Today;
+                    if (f > t) throw new Exception("'From' must be before 'To'.");
+                    var (filter, ext) = kind switch { "xlsx" => ("Excel workbook|*.xlsx", ".xlsx"), "pdf" => ("PDF document|*.pdf", ".pdf"), _ => ("CSV|*.csv", ".csv") };
+                    var dlg = new SaveFileDialog { FileName = $"XV-Vehicle-Transit-{f:yyyyMMdd}-{t:yyyyMMdd}{ext}", Filter = filter };
+                    if (dlg.ShowDialog() != true) return;
+                    if (kind == "xlsx") XV.Core.Reports.TransitExcel(App.Store, f, t, dlg.FileName);
+                    else if (kind == "pdf") XV.Core.Reports.TransitPdf(App.Store, f, t, dlg.FileName);
+                    else XV.Core.Reports.TransitCsv(App.Store, f, t, dlg.FileName);
+                    if (MessageBox.Show("Report saved. Open it now?", "Export finished", MessageBoxButton.YesNo) == MessageBoxResult.Yes)
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dlg.FileName) { UseShellExecute = true });
+                }
+                catch (Exception ex) { Fail(ex); }
+            }
+            AddButton("Close", Close);
+            AddButton("CSV", () => Export("csv"));
+            AddButton("PDF", () => Export("pdf"), "BtnDanger");
+            AddButton("Excel", () => Export("xlsx"), "BtnEmerald");
+        }
+    }
+
+    public static void TransitReport(Window owner) => new TransitReportDialog { Owner = owner }.ShowDialog();
+
     sealed class ReportDialog : DarkWindow
     {
         public ReportDialog(string company, List<string> personIds) : base("Reports & Export",
@@ -580,9 +584,14 @@ public static class Dialogs
     public static void ExportEvents(Window o) => SaveCsv($"xv-gate-records-{DateTime.Now:yyyyMMdd-HHmm}.csv", Csv.Build(
         App.Store.RecentEvents(1_000_000).Select(r => { r["time"] = Time(L(r["event_ts"]), "yyyy-MM-dd HH:mm:ss"); r["stay"] = L(r["stay_ms"]) > 0 ? Duration(L(r["stay_ms"])) : "";
             r["occupants"] = S(r["occupants"]).Length > 2 ? string.Join(", ", (System.Text.Json.JsonSerializer.Deserialize<List<string>>(S(r["occupants"])) ?? []).Select(DisplayId)) : "";
-            r["loc_mismatch"] = L(r["loc_mismatch"]) == 1 ? "YES" : ""; return r; }),
+            r["loc_mismatch"] = L(r["loc_mismatch"]) == 1 ? "YES" : "";
+            var st = S(r["tr_state"]); r["trip_status"] = st.Length == 0 ? "" : TransitText.StateLabel(st, TransitText.IsOverdue(r, "tr_"));
+            r["trip_approx"] = L(r["tr_expected_min"]) > 0 ? L(r["tr_expected_min"]).ToString() : ""; r["trip_taken"] = L(r["tr_actual_min"]) > 0 ? L(r["tr_actual_min"]).ToString() : "";
+            r["trip_how"] = TransitText.Via(S(r["tr_resolved_via"]), S(r["tr_resolved_by"])); return r; }),
         ("Time", "time"), ("Action", "event_type"), ("Type", "entity_type"), ("ID", "entity_id"), ("Name / Plate", "title"), ("Location", "location_name"), ("Gate", "gate_name"),
-        ("Operator", "operator_id"), ("Terminal", "device_id"), ("Stay", "stay"), ("Location flag", "loc_mismatch"), ("QR location", "scanned_loc"), ("Occupants", "occupants"), ("Event ID", "event_id"), ("Server seq", "seq")));
+        ("Operator", "operator_id"), ("Terminal", "device_id"), ("Stay", "stay"), ("Location flag", "loc_mismatch"), ("QR location", "scanned_loc"), ("Occupants", "occupants"),
+        ("Destination", "tr_dest_name"), ("Approx time (min)", "trip_approx"), ("Trip status", "trip_status"), ("Ended at (place)", "tr_end_name"), ("Time taken (min)", "trip_taken"), ("Trip recorded", "trip_how"),
+        ("Event ID", "event_id"), ("Server seq", "seq")));
 
     public static void ExportAudit(Window o) => SaveCsv($"xv-audit-{DateTime.Now:yyyyMMdd-HHmm}.csv", Csv.Build(
         App.Store.AuditLog(1_000_000).Select(r => { r["time"] = Time(L(r["created_at"]), "yyyy-MM-dd HH:mm:ss"); return r; }),
