@@ -426,7 +426,7 @@ public static class Dialogs
                 ? App.Store.Persons().FirstOrDefault(x => S(x["id"]) == id)
                 : App.Store.Vehicles().FirstOrDefault(x => S(x["id"]) == id);
 
-            if (entity == null) { Body.Children.Add(Para("Entity not found.")); goto btns; }
+            if (entity == null) { Body.Children.Add(Para("Entity not found.")); AddButton("Close", Close); return; }
 
             var title = type == "PERSON"
                 ? $"{S(entity["name"])} • {S(entity["rank"])} • {S(entity["company"])}"
@@ -435,10 +435,8 @@ public static class Dialogs
             Body.Children.Add(Para($"Route Chart: {events.Count} movements", "#B45309"));
             Body.Children.Add(Para($"Title: {title}", "#64748B"));
 
-            Body.Children.Add(Label("Format"));
-            var format = Choice("Choose format", ["Excel (Professional, color-coded)", "PDF (Print-friendly, single page)"], "Excel (Professional, color-coded)");
+            var format = Choice("Format", ["Excel (Professional, color-coded)", "PDF (Print-friendly, single page)"], "Excel (Professional, color-coded)");
 
-            btns:
             AddButton("Cancel", Close);
             AddButton("Export", () =>
             {
