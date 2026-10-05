@@ -569,6 +569,48 @@ private fun HomeScreen(vm: MainViewModel) {
                 compact = false
             )
 
+            // Offline mode details: buffered events and sync status
+            if (!vm.networkStatus.serverReachable) {
+                Spacer(Modifier.height(8.dp))
+                Surface(
+                    Modifier.fillMaxWidth(),
+                    color = Color(0xFFFEF3C7),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, Color(0xFFFCD34D))
+                ) {
+                    Row(
+                        Modifier.padding(12.dp).fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "Buffered: ${vm.pending} event${if (vm.pending != 1) "s" else ""}",
+                                fontFamily = Mono,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF92400E)
+                            )
+                            Text(
+                                "Will sync when connected",
+                                fontFamily = Sans,
+                                fontSize = 11.sp,
+                                color = Color(0xFFB45309)
+                            )
+                        }
+                        if (vm.pending > 0) {
+                            SecondaryButton(
+                                "Retry Sync",
+                                Icons.Default.Refresh,
+                                size = 28.dp
+                            ) {
+                                if (vm.syncActivity != ActivityState.IN_PROGRESS) vm.trySync()
+                            }
+                        }
+                    }
+                }
+            }
+
             Spacer(Modifier.height(18.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(13.dp)) {
                 HomeActionCard(
