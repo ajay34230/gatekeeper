@@ -43,7 +43,9 @@ data class MovementEventEntity(
     val destinationName: String = "",
     val transitMinutes: Int = 0,
     val serverSeq: Long = 0L,
-    val serverRecordedAt: Long = 0L
+    val serverRecordedAt: Long = 0L,
+    /** Comma-separated flags for events requiring attention (e.g. "DUPLICATE_ENTRY"). */
+    val flags: String = ""
 )
 
 @Entity(tableName = "presence_sessions", indices = [

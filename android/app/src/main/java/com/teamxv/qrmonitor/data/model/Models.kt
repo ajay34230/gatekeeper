@@ -46,7 +46,9 @@ data class MovementEvent(
     val transitMinutes: Int = 0,
     /** Set when the Command Center has stored the record: its server sequence number and the time it recorded it (0 = not recorded yet). */
     val serverSeq: Long = 0L,
-    val serverRecordedAt: Long = 0L
+    val serverRecordedAt: Long = 0L,
+    /** Comma-separated flags for events requiring attention (e.g. "DUPLICATE_ENTRY"). */
+    val flags: String = ""
 )
 
 data class NetworkStatus(

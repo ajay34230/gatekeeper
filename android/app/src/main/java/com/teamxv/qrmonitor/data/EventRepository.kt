@@ -115,6 +115,9 @@ class EventRepository(
 
     fun observeAttentionCount(): Flow<Int> = events.observeAttentionCount()
 
+    fun observeAttentionEvents(): Flow<List<MovementEvent>> =
+        events.observeAttentionEvents().map { list -> list.map(::toModel) }
+
     fun observePersonnel(): Flow<List<PersonPresence>> =
         combine(persons.observeAll(), sessions.observeActive()) { people, active ->
             val inside = active.map { it.personId }.toSet()
@@ -479,7 +482,7 @@ class EventRepository(
         e.locationId, e.gateId, e.deviceId, e.operatorId, e.eventTimestamp,
         e.createdAt, e.syncStatus.name, 0, null, e.createdAt,
         e.sourceType.name, e.sourceId, e.locationMismatch, e.scannedLocation, e.reason, e.remarks, e.expectedReturn, e.comingFrom,
-        e.destinationId, e.destinationName, e.transitMinutes, e.serverSeq, e.serverRecordedAt
+        e.destinationId, e.destinationName, e.transitMinutes, e.serverSeq, e.serverRecordedAt, e.flags
     )
 
     private fun toModel(e: MovementEventEntity) = MovementEvent(
@@ -488,7 +491,7 @@ class EventRepository(
         e.deviceId, e.operatorId, e.eventTimestamp, e.createdAt,
         SyncStatus.valueOf(e.syncStatus), PresenceSource.valueOf(e.sourceType), e.sourceId,
         e.locationMismatch, e.scannedLocation, e.reason, e.remarks, e.expectedReturn, e.comingFrom,
-        e.destinationId, e.destinationName, e.transitMinutes, e.serverSeq, e.serverRecordedAt
+        e.destinationId, e.destinationName, e.transitMinutes, e.serverSeq, e.serverRecordedAt, e.flags
     )
 
     /** The server sequence number and recording time from the Command Center's reply to an accepted record. */

@@ -154,6 +154,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var attention by mutableIntStateOf(0)
         private set
+    val attentionEvents = repo.observeAttentionEvents()
     var personnel by mutableStateOf(listOf<PersonPresence>())
         private set
     var networkStatus by mutableStateOf(

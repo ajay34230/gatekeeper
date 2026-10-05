@@ -47,6 +47,13 @@ interface MovementEventDao {
     @Query("SELECT COUNT(*) FROM movement_events WHERE syncStatus IN ('PENDING','FAILED','SYNCING')")
     fun observePendingCount(): Flow<Int>
 
-    @Query("SELECT COUNT(*) FROM movement_events WHERE syncStatus='CONFLICT' OR syncStatus='REJECTED'")
+    @Query("SELECT COUNT(*) FROM movement_events WHERE syncStatus='CONFLICT' OR syncStatus='REJECTED' OR flags != ''")
     fun observeAttentionCount(): Flow<Int>
+
+    @Query("""
+        SELECT * FROM movement_events
+        WHERE syncStatus='CONFLICT' OR syncStatus='REJECTED' OR flags != ''
+        ORDER BY createdAt DESC, eventId DESC
+    """)
+    fun observeAttentionEvents(): Flow<List<MovementEventEntity>>
 }

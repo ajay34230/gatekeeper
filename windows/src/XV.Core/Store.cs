@@ -98,6 +98,8 @@ public sealed partial class Store : IDisposable
         // Where the person is coming from, set by the guard on ENTRY only -- shown on the gate record so the
         // Command Center knows which post/unit/location the person arrived from, not just that they arrived.
         Ensure("events", "coming_from", "TEXT NOT NULL DEFAULT ''");
+        // Flags for duplicate entries, location mismatches, and other issues requiring attention (comma-separated)
+        Ensure("events", "flags", "TEXT NOT NULL DEFAULT ''");
         foreach (var (_, col) in ExtraPersonFields) Ensure("persons", col, "TEXT NOT NULL DEFAULT ''");
         MigrateFeatures(Ensure);
         MigrateTransit();
@@ -598,15 +600,15 @@ public sealed partial class Store : IDisposable
         if (Upper(T(e, "eventType")) is not ("ENTRY" or "EXIT")) throw new StoreException("INVALID_EVENT_TYPE", "Invalid event type", 400);
     }
 
-    void InsertEvent(JsonObject e, string entity, string id, string type, long seq, string hash, long? stay) =>
+    void InsertEvent(JsonObject e, string entity, string id, string type, long seq, string hash, long? stay, string flags = "") =>
         Exec("""
             INSERT INTO events(event_id,entity_type,entity_id,event_type,location_id,gate_id,device_id,operator_id,event_ts,created_at,received_at,seq,
-              source_type,source_id,loc_mismatch,scanned_loc,stay_ms,payload_hash,reason,remarks,expected_return,coming_from) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+              source_type,source_id,loc_mismatch,scanned_loc,stay_ms,payload_hash,reason,remarks,expected_return,coming_from,flags) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
             """, T(e, "eventId"), entity, id, type, Upper(T(e, "locationId")), Upper(T(e, "gateId")), T(e, "deviceId"), Upper(T(e, "operatorId")),
             (long)e["eventTimestamp"]!, (long)e["createdAt"]!, NowMs, seq, Upper(T(e, "sourceType")) is { Length: > 0 } s ? s : "DIRECT",
             e["sourceId"]?.ToString(), e["locationMismatch"]?.GetValue<bool>() == true ? 1 : 0, T(e, "scannedLocation"), stay, hash, Clip(T(e, "reason"), 60), Clip(T(e, "remarks"), 300),
             type == "EXIT" && e["expectedReturn"] is JsonValue er && er.TryGetValue<long>(out var ret) && ret > 0 ? ret : 0L,
-            type == "ENTRY" ? Clip(T(e, "comingFrom"), 80) : "");
+            type == "ENTRY" ? Clip(T(e, "comingFrom"), 80) : "", flags);
 
     static string Clip(string v, int max) => v.Length <= max ? v : v[..max];
 
@@ -630,11 +632,13 @@ public sealed partial class Store : IDisposable
             CheckPassValidity(pid, type, (long)e["eventTimestamp"]!);
             var current = One("SELECT * FROM presence WHERE person_id=$1 AND status='ACTIVE' ORDER BY entry_at DESC LIMIT 1", pid);
             long? stay = null;
+            var flags = "";
             // Allow same person to be scanned multiple times by forcing EXIT first if already inside
             // This records multiple entries/exits more naturally and prevents "ALREADY_INSIDE" errors
             if (type == "ENTRY" && current != null)
             {
-                // Auto-close the previous entry and record the new one (person re-entering same location)
+                // Flag the duplicate entry for administrator review, then auto-close the previous session
+                flags = "DUPLICATE_ENTRY";
                 Exec("UPDATE presence SET status='CLOSED', exit_event_id=$1, exit_at=$2 WHERE session_id=$3",
                     "AUTO-" + T(e, "eventId"), (long)e["eventTimestamp"]!, current["session_id"]);
             }
@@ -648,7 +652,7 @@ public sealed partial class Store : IDisposable
                 stay = (long)e["eventTimestamp"]! - Convert.ToInt64(current["entry_at"]);
             }
             var seq = NextSeq();
-            InsertEvent(e, "PERSON", pid, type, seq, hash, stay);
+            InsertEvent(e, "PERSON", pid, type, seq, hash, stay, flags);
             if (type == "ENTRY")
                 Exec("INSERT INTO presence(session_id,person_id,source_type,entry_event_id,entry_at,location_id,gate_id) VALUES($1,$2,'DIRECT',$3,$4,$5,$6)",
                     "SES-" + T(e, "eventId"), pid, T(e, "eventId"), (long)e["eventTimestamp"]!, Upper(T(e, "locationId")), Upper(T(e, "gateId")));
