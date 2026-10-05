@@ -89,6 +89,15 @@ public partial class App : Application
                 try { first = _single.WaitOne(0); } catch (AbandonedMutexException) { first = true; }
             }
             if (!first) { MessageBox.Show("XV Command Center is already running.", "XV Command Center"); Shutdown(); return; }
+
+            // Ensure WebView2 runtime is available (needed for ID Card Studio and other features).
+            // On Windows 10, the runtime may need to be installed.
+            if (!await WebView2Bootstrapper.EnsureInstalledAsync())
+            {
+                MessageBox.Show("WebView2 runtime is required to run XV Command Center.", "XV Command Center");
+                Shutdown();
+                return;
+            }
         }
 
         string? recovered = null;
