@@ -24,9 +24,11 @@ class SyncStateStore(context: Context) {
             .putString("lastRoute", route)
             .remove("lastError")
             .apply()
+        com.teamxv.qrmonitor.diag.CrashLog.i("SyncState", "Marked successful: $uploadedCount events via $route")
     }
 
     fun markError(message: String) {
         prefs.edit().putString("lastError", message.take(500)).apply()
+        com.teamxv.qrmonitor.diag.CrashLog.w("SyncState", "Marked error: ${message.take(500)}")
     }
 }
