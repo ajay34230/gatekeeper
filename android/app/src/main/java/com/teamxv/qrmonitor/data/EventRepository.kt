@@ -115,8 +115,9 @@ class EventRepository(
 
     fun observeAttentionCount(): Flow<Int> = events.observeAttentionCount()
 
-    fun observeAttentionEvents(): Flow<List<MovementEvent>> =
-        events.observeAttentionEvents().map { list -> list.map(::toModel) }
+    fun observeAttentionEvents(): Flow<List<MovementEvent>> {
+        return events.observeAttentionEvents().map { list -> list.map(::toModel) }
+    }
 
     fun observePersonnel(): Flow<List<PersonPresence>> =
         combine(persons.observeAll(), sessions.observeActive()) { people, active ->
