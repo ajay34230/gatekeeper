@@ -251,6 +251,7 @@ class EventRepository(
                 entryAt = now, locationId = location, gateId = gate
             ))
         }
+        com.teamxv.qrmonitor.diag.CrashLog.i("EventCreate", "PERSON $type: $eventId ($personId) at $location:$gate by $operator (status=${event.syncStatus})")
         OperationResult.Success(event)
     }
 
@@ -300,6 +301,7 @@ class EventRepository(
                 entryAt = now, locationId = location, gateId = gate
             ))
         }
+        com.teamxv.qrmonitor.diag.CrashLog.i("EventCreate", "VEHICLE ENTRY: $eventId ($manifestId) ${vehicle.id} at $location:$gate by $operator (driver=${draft.driver.id}, occupants=${members.size})")
         OperationResult.Success(VehicleTransaction(event, manifest, members))
     }
 
@@ -331,6 +333,7 @@ class EventRepository(
         if (closed != 1) return@withTransaction OperationResult.Rejected("MANIFEST_STATE_CHANGED")
         sessions.closeForManifest(activeManifest.manifestId, event.eventId, now)
         events.insert(toEntity(event))
+        com.teamxv.qrmonitor.diag.CrashLog.i("EventCreate", "VEHICLE EXIT: ${event.eventId} (${activeManifest.manifestId}) ${vehicle.id} at $location:$gate by $operator (stayed=${now - activeManifest.createdAt}ms)")
         OperationResult.Success(event to (now - activeManifest.createdAt))
     }
 
@@ -356,6 +359,7 @@ class EventRepository(
             remarks = "Manually recorded offline: registration $plate could not be verified against the registry. ${remarks.trim()}".trim().take(300)
         )
         events.insert(toEntity(event))
+        com.teamxv.qrmonitor.diag.CrashLog.i("EventCreate", "MANUAL VEHICLE ENTRY: ${event.eventId} (plate=$plate, entityId=$entityId) at $location:$gate by $operator")
         return OperationResult.Success(event)
     }
 
@@ -370,10 +374,14 @@ class EventRepository(
         val now = System.currentTimeMillis()
         events.recoverStaleSyncing(now - 10 * 60 * 1000L)
         manifests.recoverStaleSyncing(now - 10 * 60 * 1000L)
+        val pending = events.pending()
+        if (pending.isNotEmpty()) {
+            com.teamxv.qrmonitor.diag.CrashLog.i("SyncStart", "Syncing ${pending.size} pending event(s) (attempt #${pending.maxOf { it.syncAttempts + 1 }})")
+        }
         var synced = 0
 
         // Vehicle events are synchronized as an atomic event+manifest transaction.
-        for (eventEntity in events.pending()) {
+        for (eventEntity in pending) {
             val event = toModel(eventEntity)
             if (event.entityType == EntityType.VEHICLE) {
                 val manifest = manifests.findManifestByEvent(event.eventId) ?: manifests.findManifestByExitEvent(event.eventId)
@@ -384,23 +392,28 @@ class EventRepository(
                     // not through the vehicle-transaction path that assumes a registered vehicle and manifest.
                     val attempts = eventEntity.syncAttempts + 1
                     events.updateSync(event.eventId, SyncStatus.SYNCING.name, attempts, null, now)
+                    com.teamxv.qrmonitor.diag.CrashLog.i("SyncAttempt", "Manual vehicle: ${event.eventId} (attempt #$attempts)")
                     val result = api.submitManualVehicleSighting(baseUrl(), event)
                     if (result.isSuccess) {
                         events.updateSync(event.eventId, SyncStatus.SYNCED.name, attempts, null, System.currentTimeMillis())
                         markRecorded(event.eventId, result.getOrNull())
                         synced++
+                        com.teamxv.qrmonitor.diag.CrashLog.i("SyncSuccess", "Manual vehicle: ${event.eventId} synced on attempt #$attempts")
                     } else {
                         val f = result.exceptionOrNull()
                         val permanent = f is HttpFailure && f.code in 400..499 && f.code != 429
                         val status = if (f is HttpFailure && f.code == 409) SyncStatus.CONFLICT else if (permanent) SyncStatus.REJECTED else SyncStatus.FAILED
                         events.updateSync(event.eventId, status.name, attempts, f?.message, System.currentTimeMillis())
+                        com.teamxv.qrmonitor.diag.CrashLog.w("SyncFailed", "Manual vehicle: ${event.eventId} -> $status (attempt #$attempts): ${f?.message ?: "unknown error"}")
                         if (!permanent) throw SyncTransientException(f?.message ?: "Vehicle sighting sync failed", f)
                     }
                     continue
                 }
                 val members = manifests.members(manifest.manifestId)
-                events.updateSync(event.eventId, SyncStatus.SYNCING.name, eventEntity.syncAttempts + 1, null, now)
+                val attempts = eventEntity.syncAttempts + 1
+                events.updateSync(event.eventId, SyncStatus.SYNCING.name, attempts, null, now)
                 manifests.updateSync(manifest.manifestId, SyncStatus.SYNCING.name, now, null)
+                com.teamxv.qrmonitor.diag.CrashLog.i("SyncAttempt", "Vehicle ${event.eventType}: ${event.eventId} (manifest=${manifest.manifestId}, members=${members.size}, attempt #$attempts)")
                 val result = api.submitVehicleTransaction(baseUrl(), com.teamxv.qrmonitor.network.VehicleTransactionPayload(
                     event = com.teamxv.qrmonitor.network.EventPayload(
                         eventId = event.eventId, entityType = event.entityType.name, entityId = event.entityId,
@@ -421,34 +434,42 @@ class EventRepository(
                     )
                 ))
                 if (result.isSuccess) {
-                    events.updateSync(event.eventId, SyncStatus.SYNCED.name, eventEntity.syncAttempts + 1, null, now)
+                    events.updateSync(event.eventId, SyncStatus.SYNCED.name, attempts, null, now)
                     markRecorded(event.eventId, result.getOrNull())
                     manifests.updateSync(manifest.manifestId, SyncStatus.SYNCED.name, now, null)
                     synced++
+                    com.teamxv.qrmonitor.diag.CrashLog.i("SyncSuccess", "Vehicle ${event.eventType}: ${event.eventId} synced on attempt #$attempts")
                 } else {
                     val f = result.exceptionOrNull()
                     val permanent = f is HttpFailure && f.code in 400..499 && f.code != 429
                     val status = if (f is HttpFailure && f.code == 409) SyncStatus.CONFLICT else if (permanent) SyncStatus.REJECTED else SyncStatus.FAILED
-                    events.updateSync(event.eventId, status.name, eventEntity.syncAttempts + 1, f?.message, now)
+                    events.updateSync(event.eventId, status.name, attempts, f?.message, now)
                     manifests.updateSync(manifest.manifestId, status.name, now, f?.message)
+                    com.teamxv.qrmonitor.diag.CrashLog.w("SyncFailed", "Vehicle ${event.eventType}: ${event.eventId} -> $status (attempt #$attempts): ${f?.message ?: "unknown error"}")
                     if (!permanent) throw SyncTransientException(f?.message ?: "Vehicle transaction sync failed", f)
                 }
             } else {
                 val attempts = eventEntity.syncAttempts + 1
                 events.updateSync(event.eventId, SyncStatus.SYNCING.name, attempts, null, now)
+                com.teamxv.qrmonitor.diag.CrashLog.i("SyncAttempt", "Person ${event.eventType}: ${event.eventId} (personId=${event.entityId}, attempt #$attempts)")
                 val result = api.submitEvent(baseUrl(), event)
                 if (result.isSuccess) {
                     events.updateSync(event.eventId, SyncStatus.SYNCED.name, attempts, null, System.currentTimeMillis())
                     markRecorded(event.eventId, result.getOrNull())
                     synced++
+                    com.teamxv.qrmonitor.diag.CrashLog.i("SyncSuccess", "Person ${event.eventType}: ${event.eventId} synced on attempt #$attempts")
                 } else {
                     val f = result.exceptionOrNull()
                     val permanent = f is HttpFailure && f.code in 400..499 && f.code != 429
                     val status = if (f is HttpFailure && f.code == 409) SyncStatus.CONFLICT else if (permanent) SyncStatus.REJECTED else SyncStatus.FAILED
                     events.updateSync(event.eventId, status.name, attempts, f?.message, System.currentTimeMillis())
+                    com.teamxv.qrmonitor.diag.CrashLog.w("SyncFailed", "Person ${event.eventType}: ${event.eventId} -> $status (attempt #$attempts): ${f?.message ?: "unknown error"}")
                     if (!permanent) throw SyncTransientException(f?.message ?: "Event sync failed", f)
                 }
             }
+        }
+        if (pending.isNotEmpty()) {
+            com.teamxv.qrmonitor.diag.CrashLog.i("SyncComplete", "Synced $synced of ${pending.size} event(s)")
         }
         return synced
     }

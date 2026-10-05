@@ -39,6 +39,7 @@ object SyncScheduler {
             .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork(UNIQUE_NOW, ExistingWorkPolicy.REPLACE, request)
+        com.teamxv.qrmonitor.diag.CrashLog.i("SyncScheduler", "Expedited sync enqueued")
     }
 
     /** Background safety-net refresh (master data, presence, comms info) -- every real gate action already pushes

@@ -47,14 +47,18 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
         return@withContext try {
             val count = repo.syncPending()
             repo.applyMasterBootstrap(m)
-            api.heartbeat(config.baseUrl, config.deviceId, config.locationId, config.gateId, config.operatorId, repo.pendingCount(), BuildConfig.VERSION_NAME)
+            val remaining = repo.pendingCount()
+            api.heartbeat(config.baseUrl, config.deviceId, config.locationId, config.gateId, config.operatorId, remaining, BuildConfig.VERSION_NAME)
             state.markSuccess(count, api.lastRoute)
+            com.teamxv.qrmonitor.diag.CrashLog.i("SyncWorker", "Sync completed: $count synced, $remaining pending (route=${api.lastRoute})")
             Result.success()
         } catch (e: HttpFailure) {
             state.markError(e.message ?: "Synchronization failed")
+            com.teamxv.qrmonitor.diag.CrashLog.w("SyncWorker", "Sync HTTP error: ${e.code} ${e.reason} - ${e.message}")
             if (e.code in 400..499 && e.code != 429) Result.failure() else Result.retry()
         } catch (e: Exception) {
             state.markError(e.message ?: "Synchronization failed")
+            com.teamxv.qrmonitor.diag.CrashLog.w("SyncWorker", "Sync failed: ${e.message ?: "unknown error"}", e)
             Result.retry()
         }
     }
