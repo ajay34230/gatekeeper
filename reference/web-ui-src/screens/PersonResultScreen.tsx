@@ -122,7 +122,10 @@ export const PersonResultScreen: React.FC<PersonResultScreenProps> = ({
 
   const isSuspended = person.status === 'SUSPENDED';
   // Determine logical action based on currentStatus
-  const targetAction: ActionDirection = person.currentStatus === 'INSIDE' ? 'EXIT' : 'ENTRY';
+  // If currentStatus is unknown (first-time scan), default to ENTRY but allow user to override
+  const isFirstTimeScan = !person.currentStatus || person.currentStatus === 'UNKNOWN';
+  const [actionOverride, setActionOverride] = useState<ActionDirection | null>(isFirstTimeScan ? null : undefined);
+  const targetAction: ActionDirection = actionOverride ?? (person.currentStatus === 'INSIDE' ? 'EXIT' : 'ENTRY');
   
   // Dynamic duration calculation since last ENTRY action
   const [elapsedDuration, setElapsedDuration] = useState<string>(() =>
@@ -353,6 +356,40 @@ export const PersonResultScreen: React.FC<PersonResultScreenProps> = ({
           </div>
         )}
 
+        {/* First-Time Scan Action Choice */}
+        {isFirstTimeScan && !isSuspended && (
+          <div className="mt-4 p-3.5 bg-blue-50 border border-blue-200 rounded-xl">
+            <span className="text-[11px] font-bold text-blue-800 uppercase tracking-wider block">
+              First-Time Entry: Choose Action
+            </span>
+            <p className="text-[12px] text-blue-700 mt-2 mb-3">
+              {person.name} has not been recorded before. Is this an entry or exit?
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setActionOverride('ENTRY')}
+                className={`py-2.5 px-3 rounded-lg font-semibold text-sm transition-all ${
+                  actionOverride === 'ENTRY'
+                    ? 'bg-green-600 text-white'
+                    : 'bg-white text-blue-700 border border-blue-300 hover:bg-blue-100'
+                }`}
+              >
+                ↓ Entry
+              </button>
+              <button
+                onClick={() => setActionOverride('EXIT')}
+                className={`py-2.5 px-3 rounded-lg font-semibold text-sm transition-all ${
+                  actionOverride === 'EXIT'
+                    ? 'bg-orange-600 text-white'
+                    : 'bg-white text-blue-700 border border-blue-300 hover:bg-blue-100'
+                }`}
+              >
+                ↑ Exit
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Suspended Notice if applicable */}
         {isSuspended && (
           <div className="mt-4 p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-start gap-2.5">
@@ -379,15 +416,20 @@ export const PersonResultScreen: React.FC<PersonResultScreenProps> = ({
         ) : (
           <button
             onClick={() => setShowConfirmSheet(true)}
-            className={`w-full py-4 px-4 font-bold rounded-xl text-sm shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer ${
-              targetAction === 'ENTRY'
-                ? 'bg-zinc-900 hover:bg-black text-white'
-                : 'bg-zinc-800 hover:bg-zinc-900 text-white'
+            disabled={isFirstTimeScan && actionOverride === null}
+            className={`w-full py-4 px-4 font-bold rounded-xl text-sm shadow-sm transition-all flex items-center justify-center gap-2 ${
+              isFirstTimeScan && actionOverride === null
+                ? 'cursor-not-allowed bg-zinc-300 text-zinc-500'
+                : `cursor-pointer ${
+                    targetAction === 'ENTRY'
+                      ? 'bg-zinc-900 hover:bg-black text-white'
+                      : 'bg-zinc-800 hover:bg-zinc-900 text-white'
+                  }`
             }`}
           >
             <ShieldCheck className="w-4 h-4" />
             <span>
-              {targetAction === 'ENTRY' ? 'RECORD ENTRY' : 'RECORD EXIT'}
+              {isFirstTimeScan && actionOverride === null ? 'CHOOSE ACTION ABOVE' : targetAction === 'ENTRY' ? 'RECORD ENTRY' : 'RECORD EXIT'}
             </span>
           </button>
         )}

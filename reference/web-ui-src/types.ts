@@ -145,6 +145,7 @@ export type ScreenId =
 
 export type VehicleStep =
   | 'SCAN_VEHICLE'
+  | 'CHOOSE_VEHICLE_ACTION'
   | 'SCAN_DRIVER'
   | 'CO_DRIVER_CHOICE'
   | 'SCAN_CO_DRIVER'

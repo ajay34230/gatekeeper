@@ -59,6 +59,7 @@ export const VehicleScanFlow: React.FC<VehicleScanFlowProps> = ({
 }) => {
   const [step, setStep] = useState<VehicleStep>(initialVehicle ? 'SCAN_DRIVER' : 'SCAN_VEHICLE');
   const [vehicle, setVehicle] = useState<Vehicle | null>(initialVehicle);
+  const [vehicleAction, setVehicleAction] = useState<ActionDirection | null>(null);
   const [unrecognizedVehicleId, setUnrecognizedVehicleId] = useState<string>('');
   const [scannedVehicleLocation, setScannedVehicleLocation] = useState<string | undefined>(undefined);
   const [vehicleLocationMismatch, setVehicleLocationMismatch] = useState<boolean>(false);
@@ -102,7 +103,8 @@ export const VehicleScanFlow: React.FC<VehicleScanFlowProps> = ({
       setVehicle(v);
       setScannedVehicleLocation(parsed.locationId);
       setVehicleLocationMismatch(parsed.isLocationMismatch);
-      setStep('SCAN_DRIVER');
+      setVehicleAction(null);
+      setStep('CHOOSE_VEHICLE_ACTION');
     } else {
       setUnrecognizedVehicleId(code);
     }
@@ -237,7 +239,66 @@ export const VehicleScanFlow: React.FC<VehicleScanFlowProps> = ({
   const stayDuration = targetAction === 'EXIT' ? calculateDuration(vehicle.lastEntryTimestamp) : undefined;
 
   // ==========================================
-  // STEP 2: SCAN DRIVER
+  // STEP 2: CHOOSE VEHICLE ACTION (ENTRY/EXIT)
+  // ==========================================
+  if (step === 'CHOOSE_VEHICLE_ACTION') {
+    return (
+      <div className="flex flex-col flex-1 px-6 py-6 max-w-md mx-auto w-full select-none justify-between">
+        <div className="flex items-center gap-2 pb-3 border-b border-zinc-200">
+          <button
+            onClick={() => {
+              setVehicle(null);
+              setStep('SCAN_VEHICLE');
+            }}
+            className="p-1.5 -ml-1.5 rounded-lg text-zinc-600 hover:text-zinc-900 active:bg-zinc-100"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <span className="text-sm font-bold text-zinc-800">Vehicle Action</span>
+        </div>
+
+        <div className="flex flex-col items-center text-center my-auto px-4">
+          <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-200 mb-4">
+            <Truck className="w-8 h-8" />
+          </div>
+
+          <h2 className="text-lg font-bold text-zinc-900 tracking-tight">
+            {vehicle?.plateNumber}
+          </h2>
+          <p className="text-sm text-zinc-600 mt-1">
+            {vehicle?.id}
+          </p>
+          <p className="text-xs text-zinc-500 mt-2 max-w-xs">
+            Is this vehicle entering or exiting?
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <button
+            onClick={() => {
+              setVehicleAction('ENTRY');
+              setStep('SCAN_DRIVER');
+            }}
+            className="w-full py-3.5 px-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl text-sm transition-all"
+          >
+            ↓ Vehicle Entering
+          </button>
+          <button
+            onClick={() => {
+              setVehicleAction('EXIT');
+              setStep('SCAN_DRIVER');
+            }}
+            className="w-full py-3.5 px-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-xl text-sm transition-all"
+          >
+            ↑ Vehicle Exiting
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // STEP 3: SCAN DRIVER
   // ==========================================
   if (step === 'SCAN_DRIVER') {
     return (
