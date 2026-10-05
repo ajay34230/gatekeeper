@@ -109,6 +109,11 @@ public sealed class Settings
     /// <summary>Extra personnel fields defined by the administrator (shown in forms, cards and exports).</summary>
     public List<string> CustomFields { get; set; } = [];
 
+    /// <summary>Standard personnel fields visible in "Add Soldier" dialog. Empty list means all default fields visible.
+    /// Examples: "rank", "company", "platoon", "section", "mobile", "notes". Any field not listed here is hidden from the UI
+    /// but still stored in the database.</summary>
+    public List<string> VisiblePersonnelFields { get; set; } = ["rank", "company", "platoon", "section", "mobile", "notes"];
+
     /// <summary>History record types besides ENTRY / EXIT that can be added to a person's history from the PC.</summary>
     /// <summary>Reasons offered on the terminal when recording an entry / exit (the operator can also type a custom reason).</summary>
     public List<string> MovementReasons { get; set; } = ["TD", "Proceeding on Leave", "Rejoining from Leave", "Posting Out", "Posting In", "Local Work"];
