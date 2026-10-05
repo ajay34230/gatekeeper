@@ -1,6 +1,5 @@
 package com.teamxv.qrmonitor.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -77,16 +76,16 @@ fun NotificationsScreen(vm: MainViewModel, onBack: () -> Unit) {
 @Composable
 fun NotificationCard(event: MovementEvent) {
     val flagColor = when {
-        event.flags.contains("DUPLICATE_ENTRY") -> Color(0xFFFCD34D)
         event.syncStatus == SyncStatus.REJECTED -> Color(0xFFEF4444)
         event.syncStatus == SyncStatus.CONFLICT -> Color(0xFFFB923C)
+        event.flags.contains("DUPLICATE_ENTRY") -> Color(0xFFFCD34D)
         else -> Color(0xFFFCD34D)
     }
 
     val flagLabel = when {
-        event.flags.contains("DUPLICATE_ENTRY") -> "Duplicate Entry"
         event.syncStatus == SyncStatus.REJECTED -> "Rejected"
         event.syncStatus == SyncStatus.CONFLICT -> "Conflict"
+        event.flags.contains("DUPLICATE_ENTRY") -> "Duplicate Entry"
         else -> "Flagged"
     }
 
