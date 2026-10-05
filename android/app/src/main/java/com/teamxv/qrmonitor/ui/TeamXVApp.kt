@@ -208,7 +208,7 @@ fun TeamXVApp(vm: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel
                     when (tab) {
                         0 -> HomeScreen(vm)
                         1 -> ActivityScreen(vm)
-                        2 -> SyncStatusScreen(vm)
+                        2 -> SyncStatusScreen(vm) { notificationsOpen = true }
                         4 -> CommsScreen(vm)
                         else -> OperatorScreen(
                             vm = vm,
@@ -603,8 +603,7 @@ private fun HomeScreen(vm: MainViewModel) {
                         if (vm.pending > 0) {
                             SecondaryButton(
                                 "Retry Sync",
-                                Icons.Default.Refresh,
-                                size = 28.dp
+                                Icons.Default.Refresh
                             ) {
                                 if (vm.syncActivity != ActivityState.IN_PROGRESS) vm.trySync()
                             }
@@ -1199,7 +1198,7 @@ private fun ActivityDetailSheet(event: MovementEvent, stayMs: Long? = null, onDi
 }
 
 @Composable
-private fun SyncStatusScreen(vm: MainViewModel) {
+private fun SyncStatusScreen(vm: MainViewModel, onOpenNotifications: () -> Unit = {}) {
     val connected = vm.networkStatus.serverReachable
     Column(
         Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState())
@@ -1258,7 +1257,7 @@ private fun SyncStatusScreen(vm: MainViewModel) {
         Spacer(Modifier.height(9.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
             Surface(
-                Modifier.weight(1f).clickable(enabled = vm.attention > 0) { notificationsOpen = true },
+                Modifier.weight(1f).clickable(enabled = vm.attention > 0, onClick = onOpenNotifications),
                 color = UiSurface,
                 shape = SmallShape,
                 border = BorderStroke(1.dp, if (vm.attention > 0) UiWarning else UiBorder)

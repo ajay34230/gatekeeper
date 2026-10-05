@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.BorderStroke
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -95,7 +96,7 @@ fun NotificationCard(event: MovementEvent) {
             .padding(8.dp),
         shape = MaterialTheme.shapes.medium,
         color = flagColor.copy(alpha = 0.1f),
-        border = androidx.compose.material3.BorderStroke(1.dp, flagColor)
+        border = BorderStroke(1.dp, flagColor)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
