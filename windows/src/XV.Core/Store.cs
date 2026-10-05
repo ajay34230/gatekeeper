@@ -630,7 +630,14 @@ public sealed partial class Store : IDisposable
             CheckPassValidity(pid, type, (long)e["eventTimestamp"]!);
             var current = One("SELECT * FROM presence WHERE person_id=$1 AND status='ACTIVE' ORDER BY entry_at DESC LIMIT 1", pid);
             long? stay = null;
-            if (type == "ENTRY" && current != null) throw new StoreException("ALREADY_INSIDE", "Person is already recorded inside");
+            // Allow same person to be scanned multiple times by forcing EXIT first if already inside
+            // This records multiple entries/exits more naturally and prevents "ALREADY_INSIDE" errors
+            if (type == "ENTRY" && current != null)
+            {
+                // Auto-close the previous entry and record the new one (person re-entering same location)
+                Exec("UPDATE presence SET status='CLOSED', exit_event_id=$1, exit_at=$2 WHERE session_id=$3",
+                    "AUTO-" + T(e, "eventId"), (long)e["eventTimestamp"]!, current["session_id"]);
+            }
             if (type == "EXIT")
             {
                 if (current == null) throw new StoreException("NOT_INSIDE", "Person is not recorded inside");
@@ -724,8 +731,25 @@ public sealed partial class Store : IDisposable
                     string.IsNullOrWhiteSpace(T(m, "coDriverId")) ? null : CanonId(T(m, "coDriverId")), JsonSerializer.Serialize(people), ts);
                 var i = 0;
                 foreach (var pid in people)
+                {
                     Exec("INSERT INTO presence(session_id,person_id,vehicle_id,source_type,source_id,entry_event_id,entry_at,location_id,gate_id) VALUES($1,$2,$3,'VEHICLE',$4,$5,$6,$7,$8)",
                         $"SES-{manifestId}-{++i}", pid, vid, manifestId, T(e, "eventId"), ts, Upper(T(e, "locationId")), Upper(T(e, "gateId")));
+                    // Also generate individual ENTRY event for crew member (shows in their history)
+                    var crewEventId = "CREW-" + RandomCode(12);
+                    InsertEvent(new JsonObject
+                    {
+                        ["eventId"] = crewEventId,
+                        ["entityType"] = "PERSON",
+                        ["entityId"] = pid,
+                        ["eventType"] = "ENTRY",
+                        ["eventTimestamp"] = ts,
+                        ["locationId"] = Upper(T(e, "locationId")),
+                        ["gateId"] = Upper(T(e, "gateId")),
+                        ["sourceType"] = "VEHICLE",
+                        ["sourceId"] = vid,
+                        ["remarks"] = $"With vehicle {vid}"
+                    }, "PERSON", pid, "ENTRY", NextSeq(), Hash(new JsonObject()), null);
+                }
                 CloseTransitOnEntry(vid, Upper(T(e, "locationId")), ts, operatorId);
             }
             else
@@ -736,6 +760,25 @@ public sealed partial class Store : IDisposable
                 OpenTransitFromExit(e, vid, ts, operatorId);
                 Exec("UPDATE manifests SET state='EXITED', exit_event_id=$1, exit_at=$2 WHERE manifest_id=$3", T(e, "eventId"), ts, manifestId);
                 Exec("UPDATE presence SET status='CLOSED', exit_event_id=$1, exit_at=$2 WHERE source_type='VEHICLE' AND source_id=$3 AND status='ACTIVE'", T(e, "eventId"), ts, manifestId);
+
+                // Generate individual EXIT events for crew members
+                var occupants = (active["occupants"] as JsonArray ?? []).Select(x => x?.ToString() ?? "").Where(x => x.Length > 0).ToList();
+                foreach (var pid in occupants)
+                {
+                    var crewEventId = "CREW-" + RandomCode(12);
+                    InsertEvent(new JsonObject
+                    {
+                        ["eventId"] = crewEventId,
+                        ["entityType"] = "PERSON",
+                        ["entityId"] = pid,
+                        ["eventType"] = "EXIT",
+                        ["eventTimestamp"] = ts,
+                        ["locationId"] = Upper(T(e, "locationId")),
+                        ["gateId"] = Upper(T(e, "gateId")),
+                        ["sourceType"] = "VEHICLE",
+                        ["sourceId"] = vid
+                    }, "PERSON", pid, "EXIT", NextSeq(), Hash(new JsonObject()), null);
+                }
             }
             Audit(operatorId, "VEHICLE_" + type, "VEHICLE", vid, manifestId);
             return new JsonObject { ["status"] = "accepted", ["eventId"] = T(e, "eventId"), ["manifestId"] = manifestId, ["serverSequence"] = seq, ["recordedAt"] = NowMs };
