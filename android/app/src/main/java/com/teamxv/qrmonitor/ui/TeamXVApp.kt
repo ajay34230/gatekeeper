@@ -156,6 +156,7 @@ fun TeamXVApp(vm: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel
     val cfg = remember { vm.currentConfig() }
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    var notificationsOpen by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(vm.paired) { if (vm.paired) vm.refreshCommsInfo() }
     val openComms by com.teamxv.qrmonitor.CommsNav.openRequested
@@ -192,6 +193,7 @@ fun TeamXVApp(vm: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel
         when {
             vm.scannerTarget == ScannerTarget.PAIRING -> ScannerHost(vm)
             !vm.loggedIn -> LoginScreen(vm)
+            notificationsOpen -> NotificationsScreen(vm, onBack = { notificationsOpen = false })
             settingsOpen -> SettingsScreen(vm, onBack = { settingsOpen = false })
             vm.showSuccess && vm.completedEvent != null -> SuccessScreen(
                 vm = vm,
@@ -1255,7 +1257,18 @@ private fun SyncStatusScreen(vm: MainViewModel) {
         }
         Spacer(Modifier.height(9.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-            StatCard(Modifier.weight(1f), "ATTENTION", vm.attention.toString())
+            Surface(
+                Modifier.weight(1f).clickable(enabled = vm.attention > 0) { notificationsOpen = true },
+                color = UiSurface,
+                shape = SmallShape,
+                border = BorderStroke(1.dp, if (vm.attention > 0) UiWarning else UiBorder)
+            ) {
+                Column(Modifier.padding(12.dp)) {
+                    Text("ATTENTION", fontFamily = Sans, fontSize = 8.sp, color = UiFaint, letterSpacing = .8.sp)
+                    Spacer(Modifier.height(4.dp))
+                    Text(vm.attention.toString(), fontFamily = Mono, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (vm.attention > 0) UiWarning else UiInk)
+                }
+            }
             StatCard(Modifier.weight(1f), "UPLOADED LAST", vm.syncUi.lastUploadedCount.toString())
         }
 
