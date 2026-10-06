@@ -85,20 +85,20 @@ class EventRepository(
                     manifests.insertMembers(m.occupants.mapIndexed { i, pid -> VehicleManifestMemberEntity(m.manifestId, pid, i + 1) })
                 }
             }
-            if (events.pendingCount() == 0) {
-                val now = System.currentTimeMillis()
-                val serverInside = master.presence.associateBy { it.personId }
-                val localActive = sessions.activeAll()
-                localActive.filter { it.sourceType == "DIRECT" && it.personId !in serverInside }
-                    .forEach { sessions.closeDirectForPerson(it.personId, now) }
-                val localIds = localActive.map { it.personId }.toSet()
-                serverInside.values.filter { it.personId !in localIds }.forEach {
-                    sessions.insert(PresenceSessionEntity(
-                        sessionId = "SRV-${it.personId}-${it.entryAt}", personId = it.personId, vehicleId = null,
-                        sourceType = "DIRECT", sourceId = null, entryEventId = "SERVER", entryAt = it.entryAt,
-                        locationId = "", gateId = ""
-                    ))
-                }
+            // Sync presence state from server: always update to reflect current location status,
+            // even if there are pending events (presence is independent of local event queue).
+            val now = System.currentTimeMillis()
+            val serverInside = master.presence.associateBy { it.personId }
+            val localActive = sessions.activeAll()
+            localActive.filter { it.sourceType == "DIRECT" && it.personId !in serverInside }
+                .forEach { sessions.closeDirectForPerson(it.personId, now) }
+            val localIds = localActive.map { it.personId }.toSet()
+            serverInside.values.filter { it.personId !in localIds }.forEach {
+                sessions.insert(PresenceSessionEntity(
+                    sessionId = "SRV-${it.personId}-${it.entryAt}", personId = it.personId, vehicleId = null,
+                    sourceType = "DIRECT", sourceId = null, entryEventId = "SERVER", entryAt = it.entryAt,
+                    locationId = "", gateId = ""
+                ))
             }
         }
     }
