@@ -253,7 +253,7 @@ public sealed partial class Store : IDisposable
             var syntheticEventId = "INIT-" + id + "-" + now;
             var sessionId = "SES-" + syntheticEventId;
             Exec("INSERT INTO presence(session_id,person_id,source_type,entry_event_id,entry_at,location_id,gate_id) VALUES($1,$2,'DIRECT',$3,$4,$5,$6)",
-                sessionId, id, syntheticEventId, now, Upper(initialLoc), "ADMIN");
+                sessionId, id, syntheticEventId, now, Upper(initialLoc), "");
         }
 
         Audit(actor, existing == null ? "ADD_PERSON" : "EDIT_PERSON", "PERSON", id);
