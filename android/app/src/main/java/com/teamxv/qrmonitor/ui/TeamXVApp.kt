@@ -712,6 +712,7 @@ private fun HomeScreen(vm: MainViewModel) {
                         }
                         vm.personnel.sortedByDescending { p -> vm.events.firstOrNull { it.entityType == EntityType.PERSON && it.entityId == p.id }?.eventTimestamp ?: 0L }.take(4).forEach { p ->
                             val isInside = p.currentStatus == PresenceStatus.INSIDE
+                            val notTracked = p.currentStatus == PresenceStatus.NOT_TRACKED
                             val lastSeen = vm.events.firstOrNull { it.entityType == EntityType.PERSON && it.entityId == p.id }?.eventTimestamp
                             Surface(
                                 Modifier.fillMaxWidth().clickable { vm.selectPerson(p.id) },
@@ -726,7 +727,11 @@ private fun HomeScreen(vm: MainViewModel) {
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                         Box(
-                                            Modifier.size(6.dp).clip(CircleShape).background(if (isInside) UiSuccess else tc(0xFF9CA3AF))
+                                            Modifier.size(6.dp).clip(CircleShape).background(when {
+                                                isInside -> UiSuccess
+                                                notTracked -> tc(0xFFC084FC)
+                                                else -> tc(0xFF9CA3AF)
+                                            })
                                         )
                                         Column {
                                             Text(p.name, fontFamily = Sans, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = UiInk)
@@ -734,16 +739,33 @@ private fun HomeScreen(vm: MainViewModel) {
                                         }
                                     }
                                     Surface(
-                                        color = if (isInside) UiSuccessBg else UiSurfaceSubtle,
+                                        color = when {
+                                            isInside -> UiSuccessBg
+                                            notTracked -> tc(0xFFC084FC).copy(alpha = 0.1f)
+                                            else -> UiSurfaceSubtle
+                                        },
                                         shape = RoundedCornerShape(100.dp),
-                                        border = BorderStroke(1.dp, if (isInside) tc(0xFFA7F3D0) else UiBorder)
+                                        border = BorderStroke(1.dp, when {
+                                            isInside -> tc(0xFFA7F3D0)
+                                            notTracked -> tc(0xFFC084FC)
+                                            else -> UiBorder
+                                        })
                                     ) {
                                         Text(
-                                            if (lastSeen != null) "Seen ${formatShort(lastSeen)}" else if (isInside) "On site" else "No activity",
+                                            when {
+                                                notTracked -> "Not tracked"
+                                                lastSeen != null -> "Seen ${formatShort(lastSeen)}"
+                                                isInside -> "On site"
+                                                else -> "No activity"
+                                            },
                                             fontFamily = Mono,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 9.sp,
-                                            color = if (isInside) UiSuccess else UiMuted,
+                                            color = when {
+                                                isInside -> UiSuccess
+                                                notTracked -> tc(0xFFC084FC)
+                                                else -> UiMuted
+                                            },
                                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                         )
                                     }

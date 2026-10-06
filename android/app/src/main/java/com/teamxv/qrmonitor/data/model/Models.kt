@@ -62,7 +62,7 @@ data class NetworkStatus(
     val message: String = "Not tested"
 )
 
-enum class PresenceStatus { INSIDE, OUTSIDE }
+enum class PresenceStatus { INSIDE, OUTSIDE, NOT_TRACKED }
 
 data class PersonPresence(
     val id: String,

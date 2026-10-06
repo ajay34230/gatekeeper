@@ -122,8 +122,13 @@ class EventRepository(
     fun observePersonnel(): Flow<List<PersonPresence>> =
         combine(persons.observeAll(), sessions.observeActive(), events.observeTrackedPersonIds()) { people, active, tracked ->
             val inside = active.map { it.personId }.toSet()
-            people.filter { it.id in tracked }.map {
-                PersonPresence(it.id, it.name, if (it.id in inside) PresenceStatus.INSIDE else PresenceStatus.OUTSIDE)
+            people.map {
+                val status = when {
+                    it.id in inside -> PresenceStatus.INSIDE
+                    it.id in tracked -> PresenceStatus.OUTSIDE
+                    else -> PresenceStatus.NOT_TRACKED
+                }
+                PersonPresence(it.id, it.name, status)
             }
         }
 
