@@ -103,6 +103,9 @@ public static class Dialogs
             var fNokPhone = Field("Next of kin — phone", V("nok_phone"), mono: true);
             var fSerial = Field("ID card serial / reference no.", V("card_serial"), mono: true);
             var fNotes = Field("Notes", V("notes"));
+            var fInitialLoc = Choice("Initial location (mark as inside when added)", ["", "MAIN_GATE", "SIDE_GATE", "OFFICE", "BARRACKS", "MESS", "HOSPITAL", "TRAINING_AREA"], V("initial_location"), editable: true);
+            Body.Children.Add(Label("Initial status"));
+            Body.Children.Add(fInitialLoc);
             Body.Children.Add(Label("Photo (uniform passport portrait)"));
             byte[]? photo = id == null ? null : App.Store.PersonPhoto(id);
             var photoChanged = false;
@@ -135,6 +138,7 @@ public static class Dialogs
                         ["platoon"] = fPlatoon.Text, ["section"] = fSection.Text, ["address"] = fAddress.Text, ["dob"] = fDob.Text, ["enrolDate"] = fEnrol.Text,
                         ["expiryDate"] = fExpiry.Text, ["idMark"] = fMark.Text, ["nokName"] = fNokName.Text, ["nokRelation"] = fNokRel.Text,
                         ["nokPhone"] = fNokPhone.Text, ["cardSerial"] = fSerial.Text,
+                        ["initialLocation"] = fInitialLoc.Text,
                         ["custom"] = new JsonObject(customBoxes.Select(kv => new KeyValuePair<string, System.Text.Json.Nodes.JsonNode?>(kv.Key, kv.Value.Text.Trim()))),
                     });
                     if (photoChanged) App.Store.SetPersonPhoto(Store.CanonId(fId.Text), photo);

@@ -242,6 +242,20 @@ public sealed partial class Store : IDisposable
         if (p["validFrom"] != null) Exec("UPDATE persons SET valid_from=$1 WHERE id=$2", p["validFrom"]!.GetValue<long>(), id);
         if (p["validTo"] != null) Exec("UPDATE persons SET valid_to=$1 WHERE id=$2", p["validTo"]!.GetValue<long>(), id);
         if (existing == null) CardEvent(id, "ISSUED", "", actor);
+
+        // Create initial presence session if location is specified
+        var initialLoc = T(p, "initialLocation");
+        if (!string.IsNullOrWhiteSpace(initialLoc))
+        {
+            // Close any existing presence session for this person
+            Exec("UPDATE presence SET status='CLOSED', exit_at=$1 WHERE person_id=$2 AND status='ACTIVE'", now, id);
+
+            var syntheticEventId = "INIT-" + id + "-" + now;
+            var sessionId = "SES-" + syntheticEventId;
+            Exec("INSERT INTO presence(session_id,person_id,source_type,entry_event_id,entry_at,location_id,gate_id) VALUES($1,$2,'DIRECT',$3,$4,$5,$6)",
+                sessionId, id, syntheticEventId, now, Upper(initialLoc), "ADMIN");
+        }
+
         Audit(actor, existing == null ? "ADD_PERSON" : "EDIT_PERSON", "PERSON", id);
         Notify();
     }
