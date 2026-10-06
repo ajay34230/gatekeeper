@@ -45,7 +45,7 @@ export interface CardThemeConfig {
 }
 
 /** Card layout and wording chosen by the administrator (saved on the PC, applies to every card). */
-export type CardLayout = 'classic' | 'modernSplit' | 'modernSingle';
+export type CardLayout = 'classic' | 'modernSplit' | 'modernSingle' | 'simple';
 
 export interface CardDesign {
   /** classic = the formal government card; modernSplit = details on the front, QR on the back; modernSingle = everything on one side. */

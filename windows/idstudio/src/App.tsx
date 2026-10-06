@@ -339,7 +339,7 @@ export default function App() {
                 <div className="rounded-xl border border-slate-800 p-4 space-y-3">
                   <div className="text-xs font-mono font-bold text-amber-400 uppercase">Card style</div>
                   <div className="grid grid-cols-1 gap-2">
-                    {([['classic', 'Classic — formal armed forces card'], ['modernSplit', 'Modern, two sides — details on the front, QR on the back'], ['modernSingle', 'Modern, one side — photo, details and QR together']] as const).map(([k, t]) => (
+                    {([['classic', 'Classic — formal armed forces card'], ['modernSplit', 'Modern, two sides — details on the front, QR on the back'], ['modernSingle', 'Modern, one side — photo, details and QR together'], ['simple', 'Simple — logo & info on front, big QR on back']] as const).map(([k, t]) => (
                       <button key={k} onClick={() => setD({ layout: k })} className={`px-3 py-2 rounded-lg text-sm text-left border ${design.layout === k ? 'border-amber-500 text-amber-300 bg-amber-500/10' : 'border-slate-700 text-slate-400'}`}>{t}</button>
                     ))}
                   </div>
