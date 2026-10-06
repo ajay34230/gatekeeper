@@ -64,7 +64,8 @@ export const ModernCard: React.FC<{ side: 'front' | 'back'; soldier: Soldier; de
       <div style={{ fontSize: 11, fontFamily: 'monospace', color: ink, fontWeight: 700, letterSpacing: 1 }}>{cardNo}</div>
     </div>
   );
-  const extras = MODERN_EXTRAS.filter(e => design.modExtras.includes(e.key) && e.get(soldier).trim());
+  const extrasByKey = Object.fromEntries(MODERN_EXTRAS.map(e => [e.key, e]));
+  const extras = design.modExtras.map(k => extrasByKey[k]).filter((e): e is typeof MODERN_EXTRAS[number] => e != null && e.get(soldier).trim());
   const field = (label: string, value: string, big = false) => (
     <div style={{ minWidth: 0 }}>
       <div style={{ fontSize: 8, letterSpacing: 1.6, color: sub, fontWeight: 700 }}>{label}</div>

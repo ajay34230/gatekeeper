@@ -366,11 +366,25 @@ export default function App() {
                       </label>
                     ))}
                     <div className="text-xs text-slate-400">Extra details on the card (rank, name, army no, unit and mobile are always shown)</div>
-                    <div className="flex flex-wrap gap-2">
-                      {MODERN_EXTRAS.map(e => {
-                        const on = design.modExtras.includes(e.key);
-                        return <button key={e.key} onClick={() => setD({ modExtras: on ? design.modExtras.filter(x => x !== e.key) : [...design.modExtras, e.key] })} className={`px-3 py-1 rounded-lg text-xs border ${on ? 'border-amber-500 text-amber-300 bg-amber-500/10' : 'border-slate-700 text-slate-400'}`}>{on ? '✓ ' : ''}{e.label}</button>;
-                      })}
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        {MODERN_EXTRAS.map(e => {
+                          const on = design.modExtras.includes(e.key);
+                          const idx = design.modExtras.indexOf(e.key);
+                          return (
+                            <div key={e.key} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs ${on ? 'border-amber-500 bg-amber-500/10' : 'border-slate-700 bg-slate-900/30'}`}>
+                              <button onClick={() => setD({ modExtras: on ? design.modExtras.filter(x => x !== e.key) : [...design.modExtras, e.key] })} className={`${on ? 'text-amber-400' : 'text-slate-500'} font-bold text-sm`}>{on ? '✓' : '○'}</button>
+                              <span className={on ? 'text-amber-300' : 'text-slate-400'}>{e.label}</span>
+                              {on && (
+                                <div className="ml-auto flex gap-1">
+                                  <button onClick={() => { const arr = [...design.modExtras]; [arr[Math.max(0, idx-1)], arr[idx]] = [arr[idx], arr[Math.max(0, idx-1)]]; setD({ modExtras: arr }); }} disabled={idx === 0} className="text-amber-400 disabled:text-slate-600 text-xs font-bold">↑</button>
+                                  <button onClick={() => { const arr = [...design.modExtras]; [arr[Math.min(design.modExtras.length-1, idx+1)], arr[idx]] = [arr[idx], arr[Math.min(design.modExtras.length-1, idx+1)]]; setD({ modExtras: arr }); }} disabled={idx === design.modExtras.length-1} className="text-amber-400 disabled:text-slate-600 text-xs font-bold">↓</button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                     <ImagePick label={design.layout === 'modernSingle' ? 'Logo — left of the title' : 'Logo — front'} mode={design.modLogoFront ? 'custom' : 'none'} image={design.modLogoFront} options={[['none', 'No logo']]}
                       onMode={() => setD({ modLogoFront: '' })} onImage={u => setD({ modLogoFront: u })} read={readFile} />
