@@ -135,7 +135,9 @@ public static class Dialogs
             AddIfVisible("notes", "Notes", fNotes);
             AddIfVisible("id_card", "I-Card number", fCard);
 
-            var fInitialLoc = Choice("Initial location (mark as inside when added)", ["", "MAIN_GATE", "SIDE_GATE", "OFFICE", "BARRACKS", "MESS", "HOSPITAL", "TRAINING_AREA"], V("initial_location"), editable: true);
+            var locations = new List<string> { "" };
+            locations.AddRange(App.Store.Locations().Select(l => S(l["name"])));
+            var fInitialLoc = Choice("Initial location (mark as inside when added)", locations, V("initial_location"), editable: false);
             Body.Children.Add(Label("Initial status"));
             Body.Children.Add(fInitialLoc);
             Body.Children.Add(Label("Photo (uniform passport portrait)"));
@@ -162,6 +164,15 @@ public static class Dialogs
             {
                 try
                 {
+                    // Map location name to ID
+                    var locName = fInitialLoc.Text.Trim();
+                    var locId = "";
+                    if (locName.Length > 0)
+                    {
+                        var loc = App.Store.Locations().FirstOrDefault(l => S(l["name"]) == locName);
+                        if (loc != null) locId = S(loc["id"]);
+                    }
+
                     App.Store.UpsertPerson(new JsonObject
                     {
                         ["id"] = fId.Text, ["name"] = fName.Text, ["rank"] = fRank.Text, ["serviceNo"] = fService.Text, ["company"] = fCompany.Text, ["unit"] = fUnit.Text,
@@ -170,7 +181,7 @@ public static class Dialogs
                         ["platoon"] = fPlatoon.Text, ["section"] = fSection.Text, ["address"] = fAddress.Text, ["dob"] = fDob.Text, ["enrolDate"] = fEnrol.Text,
                         ["expiryDate"] = fExpiry.Text, ["idMark"] = fMark.Text, ["nokName"] = fNokName.Text, ["nokRelation"] = fNokRel.Text,
                         ["nokPhone"] = fNokPhone.Text, ["cardSerial"] = fSerial.Text,
-                        ["initialLocation"] = fInitialLoc.Text,
+                        ["initialLocation"] = locId,
                         ["custom"] = new JsonObject(customBoxes.Select(kv => new KeyValuePair<string, System.Text.Json.Nodes.JsonNode?>(kv.Key, kv.Value.Text.Trim()))),
                     });
                     if (photoChanged) App.Store.SetPersonPhoto(Store.CanonId(fId.Text), photo);
