@@ -78,8 +78,14 @@ public static class Dialogs
         {
             var p = id == null ? null : App.Store.Persons().FirstOrDefault(x => S(x["id"]) == id);
             string V(string k) => p == null ? "" : S(p[k]);
+            var visible = App.Settings.VisiblePersonnelFields;
+            void AddIfVisible(string key, string label, Control control) { if (visible.Contains(key, StringComparer.OrdinalIgnoreCase)) { Body.Children.Add(Label(label)); Body.Children.Add(control); } }
+
             var fId = Field("Personnel ID", id ?? App.Store.NextId("P", "persons"), readOnly: id != null, mono: true);
             var fName = Field("Full name", V("name"));
+            Body.Children.Add(Label("Personnel ID")); Body.Children.Add(fId);
+            Body.Children.Add(Label("Full name")); Body.Children.Add(fName);
+
             var fRank = Choice("Rank", ["Sepoy", "Lance Naik", "Naik", "Havildar", "Naib Subedar", "Subedar", "Subedar Major", "Lieutenant", "Captain", "Major", "Lieutenant Colonel", "Colonel", "Brigadier", "Civilian"], V("rank"), editable: true);
             var fService = Field("Army / service number", V("service_no"), mono: true);
             var fCompany = Choice("Company", Companies, V("company"), editable: true);
@@ -103,6 +109,32 @@ public static class Dialogs
             var fNokPhone = Field("Next of kin — phone", V("nok_phone"), mono: true);
             var fSerial = Field("ID card serial / reference no.", V("card_serial"), mono: true);
             var fNotes = Field("Notes", V("notes"));
+
+            // Add optional fields based on visibility settings
+            AddIfVisible("rank", "Rank", fRank);
+            AddIfVisible("service_no", "Army / service number", fService);
+            AddIfVisible("company", "Company", fCompany);
+            AddIfVisible("unit", "Unit", fUnit);
+            AddIfVisible("role", "Appointment / designation", fRole);
+            AddIfVisible("platoon", "Platoon", fPlatoon);
+            AddIfVisible("section", "Section", fSection);
+            AddIfVisible("category", "Category", fCat);
+            AddIfVisible("status", "Credential status", fStatus);
+            AddIfVisible("mobile", "Mobile number", fMobile);
+            AddIfVisible("blood_group", "Blood group", fBlood);
+            AddIfVisible("access", "Authorized locations (comma separated IDs, blank = all)", fAccess);
+            AddIfVisible("address", "Permanent address", fAddress);
+            AddIfVisible("dob", "Date of birth (DD-MM-YYYY)", fDob);
+            AddIfVisible("enrol", "Date of enrolment (DD-MM-YYYY)", fEnrol);
+            AddIfVisible("expiry", "ID card expiry (DD-MM-YYYY)", fExpiry);
+            AddIfVisible("id_mark", "Identification mark", fMark);
+            AddIfVisible("nok_name", "Next of kin — name", fNokName);
+            AddIfVisible("nok_relation", "Next of kin — relation", fNokRel);
+            AddIfVisible("nok_phone", "Next of kin — phone", fNokPhone);
+            AddIfVisible("card_serial", "ID card serial / reference no.", fSerial);
+            AddIfVisible("notes", "Notes", fNotes);
+            AddIfVisible("id_card", "I-Card number", fCard);
+
             var fInitialLoc = Choice("Initial location (mark as inside when added)", ["", "MAIN_GATE", "SIDE_GATE", "OFFICE", "BARRACKS", "MESS", "HOSPITAL", "TRAINING_AREA"], V("initial_location"), editable: true);
             Body.Children.Add(Label("Initial status"));
             Body.Children.Add(fInitialLoc);

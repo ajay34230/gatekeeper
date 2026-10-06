@@ -199,6 +199,8 @@ public sealed class StationsWindow : DarkWindow
         var autostart = new CheckBox { Content = "Start XV Command Center when Windows starts", IsChecked = s.StartWithWindows, Margin = new Thickness(0, 8, 0, 0) };
         Body.Children.Add(approval); Body.Children.Add(autostart);
         Body.Children.Add(Label("Customisation"));
+        var visibleFields = Field("Soldier details fields visible in 'Add Soldier' form (one per line)\nAvailable: rank, service_no, company, unit, role, category, status, mobile, blood_group, access, address, dob, enrol, expiry, id_mark, nok_name, nok_relation, nok_phone, card_serial, notes", string.Join(Environment.NewLine, s.VisiblePersonnelFields));
+        visibleFields.AcceptsReturn = true; visibleFields.MinHeight = 70; visibleFields.TextWrapping = TextWrapping.Wrap;
         var fields = Field("Custom personnel fields (one per line, e.g. Blood Group, Weapon No, Next of Kin)", string.Join(Environment.NewLine, s.CustomFields));
         fields.AcceptsReturn = true; fields.MinHeight = 80; fields.TextWrapping = TextWrapping.Wrap;
         var types = Field("History record types besides ENTRY / EXIT (one per line)", string.Join(Environment.NewLine, s.EventTypes));
@@ -277,6 +279,7 @@ public sealed class StationsWindow : DarkWindow
             s.StartWithWindows = autostart.IsChecked == true; s.TokenHours = th; s.OfflineGraceHours = gh;
             s.ShowMonthsInDuration = showMonths.IsChecked == true;
             static List<string> Lines(string t) => t.Split('\n', '\r', ',').Select(x => x.Trim()).Where(x => x.Length > 0 && x.Length <= 40).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            s.VisiblePersonnelFields = Lines(visibleFields.Text);
             s.CustomFields = Lines(fields.Text);
             s.ReturnDateReasons = Lines(returnReasons.Text);
             s.MovementReasons = Lines(reasons.Text).Where(r => !r.Equals("Custom", StringComparison.OrdinalIgnoreCase)).ToList();
