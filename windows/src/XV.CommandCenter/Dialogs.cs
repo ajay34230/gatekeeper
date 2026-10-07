@@ -135,7 +135,10 @@ public static class Dialogs
             AddIfVisible("notes", "Notes", fNotes);
             AddIfVisible("id_card", "I-Card number", fCard);
 
-            var fInitialLoc = Field("Initial place (mark as inside when added) — e.g. Khaprail, Quarters, Mess, Training Area", V("initial_location"));
+            var locations = new List<string> { "" };
+            var locMapping = new Dictionary<string, string>();
+            foreach (var loc in App.Store.Locations()) { var name = S(loc["name"]); locations.Add(name); locMapping[name] = S(loc["id"]); }
+            var fInitialLoc = Choice("Initial place (mark as inside when added)", locations, V("initial_location"), editable: false);
             Body.Children.Add(Label("Initial status"));
             Body.Children.Add(fInitialLoc);
             Body.Children.Add(Label("Photo (uniform passport portrait)"));
@@ -162,6 +165,9 @@ public static class Dialogs
             {
                 try
                 {
+                    var locName = fInitialLoc.Text.Trim();
+                    var locId = locName.Length > 0 && locMapping.TryGetValue(locName, out var lid) ? lid : "";
+
                     App.Store.UpsertPerson(new JsonObject
                     {
                         ["id"] = fId.Text, ["name"] = fName.Text, ["rank"] = fRank.Text, ["serviceNo"] = fService.Text, ["company"] = fCompany.Text, ["unit"] = fUnit.Text,
@@ -170,7 +176,7 @@ public static class Dialogs
                         ["platoon"] = fPlatoon.Text, ["section"] = fSection.Text, ["address"] = fAddress.Text, ["dob"] = fDob.Text, ["enrolDate"] = fEnrol.Text,
                         ["expiryDate"] = fExpiry.Text, ["idMark"] = fMark.Text, ["nokName"] = fNokName.Text, ["nokRelation"] = fNokRel.Text,
                         ["nokPhone"] = fNokPhone.Text, ["cardSerial"] = fSerial.Text,
-                        ["initialLocation"] = fInitialLoc.Text.Trim(),
+                        ["initialLocation"] = locId,
                         ["custom"] = new JsonObject(customBoxes.Select(kv => new KeyValuePair<string, System.Text.Json.Nodes.JsonNode?>(kv.Key, kv.Value.Text.Trim()))),
                     });
                     if (photoChanged) App.Store.SetPersonPhoto(Store.CanonId(fId.Text), photo);
