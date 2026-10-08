@@ -57,6 +57,24 @@ public sealed partial class Store
             Exec("UPDATE audit SET hash=$1 WHERE id=$2", hash, rowId);
             WriteAuditHead(rowId, hash);
         }
+        // Persistent file logging for security events (Phase 3)
+        PersistSecurityLog(actor, action, type, id, detail, at: NowMs);
+    }
+
+    static void PersistSecurityLog(string actor, string action, string? type, string? id, string? detail, long at)
+    {
+        // Log security-critical events to file for auditing and forensics
+        var securityActions = new[] { "OPERATOR_LOGIN", "DELETE_ACCOUNT", "REVOKE_DEVICE", "PAIR_DEVICE", "DELETE_PERSON", "DELETE_VEHICLE", "INVALID_CREDENTIALS", "TOO_MANY_ATTEMPTS", "OPERATOR_LOGOUT" };
+        if (!securityActions.Contains(action)) return;
+        try
+        {
+            var timestamp = new DateTime(at, DateTimeKind.Utc).ToString("O");
+            var logEntry = $"{timestamp}|{actor}|{action}|{type}|{id}|{detail ?? ""}\n";
+            var logPath = Paths.File("audit-security.log");
+            lock (lockObj: new object()) // File write lock to prevent concurrent access
+                File.AppendAllText(logPath, logEntry);
+        }
+        catch { /* Audit log write failure should not crash the server */ }
     }
 
     static void WriteAuditHead(long id, string hash)

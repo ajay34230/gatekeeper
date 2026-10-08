@@ -434,13 +434,18 @@ public sealed partial class Store : IDisposable
 
     // ------------------------------------------------------------------ device pairing
 
-    readonly Dictionary<string, long> _pairCodes = new();
+    readonly Dictionary<string, (long expiresAt, int attempts)> _pairCodes = new();
+    const int MaxPairingAttempts = 5;
 
     /// <summary>One-time pairing code shown in the pairing QR; valid 10 minutes.</summary>
     public string NewPairCode()
     {
         var code = RandomCode(8);
-        lock (_pairCodes) { foreach (var k in _pairCodes.Where(k => k.Value < NowMs).Select(k => k.Key).ToList()) _pairCodes.Remove(k); _pairCodes[code] = NowMs + 600_000; }
+        lock (_pairCodes)
+        {
+            foreach (var k in _pairCodes.Where(k => k.Value.expiresAt < NowMs).Select(k => k.Key).ToList()) _pairCodes.Remove(k);
+            _pairCodes[code] = (NowMs + 600_000, 0);
+        }
         return code;
     }
 
@@ -448,10 +453,16 @@ public sealed partial class Store : IDisposable
     {
         lock (_pairCodes)
         {
-            if (!_pairCodes.TryGetValue(Upper(code), out var exp) || exp < NowMs)
+            var upperCode = Upper(code);
+            if (!_pairCodes.TryGetValue(upperCode, out var data) || data.expiresAt < NowMs)
                 throw new StoreException("INVALID_PAIR_CODE", "Pairing code is invalid or expired. Show a new QR on the PC.", 403);
-            _pairCodes.Remove(Upper(code));
+            if (data.attempts >= MaxPairingAttempts)
+                throw new StoreException("TOO_MANY_ATTEMPTS", "Too many pairing attempts. Show a new QR on the PC.", 429);
+            // Increment attempts; on last successful attempt, code is removed below after device creation
+            _pairCodes[upperCode] = (data.expiresAt, data.attempts + 1);
         }
+        // Remove code after successful enrollment (one-time use)
+        lock (_pairCodes) { _pairCodes.Remove(Upper(code)); }
         var deviceId = "DEV-" + RandomCode(6);
         var key = RandomNumberGenerator.GetBytes(32);
         Exec("INSERT INTO devices(device_id,name,model,key_b64,active,paired_at,last_ip) VALUES($1,$2,$3,$4,1,$5,$6)",
