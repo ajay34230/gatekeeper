@@ -35,7 +35,7 @@ code, body, used = rpc("health"); assert code == 200, body
 assert rpc("health", replay=used)[0] == 401, "replay must be rejected"
 assert rpc("master.bootstrap")[0] == 401, "data requires operator login"
 code, body, _ = rpc("auth.register", {"name": "Test Recruit", "password": "abcdef1"}); assert body["status"] == "pending", body
-code, body, _ = rpc("auth.login", {"username": body["username"], "password": "abcdef1"}); assert code == 403, (code, body)
+code, body, _ = rpc("auth.login", {"username": body["username"], "password": "abcdef1"}); assert code == 401, (code, body)
 code, login, _ = rpc("auth.login", {"username": "GK-01", "password": "Operator#1"}); assert code == 200, login
 tok = login["accessToken"]
 code, boot, _ = rpc("master.bootstrap", token=tok); assert code == 200
