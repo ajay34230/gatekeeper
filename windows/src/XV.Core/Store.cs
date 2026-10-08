@@ -435,7 +435,6 @@ public sealed partial class Store : IDisposable
     // ------------------------------------------------------------------ device pairing
 
     readonly Dictionary<string, (long expiresAt, int attempts)> _pairCodes = new();
-    const int MaxPairingAttempts = 5;
 
     /// <summary>One-time pairing code shown in the pairing QR; valid 10 minutes.</summary>
     public string NewPairCode()
@@ -456,7 +455,7 @@ public sealed partial class Store : IDisposable
             var upperCode = Upper(code);
             if (!_pairCodes.TryGetValue(upperCode, out var data) || data.expiresAt < NowMs)
                 throw new StoreException("INVALID_PAIR_CODE", "Pairing code is invalid or expired. Show a new QR on the PC.", 403);
-            if (data.attempts >= MaxPairingAttempts)
+            if (data.attempts >= Settings.MaxPairingAttempts)
                 throw new StoreException("TOO_MANY_ATTEMPTS", "Too many pairing attempts. Show a new QR on the PC.", 429);
             // Increment attempts; on last successful attempt, code is removed below after device creation
             _pairCodes[upperCode] = (data.expiresAt, data.attempts + 1);

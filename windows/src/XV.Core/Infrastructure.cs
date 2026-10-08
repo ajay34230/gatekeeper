@@ -149,6 +149,19 @@ public sealed class Settings
     /// <summary>Break a long stay into months once it passes 30 days ("1mo 5d") instead of just piling up days.</summary>
     public bool ShowMonthsInDuration { get; set; }
 
+    // ============================================================ Security settings (Phase 1-4)
+    /// <summary>Maximum pairing attempts per code before lockout (Phase 3 security).</summary>
+    public int MaxPairingAttempts { get; set; } = 5;
+
+    /// <summary>Certificate validity period in years (Phase 4 security).</summary>
+    public int CertificateValidityYears { get; set; } = 2;
+
+    /// <summary>Days before certificate expiry to trigger rotation (Phase 4 security).</summary>
+    public int CertificateRotationDays { get; set; } = 30;
+
+    /// <summary>When true, certificates never expire (no automatic rotation); when false, rotate after CertificateValidityYears (Phase 4).</summary>
+    public bool DisableCertificateExpiry { get; set; } = false;
+
     static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
     static string FilePath => Paths.File("settings.json");
 
@@ -186,8 +199,8 @@ public static class CertManager
 #pragma warning disable SYSLIB0057
                 var cert = new X509Certificate2(pfx, (string?)null, X509KeyStorageFlags.Exportable | X509KeyStorageFlags.UserKeySet | X509KeyStorageFlags.PersistKeySet);
 #pragma warning restore SYSLIB0057
-                // Rotate certificate if expiring within 30 days (validity now 2 years instead of 15)
-                if (cert.NotAfter < DateTimeOffset.UtcNow.AddDays(30))
+                // Rotate certificate if expiring within CertificateRotationDays and expiry is not disabled
+                if (!settings.DisableCertificateExpiry && cert.NotAfter < DateTimeOffset.UtcNow.AddDays(settings.CertificateRotationDays))
                     RotateCertificate(settings);
                 else
                     return cert;
@@ -212,8 +225,9 @@ public static class CertManager
         req.CertificateExtensions.Add(san.Build());
         req.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
         req.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new Oid("1.3.6.1.5.5.7.3.1") }, false));
-        // Certificate validity: 2 years (was 15 years, reduced for rotation support)
-        using var cert = req.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(2));
+        // Certificate validity: configurable via settings.CertificateValidityYears (Phase 4 security)
+        var validityYears = settings.DisableCertificateExpiry ? 100 : Math.Max(1, settings.CertificateValidityYears);
+        using var cert = req.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(validityYears));
         return cert.Export(X509ContentType.Pfx);
     }
 
