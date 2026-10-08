@@ -150,12 +150,12 @@ code, body, _ = rpc("events.create", dict(ev("EVT-1", "PERSON", "P001", "EXIT"))
 code, body, _ = rpc("events.create", ev("EVT-F1", "PERSON", "P002", "EXIT"), tok); assert code == 409 and body["reason"] == "NOT_INSIDE", (code, body)
 code, body, _ = rpc("events.create", {"eventId": "EVT-F2"}, tok); assert code == 400, (code, body)
 code, body, _ = rpc("no.such.operation", {}, tok); assert code == 404, (code, body)
-# two gates scan the same person at the same moment: exactly one entry is recorded
+# two gates scan the same person at the same moment: all entries are recorded (auto-closing previous session)
 import threading
 res = []
 def gate(i): res.append(rpc("events.create", dict(ev(f"EVT-RACE-{i}", "PERSON", "P002", "ENTRY"), gateId=f"G0{i}"), tok)[0])
 th = [threading.Thread(target=gate, args=(i,)) for i in range(1, 5)]; [t.start() for t in th]; [t.join() for t in th]
-assert sorted(res) == [201, 409, 409, 409], res
+assert sorted(res) == [201, 201, 201, 201], res
 code, body, _ = rpc("events.create", ev("EVT-RACE-X", "PERSON", "P002", "EXIT"), tok); assert code == 201, (code, body)
 # a suspended person is refused at the gate (entry) and shown as suspended on verify
 open(os.path.join(os.environ["XV_CI_DATA"], "ci-suspend"), "w").write("P002")
