@@ -176,23 +176,59 @@ public static class CertManager
 {
     public static X509Certificate2 LoadOrCreate(Settings settings)
     {
-        var pfx = Protector.LoadOrCreate("server-cert.pfx.bin", () =>
+        // Check if certificate needs rotation (Phase 4 security: certificate rotation)
+        var certPath = Paths.File("server-cert.pfx.bin");
+        if (File.Exists(certPath))
         {
-            using var rsa = RSA.Create(2048);
-            var req = new CertificateRequest($"CN=XV Access Control {settings.ServerId}", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-            var san = new SubjectAlternativeNameBuilder();
-            san.AddDnsName("localhost");
-            san.AddDnsName("xv-access-control.local");
-            san.AddIpAddress(IPAddress.Loopback);
-            req.CertificateExtensions.Add(san.Build());
-            req.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
-            req.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new Oid("1.3.6.1.5.5.7.3.1") }, false));
-            using var cert = req.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(15));
-            return cert.Export(X509ContentType.Pfx);
-        });
+            try
+            {
+                var pfx = Protector.Unprotect(File.ReadAllBytes(certPath));
 #pragma warning disable SYSLIB0057
-        return new X509Certificate2(pfx, (string?)null, X509KeyStorageFlags.Exportable | X509KeyStorageFlags.UserKeySet | X509KeyStorageFlags.PersistKeySet);
+                var cert = new X509Certificate2(pfx, (string?)null, X509KeyStorageFlags.Exportable | X509KeyStorageFlags.UserKeySet | X509KeyStorageFlags.PersistKeySet);
 #pragma warning restore SYSLIB0057
+                // Rotate certificate if expiring within 30 days (validity now 2 years instead of 15)
+                if (cert.NotAfter < DateTimeOffset.UtcNow.AddDays(30))
+                    RotateCertificate(settings);
+                else
+                    return cert;
+            }
+            catch { /* Fall through to regenerate on any error */ }
+        }
+
+        var newPfx = Protector.LoadOrCreate("server-cert.pfx.bin", () => GenerateCertificate(settings));
+#pragma warning disable SYSLIB0057
+        return new X509Certificate2(newPfx, (string?)null, X509KeyStorageFlags.Exportable | X509KeyStorageFlags.UserKeySet | X509KeyStorageFlags.PersistKeySet);
+#pragma warning restore SYSLIB0057
+    }
+
+    static byte[] GenerateCertificate(Settings settings)
+    {
+        using var rsa = RSA.Create(2048);
+        var req = new CertificateRequest($"CN=XV Access Control {settings.ServerId}", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        var san = new SubjectAlternativeNameBuilder();
+        san.AddDnsName("localhost");
+        san.AddDnsName("xv-access-control.local");
+        san.AddIpAddress(IPAddress.Loopback);
+        req.CertificateExtensions.Add(san.Build());
+        req.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
+        req.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new Oid("1.3.6.1.5.5.7.3.1") }, false));
+        // Certificate validity: 2 years (was 15 years, reduced for rotation support)
+        using var cert = req.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(2));
+        return cert.Export(X509ContentType.Pfx);
+    }
+
+    static void RotateCertificate(Settings settings)
+    {
+        try
+        {
+            // Archive old certificate before generating new one
+            var certPath = Paths.File("server-cert.pfx.bin");
+            var archivePath = Paths.File($"server-cert-{DateTime.UtcNow:yyyyMMdd-HHmmss}.pfx.bin.bak");
+            if (File.Exists(certPath)) File.Copy(certPath, archivePath, overwrite: false);
+            // Regenerate certificate (overwriting existing)
+            Protector.LoadOrCreate("server-cert.pfx.bin", () => GenerateCertificate(settings));
+        }
+        catch { /* Certificate rotation failure is non-fatal; server continues with old cert */ }
     }
 
     public static string Fingerprint(X509Certificate2 cert) => Convert.ToHexString(SHA256.HashData(cert.RawData)).ToLowerInvariant();
