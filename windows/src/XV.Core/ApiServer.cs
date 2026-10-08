@@ -79,6 +79,13 @@ public sealed class ApiServer : IAsyncDisposable
         var app = builder.Build();
         app.UseRateLimiter();
 
+        // Add HSTS header for security
+        app.Use(async (ctx, next) =>
+        {
+            ctx.Response.Headers.Append("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+            await next();
+        });
+
         app.Use(async (ctx, next) =>
         {
             var local = IsLocal(ctx);

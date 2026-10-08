@@ -131,7 +131,7 @@ public sealed class Settings
     public List<string> ReturnDateReasons { get; set; } = ["TD", "Proceeding on Leave", "Local Work"];
 
     /// <summary>Lock the Command Center after this many idle minutes (0 = never); unlocked with the administrator password.</summary>
-    public int AutoLockMinutes { get; set; } = 10;
+    public int AutoLockMinutes { get; set; } = 0;
 
     /// <summary>Heading printed at the top of an Excel/PDF export, with {Scope} replaced by what the export covers
     /// (e.g. "Capt John Doe" for one person, "Alpha Company" for a company, "2 Platoon" for a platoon). Editable in

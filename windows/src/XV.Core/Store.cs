@@ -398,8 +398,7 @@ public sealed partial class Store : IDisposable
         }
         lock (_failures) _failures.Remove(id + deviceId);
         var status = S(a!["status"]);
-        if (status == "PENDING") throw new StoreException("PENDING_APPROVAL", "Account is waiting for approval on the PC Command Center", 403);
-        if (status != "ACTIVE") throw new StoreException("ACCOUNT_DISABLED", "Account is disabled", 403);
+        if (status != "ACTIVE") throw new StoreException("INVALID_CREDENTIALS", "Invalid RP ID or password", 401);
         var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         // Terminals stay signed in for 24 hours (or until the operator logs out), so a sign-in never lasts less.
         var expires = NowMs + Math.Max(24, Settings.TokenHours) * 3_600_000L;
