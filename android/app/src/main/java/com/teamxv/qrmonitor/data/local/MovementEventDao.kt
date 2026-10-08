@@ -58,5 +58,5 @@ interface MovementEventDao {
     fun observeAttentionEvents(): Flow<List<MovementEventEntity>>
 
     @Query("SELECT DISTINCT entityId FROM movement_events WHERE entityType='PERSON'")
-    fun observeTrackedPersonIds(): Flow<Set<String>>
+    fun observeTrackedPersonIds(): Flow<List<String>>
 }
