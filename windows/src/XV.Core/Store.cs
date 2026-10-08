@@ -776,8 +776,11 @@ public sealed partial class Store : IDisposable
                         ["entityId"] = pid,
                         ["eventType"] = "ENTRY",
                         ["eventTimestamp"] = ts,
+                        ["createdAt"] = ts,
                         ["locationId"] = Upper(T(e, "locationId")),
                         ["gateId"] = Upper(T(e, "gateId")),
+                        ["deviceId"] = T(e, "deviceId"),
+                        ["operatorId"] = T(e, "operatorId"),
                         ["sourceType"] = "VEHICLE",
                         ["sourceId"] = vid,
                         ["remarks"] = $"With vehicle {vid}"
@@ -806,8 +809,11 @@ public sealed partial class Store : IDisposable
                         ["entityId"] = pid,
                         ["eventType"] = "EXIT",
                         ["eventTimestamp"] = ts,
+                        ["createdAt"] = ts,
                         ["locationId"] = Upper(T(e, "locationId")),
                         ["gateId"] = Upper(T(e, "gateId")),
+                        ["deviceId"] = T(e, "deviceId"),
+                        ["operatorId"] = T(e, "operatorId"),
                         ["sourceType"] = "VEHICLE",
                         ["sourceId"] = vid
                     }, "PERSON", pid, "EXIT", NextSeq(), Hash(new JsonObject()), null);
