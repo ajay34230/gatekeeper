@@ -104,6 +104,9 @@ public sealed partial class Store : IDisposable
         MigrateFeatures(Ensure);
         MigrateTransit();
         MigrateTransitNotice();
+        // Session binding for tokens (Phase 2 security): bind tokens to IP address and created device
+        Ensure("tokens", "bound_ip", "TEXT NOT NULL DEFAULT ''");
+        Ensure("tokens", "created_at", "INTEGER NOT NULL DEFAULT 0");
         Exec("CREATE TABLE IF NOT EXISTS person_media(person_id TEXT PRIMARY KEY, photo BLOB, signature BLOB, updated_at INTEGER NOT NULL)");
         Ensure("person_media", "photo_at", "INTEGER NOT NULL DEFAULT 0");
         Ensure("person_media", "signed_at", "INTEGER NOT NULL DEFAULT 0");
@@ -382,7 +385,7 @@ public sealed partial class Store : IDisposable
 
     readonly Dictionary<string, (int n, long first)> _failures = new();
 
-    public JsonObject Login(string idRaw, string password, string deviceId)
+    public JsonObject Login(string idRaw, string password, string deviceId, string ip = "")
     {
         var id = Upper(idRaw);
         lock (_failures)
@@ -400,9 +403,9 @@ public sealed partial class Store : IDisposable
         var status = S(a!["status"]);
         if (status != "ACTIVE") throw new StoreException("INVALID_CREDENTIALS", "Invalid RP ID or password", 401);
         var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
-        // Terminals stay signed in for 24 hours (or until the operator logs out), so a sign-in never lasts less.
-        var expires = NowMs + Math.Max(24, Settings.TokenHours) * 3_600_000L;
-        Exec("INSERT INTO tokens(token_hash,account_id,device_id,expires_at) VALUES($1,$2,$3,$4)", Sha(token), id, deviceId, expires);
+        // Token lifetime set by Settings.TokenHours (default 8 hours)
+        var expires = NowMs + Settings.TokenHours * 3_600_000L;
+        Exec("INSERT INTO tokens(token_hash,account_id,device_id,expires_at,bound_ip,created_at) VALUES($1,$2,$3,$4,$5,$6)", Sha(token), id, deviceId, expires, ip, NowMs);
         Exec("UPDATE accounts SET last_login=$1 WHERE id=$2", NowMs, id);
         Audit(id, "OPERATOR_LOGIN", "DEVICE", deviceId);
         Notify();
@@ -416,11 +419,14 @@ public sealed partial class Store : IDisposable
     public void Logout(string token) => Exec("DELETE FROM tokens WHERE token_hash=$1", Sha(token));
 
     /// <summary>Returns the operator id for a valid token issued to this device, else null.</summary>
-    public string? OperatorFor(string? token, string deviceId)
+    public string? OperatorFor(string? token, string deviceId, string ip = "")
     {
         if (string.IsNullOrEmpty(token)) return null;
-        var r = One("SELECT t.account_id, t.expires_at, a.status FROM tokens t JOIN accounts a ON a.id=t.account_id WHERE t.token_hash=$1 AND t.device_id=$2", Sha(token), deviceId);
+        var r = One("SELECT t.account_id, t.expires_at, t.bound_ip, a.status FROM tokens t JOIN accounts a ON a.id=t.account_id WHERE t.token_hash=$1 AND t.device_id=$2", Sha(token), deviceId);
         if (r == null || Convert.ToInt64(r["expires_at"]) < NowMs || S(r["status"]) != "ACTIVE") return null;
+        // Session binding: token must be used from the same IP address
+        var boundIp = S(r["bound_ip"]);
+        if (!string.IsNullOrEmpty(boundIp) && boundIp != ip) return null;
         return S(r["account_id"]);
     }
 

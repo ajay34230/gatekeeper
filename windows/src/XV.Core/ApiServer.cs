@@ -207,7 +207,7 @@ public sealed class ApiServer : IAsyncDisposable
                 return (200, new JsonObject { ["status"] = "ok", ["service"] = "xv-access-control", ["serverId"] = s.ServerId, ["serverName"] = s.ServerName,
                     ["version"] = Version, ["serverTime"] = Store.NowMs, ["publicUrl"] = s.PublicUrl, ["internetEnabled"] = s.InternetEnabled });
             case "auth.login":
-                return (200, _store.Login(data["username"]?.ToString() ?? "", data["password"]?.ToString() ?? "", deviceId));
+                return (200, _store.Login(data["username"]?.ToString() ?? "", data["password"]?.ToString() ?? "", deviceId, ip));
             case "auth.register":
             {
                 var (id, _) = _store.CreateAccount(data["name"]?.ToString() ?? "", data["username"]?.ToString(), data["password"]?.ToString() ?? "", "SELF");
@@ -231,7 +231,7 @@ public sealed class ApiServer : IAsyncDisposable
                 return (200, new JsonObject { ["status"] = "ok" });
         }
 
-        var operatorId = _store.OperatorFor(token, deviceId);
+        var operatorId = _store.OperatorFor(token, deviceId, ip);
         if (operatorId == null) return (401, new JsonObject { ["status"] = "error", ["reason"] = "OPERATOR_AUTH_REQUIRED" });
 
         switch (op)
