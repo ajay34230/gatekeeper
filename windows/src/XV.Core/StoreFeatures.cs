@@ -39,6 +39,7 @@ public sealed partial class Store
     // ================================================================== tamper-evident audit trail
 
     const string AuditHeadFile = "audit-head.bin";
+    static readonly object SecurityLogLock = new();
 
     static string AuditHash(string prev, long id, string actor, string action, string? type, string? entity, string? detail, long at) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{prev}|{id}|{actor}|{action}|{type}|{entity}|{detail}|{at}"))).ToLowerInvariant();
@@ -71,7 +72,7 @@ public sealed partial class Store
             var timestamp = new DateTime(at, DateTimeKind.Utc).ToString("O");
             var logEntry = $"{timestamp}|{actor}|{action}|{type}|{id}|{detail ?? ""}\n";
             var logPath = Paths.File("audit-security.log");
-            lock (lockObj: new object()) // File write lock to prevent concurrent access
+            lock (SecurityLogLock) // Shared lock to prevent concurrent file writes
                 File.AppendAllText(logPath, logEntry);
         }
         catch { /* Audit log write failure should not crash the server */ }

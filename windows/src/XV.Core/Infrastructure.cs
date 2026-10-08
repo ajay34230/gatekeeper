@@ -171,6 +171,10 @@ public sealed class Settings
         try { s = System.IO.File.Exists(FilePath) ? JsonSerializer.Deserialize<Settings>(System.IO.File.ReadAllText(FilePath)) ?? new() : new(); }
         catch { s = new(); }
         if (string.IsNullOrWhiteSpace(s.ServerId)) s.ServerId = "XV-" + Convert.ToHexString(RandomNumberGenerator.GetBytes(4));
+        // Validate security settings to prevent misconfiguration
+        if (s.MaxPairingAttempts < 1) s.MaxPairingAttempts = 5;
+        if (s.CertificateValidityYears < 1) s.CertificateValidityYears = 2;
+        if (s.CertificateRotationDays < 1) s.CertificateRotationDays = 30;
         s.Save();
         return s;
     }
